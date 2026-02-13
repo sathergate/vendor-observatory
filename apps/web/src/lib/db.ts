@@ -32,10 +32,10 @@ function getDb(): Database.Database | null {
   try {
     const dbPath = findDbPath();
     _db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    _db.pragma("journal_mode = WAL");
     return _db;
-  } catch {
-    _dbFailed = false;
+  } catch (err) {
+    console.error("[vendor-observatory] DB init failed:", err);
+    _dbFailed = true;
     return null;
   }
 }
