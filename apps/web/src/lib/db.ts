@@ -1,21 +1,19 @@
 import Database from "better-sqlite3";
 import path from "path";
-import { existsSync } from "fs";
+import { existsSync, copyFileSync } from "fs";
 
 // ── Lazy DB initialization ──────────────────────────────────────────
 
 let _db: Database.Database | null = null;
 let _dbFailed = false;
 
-function findDbPath(): string {
-  // Explicit env var takes priority
+function findSourceDbPath(): string | null {
   if (process.env.OBS_DB_PATH) return process.env.OBS_DB_PATH;
 
-  // Try multiple candidate locations (local dev vs Vercel)
   const candidates = [
-    path.resolve(process.cwd(), "../../db/observatory.sqlite"),  // local dev from apps/web
-    path.resolve(process.cwd(), "db/observatory.sqlite"),         // Vercel serverless
-    path.resolve(__dirname, "../../db/observatory.sqlite"),        // relative to compiled output
+    path.resolve(process.cwd(), "../../db/observatory.sqlite"),
+    path.resolve(process.cwd(), "db/observatory.sqlite"),
+    path.resolve(__dirname, "../../db/observatory.sqlite"),
     path.resolve(__dirname, "../../../db/observatory.sqlite"),
     path.resolve(__dirname, "../../../../db/observatory.sqlite"),
   ];
@@ -23,14 +21,30 @@ function findDbPath(): string {
   for (const p of candidates) {
     if (existsSync(p)) return p;
   }
-  return candidates[0]; // fallback — will fail with clear error
+  return null;
 }
 
 function getDb(): Database.Database | null {
   if (_dbFailed) return null;
   if (_db) return _db;
   try {
-    const dbPath = findDbPath();
+    const sourcePath = findSourceDbPath();
+    if (!sourcePath) {
+      console.error("[vendor-observatory] No DB file found");
+      _dbFailed = true;
+      return null;
+    }
+
+    // On Vercel, the filesystem is readonly — copy DB to /tmp so SQLite can create journal
+    let dbPath = sourcePath;
+    const tmpPath = "/tmp/observatory.sqlite";
+    if (process.env.VERCEL || !existsSync(path.dirname(sourcePath) + "/.writable_check")) {
+      if (!existsSync(tmpPath)) {
+        copyFileSync(sourcePath, tmpPath);
+      }
+      dbPath = tmpPath;
+    }
+
     _db = new Database(dbPath, { readonly: true, fileMustExist: true });
     return _db;
   } catch (err) {
