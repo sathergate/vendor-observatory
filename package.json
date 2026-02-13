@@ -11,6 +11,9 @@
     "stats": "node packages/ingest/dist/index.js stats",
     "web": "pnpm --filter web"
   },
+  "devDependencies": {
+    "next": "^15.0.0"
+  },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
