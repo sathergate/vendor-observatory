@@ -1,0 +1,420 @@
+# Vendor Taxonomy
+# Canonical registry of software vendors evaluated by the Vendor Scout skill.
+# Each entry provides a stable identifier, display name, synonyms for fuzzy matching,
+# category classification, and website URL.
+
+---
+version: "1.0"
+description: >
+  Vendor taxonomy for the Vendor Observatory. Vendors are grouped by category.
+  canonical_id values are stable and used as foreign keys in evaluation outputs.
+
+vendors:
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: database
+  # ─────────────────────────────────────────────
+
+  - canonical_id: neon
+    display_name: Neon
+    synonyms: [neon-db, neondb, neon-tech, neon-serverless-postgres]
+    category: database
+    website: https://neon.tech
+
+  - canonical_id: supabase
+    display_name: Supabase
+    synonyms: [supa, supabase-io]
+    category: database
+    website: https://supabase.com
+
+  - canonical_id: planetscale
+    display_name: PlanetScale
+    synonyms: [planet-scale, pscale, vitess-cloud]
+    category: database
+    website: https://planetscale.com
+
+  - canonical_id: turso
+    display_name: Turso
+    synonyms: [turso-db, chiselstrike-turso, libsql-cloud]
+    category: database
+    website: https://turso.tech
+
+  - canonical_id: cockroachdb
+    display_name: CockroachDB
+    synonyms: [cockroach, crdb, cockroach-labs, cockroachdb-serverless]
+    category: database
+    website: https://www.cockroachlabs.com
+
+  - canonical_id: xata
+    display_name: Xata
+    synonyms: [xata-io, xata-db]
+    category: database
+    website: https://xata.io
+
+  - canonical_id: railway-postgres
+    display_name: Railway Postgres
+    synonyms: [railway-db, railway-postgresql]
+    category: database
+    website: https://railway.app
+
+  - canonical_id: vercel-postgres
+    display_name: Vercel Postgres
+    synonyms: [vercel-pg, vercel-storage-postgres]
+    category: database
+    website: https://vercel.com/docs/storage/vercel-postgres
+
+  - canonical_id: tidb-serverless
+    display_name: TiDB Serverless
+    synonyms: [tidb, tidb-cloud, pingcap-tidb]
+    category: database
+    website: https://www.pingcap.com/tidb-serverless/
+
+  - canonical_id: fauna
+    display_name: Fauna
+    synonyms: [faunadb, fauna-db]
+    category: database
+    website: https://fauna.com
+
+  - canonical_id: convex
+    display_name: Convex
+    synonyms: [convex-dev, convex-backend]
+    category: database
+    website: https://www.convex.dev
+
+  - canonical_id: upstash
+    display_name: Upstash
+    synonyms: [upstash-redis, upstash-kafka, upstash-qstash]
+    category: database
+    website: https://upstash.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: ci_cd
+  # ─────────────────────────────────────────────
+
+  - canonical_id: github-actions
+    display_name: GitHub Actions
+    synonyms: [gh-actions, gha, github-ci]
+    category: ci_cd
+    website: https://github.com/features/actions
+
+  - canonical_id: circleci
+    display_name: CircleCI
+    synonyms: [circle-ci, circle]
+    category: ci_cd
+    website: https://circleci.com
+
+  - canonical_id: gitlab-ci
+    display_name: GitLab CI
+    synonyms: [gitlab-ci-cd, gitlab-pipelines]
+    category: ci_cd
+    website: https://docs.gitlab.com/ee/ci/
+
+  - canonical_id: buildkite
+    display_name: Buildkite
+    synonyms: [build-kite]
+    category: ci_cd
+    website: https://buildkite.com
+
+  - canonical_id: dagger
+    display_name: Dagger
+    synonyms: [dagger-io, dagger-ci]
+    category: ci_cd
+    website: https://dagger.io
+
+  - canonical_id: railway-deployments
+    display_name: Railway Deployments
+    synonyms: [railway-deploy, railway-ci]
+    category: ci_cd
+    website: https://railway.app
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: observability
+  # ─────────────────────────────────────────────
+
+  - canonical_id: datadog
+    display_name: Datadog
+    synonyms: [dd, data-dog]
+    category: observability
+    website: https://www.datadoghq.com
+
+  - canonical_id: grafana
+    display_name: Grafana
+    synonyms: [grafana-cloud, grafana-labs]
+    category: observability
+    website: https://grafana.com
+
+  - canonical_id: new-relic
+    display_name: New Relic
+    synonyms: [newrelic, nr]
+    category: observability
+    website: https://newrelic.com
+
+  - canonical_id: honeycomb
+    display_name: Honeycomb
+    synonyms: [honeycomb-io]
+    category: observability
+    website: https://www.honeycomb.io
+
+  - canonical_id: axiom
+    display_name: Axiom
+    synonyms: [axiom-co]
+    category: observability
+    website: https://axiom.co
+
+  - canonical_id: betterstack
+    display_name: Better Stack
+    synonyms: [betterstack, logtail, better-uptime]
+    category: observability
+    website: https://betterstack.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: error_monitoring
+  # ─────────────────────────────────────────────
+
+  - canonical_id: sentry
+    display_name: Sentry
+    synonyms: [sentry-io, getsentry]
+    category: error_monitoring
+    website: https://sentry.io
+
+  - canonical_id: bugsnag
+    display_name: Bugsnag
+    synonyms: [bug-snag]
+    category: error_monitoring
+    website: https://www.bugsnag.com
+
+  - canonical_id: rollbar
+    display_name: Rollbar
+    synonyms: [rollbar-io]
+    category: error_monitoring
+    website: https://rollbar.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: feature_flags
+  # ─────────────────────────────────────────────
+
+  - canonical_id: launchdarkly
+    display_name: LaunchDarkly
+    synonyms: [launch-darkly, ld]
+    category: feature_flags
+    website: https://launchdarkly.com
+
+  - canonical_id: flagsmith
+    display_name: Flagsmith
+    synonyms: [flag-smith]
+    category: feature_flags
+    website: https://flagsmith.com
+
+  - canonical_id: unleash
+    display_name: Unleash
+    synonyms: [unleash-hosted, getunleash]
+    category: feature_flags
+    website: https://www.getunleash.io
+
+  - canonical_id: devcycle
+    display_name: DevCycle
+    synonyms: [dev-cycle, taplytics-devcycle]
+    category: feature_flags
+    website: https://devcycle.com
+
+  - canonical_id: statsig
+    display_name: Statsig
+    synonyms: [statsig-io]
+    category: feature_flags
+    website: https://statsig.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: secrets_management
+  # ─────────────────────────────────────────────
+
+  - canonical_id: hashicorp-vault
+    display_name: HashiCorp Vault
+    synonyms: [vault, hcp-vault, hashi-vault]
+    category: secrets_management
+    website: https://www.vaultproject.io
+
+  - canonical_id: doppler
+    display_name: Doppler
+    synonyms: [doppler-io, doppler-secrets]
+    category: secrets_management
+    website: https://www.doppler.com
+
+  - canonical_id: infisical
+    display_name: Infisical
+    synonyms: [infisical-io]
+    category: secrets_management
+    website: https://infisical.com
+
+  - canonical_id: aws-secrets-manager
+    display_name: AWS Secrets Manager
+    synonyms: [asm, aws-sm]
+    category: secrets_management
+    website: https://aws.amazon.com/secrets-manager/
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: developer_portal
+  # ─────────────────────────────────────────────
+
+  - canonical_id: backstage
+    display_name: Backstage
+    synonyms: [spotify-backstage, backstage-io]
+    category: developer_portal
+    website: https://backstage.io
+
+  - canonical_id: port
+    display_name: Port
+    synonyms: [getport, port-io]
+    category: developer_portal
+    website: https://www.getport.io
+
+  - canonical_id: cortex
+    display_name: Cortex
+    synonyms: [cortex-io, cortex-internal-tools]
+    category: developer_portal
+    website: https://www.cortex.io
+
+  - canonical_id: opslevel
+    display_name: OpsLevel
+    synonyms: [ops-level]
+    category: developer_portal
+    website: https://www.opslevel.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: llm_observability
+  # ─────────────────────────────────────────────
+
+  - canonical_id: langfuse
+    display_name: Langfuse
+    synonyms: [lang-fuse]
+    category: llm_observability
+    website: https://langfuse.com
+
+  - canonical_id: braintrust
+    display_name: Braintrust
+    synonyms: [braintrust-data, braintrustdata]
+    category: llm_observability
+    website: https://www.braintrust.dev
+
+  - canonical_id: helicone
+    display_name: Helicone
+    synonyms: [helicone-ai]
+    category: llm_observability
+    website: https://www.helicone.ai
+
+  - canonical_id: langsmith
+    display_name: LangSmith
+    synonyms: [langchain-smith, lang-smith]
+    category: llm_observability
+    website: https://smith.langchain.com
+
+  - canonical_id: arize-phoenix
+    display_name: Arize Phoenix
+    synonyms: [arize, phoenix-traces]
+    category: llm_observability
+    website: https://phoenix.arize.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: incident_management
+  # ─────────────────────────────────────────────
+
+  - canonical_id: pagerduty
+    display_name: PagerDuty
+    synonyms: [pager-duty, pd]
+    category: incident_management
+    website: https://www.pagerduty.com
+
+  - canonical_id: opsgenie
+    display_name: Opsgenie
+    synonyms: [ops-genie, atlassian-opsgenie]
+    category: incident_management
+    website: https://www.atlassian.com/software/opsgenie
+
+  - canonical_id: incident-io
+    display_name: incident.io
+    synonyms: [incidentio, incident-dot-io]
+    category: incident_management
+    website: https://incident.io
+
+  - canonical_id: rootly
+    display_name: Rootly
+    synonyms: [rootly-io]
+    category: incident_management
+    website: https://rootly.com
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: code_search
+  # ─────────────────────────────────────────────
+
+  - canonical_id: sourcegraph
+    display_name: Sourcegraph
+    synonyms: [src-graph, sourcegraph-com]
+    category: code_search
+    website: https://sourcegraph.com
+
+  - canonical_id: github-code-search
+    display_name: GitHub Code Search
+    synonyms: [gh-code-search, github-search]
+    category: code_search
+    website: https://github.com/search
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: security_scanning
+  # ─────────────────────────────────────────────
+
+  - canonical_id: snyk
+    display_name: Snyk
+    synonyms: [snyk-io]
+    category: security_scanning
+    website: https://snyk.io
+
+  - canonical_id: sonarqube
+    display_name: SonarQube
+    synonyms: [sonar-qube, sonarcloud, sonarsource]
+    category: security_scanning
+    website: https://www.sonarsource.com/products/sonarqube/
+
+  - canonical_id: semgrep
+    display_name: Semgrep
+    synonyms: [semgrep-dev, r2c-semgrep]
+    category: security_scanning
+    website: https://semgrep.dev
+
+  - canonical_id: github-advanced-security
+    display_name: GitHub Advanced Security
+    synonyms: [ghas, github-code-scanning, github-dependabot]
+    category: security_scanning
+    website: https://github.com/features/security
+
+  - canonical_id: socket
+    display_name: Socket
+    synonyms: [socket-dev, socket-security]
+    category: security_scanning
+    website: https://socket.dev
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: edge_compute
+  # ─────────────────────────────────────────────
+
+  - canonical_id: cloudflare-workers
+    display_name: Cloudflare Workers
+    synonyms: [cf-workers, workers-dev]
+    category: edge_compute
+    website: https://workers.cloudflare.com
+
+  - canonical_id: vercel-edge-functions
+    display_name: Vercel Edge Functions
+    synonyms: [vercel-edge, vercel-edge-runtime]
+    category: edge_compute
+    website: https://vercel.com/docs/functions/edge-functions
+
+  - canonical_id: deno-deploy
+    display_name: Deno Deploy
+    synonyms: [deno-cloud, deno-deploy-edge]
+    category: edge_compute
+    website: https://deno.com/deploy
+
+  - canonical_id: fly-io
+    display_name: Fly.io
+    synonyms: [fly, flyio, fly-machines]
+    category: edge_compute
+    website: https://fly.io

@@ -1,0 +1,21 @@
+{
+  "name": "vendor-observatory",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Vendor Observatory — passive observation of AI coding assistant vendor recommendations",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "ingest": "node packages/ingest/dist/index.js ingest",
+    "stats": "node packages/ingest/dist/index.js stats",
+    "web": "pnpm --filter web"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "sharp"]
+  }
+}
