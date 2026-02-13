@@ -7,3 +7,5 @@ db/*.sqlite-wal
 .env.local
 *.tsbuildinfo
 .vercel
+db/sync.log
+db/sync-launchd.log
