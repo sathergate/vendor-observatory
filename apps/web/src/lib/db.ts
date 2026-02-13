@@ -1,16 +1,36 @@
 import Database from "better-sqlite3";
 import path from "path";
+import { existsSync } from "fs";
 
 // ── Lazy DB initialization ──────────────────────────────────────────
 
 let _db: Database.Database | null = null;
 let _dbFailed = false;
 
+function findDbPath(): string {
+  // Explicit env var takes priority
+  if (process.env.OBS_DB_PATH) return process.env.OBS_DB_PATH;
+
+  // Try multiple candidate locations (local dev vs Vercel)
+  const candidates = [
+    path.resolve(process.cwd(), "../../db/observatory.sqlite"),  // local dev from apps/web
+    path.resolve(process.cwd(), "db/observatory.sqlite"),         // Vercel serverless
+    path.resolve(__dirname, "../../db/observatory.sqlite"),        // relative to compiled output
+    path.resolve(__dirname, "../../../db/observatory.sqlite"),
+    path.resolve(__dirname, "../../../../db/observatory.sqlite"),
+  ];
+
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return candidates[0]; // fallback — will fail with clear error
+}
+
 function getDb(): Database.Database | null {
   if (_dbFailed) return null;
   if (_db) return _db;
   try {
-    const dbPath = process.env.OBS_DB_PATH || path.resolve(process.cwd(), "../../db/observatory.sqlite");
+    const dbPath = findDbPath();
     _db = new Database(dbPath, { readonly: true, fileMustExist: true });
     _db.pragma("journal_mode = WAL");
     return _db;
