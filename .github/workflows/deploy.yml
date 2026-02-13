@@ -1,4 +1,4 @@
-name: Deploy to Vercel
+name: Verify Deployment
 
 on:
   push:
@@ -7,34 +7,24 @@ on:
       - "db/observatory.sqlite"
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
+    # Wait for Vercel's native GitHub integration to deploy
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Wait for Vercel deployment
+        run: sleep 120
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Verify health endpoint
+        run: |
+          STATUS=$(curl -sf https://vendor-observatory.vercel.app/api/health | jq -r '.ok')
+          if [ "$STATUS" = "true" ]; then
+            echo "✅ Deployment verified — health check passed"
+          else
+            echo "❌ Health check failed"
+            exit 1
+          fi
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build
-        run: pnpm --filter @obs/shared build && pnpm --filter web build
-
-      - name: Install Vercel CLI
-        run: npm install -g vercel
-
-      - name: Deploy to Vercel
-        run: vercel deploy --prod --token ${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Verify data endpoint
+        run: |
+          COUNT=$(curl -sf https://vendor-observatory.vercel.app/api/vendors | jq '.length')
+          echo "✅ Vendors endpoint returned $COUNT vendors"
