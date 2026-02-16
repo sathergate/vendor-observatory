@@ -90,6 +90,7 @@ export interface SessionRow {
   git_branch: string | null;
   turn_count: number;
   file_path: string;
+  is_benchmark: number;
 }
 
 export interface ObservationRow {

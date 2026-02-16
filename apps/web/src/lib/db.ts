@@ -252,3 +252,75 @@ export function getCategories(): string[] {
     return rows.map(r => r.work_category);
   } catch { return []; }
 }
+
+// ── Benchmark Stats ─────────────────────────────────────────────────
+
+export interface BenchmarkRunRow {
+  id: string;
+  source_platform: string;
+  model_id: string | null;
+  started_at: string;
+  cwd: string | null;
+  turn_count: number;
+  observation_count: number;
+  vendors: string;
+}
+
+export function getBenchmarkSessions(limit = 100): BenchmarkRunRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    const cols = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+    if (!cols.some(c => c.name === "is_benchmark")) return [];
+    return db.prepare(`
+      SELECT s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
+        COUNT(o.id) AS observation_count,
+        GROUP_CONCAT(DISTINCT o.vendor_canonical_id) AS vendors
+      FROM sessions s LEFT JOIN observations o ON s.id = o.session_id
+      WHERE s.is_benchmark = 1
+      GROUP BY s.id ORDER BY s.started_at DESC LIMIT ?
+    `).all(limit) as BenchmarkRunRow[];
+  } catch { return []; }
+}
+
+export interface BenchmarkVendorCompRow {
+  vendor_canonical_id: string;
+  claude_code_count: number;
+  codex_cli_count: number;
+  cursor_count: number;
+  total: number;
+}
+
+export function getBenchmarkVendorComparison(): BenchmarkVendorCompRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    const cols = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+    if (!cols.some(c => c.name === "is_benchmark")) return [];
+    return db.prepare(`
+      SELECT o.vendor_canonical_id,
+        SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) AS claude_code_count,
+        SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) AS codex_cli_count,
+        SUM(CASE WHEN s.source_platform = 'cursor' THEN 1 ELSE 0 END) AS cursor_count,
+        COUNT(*) AS total
+      FROM observations o JOIN sessions s ON o.session_id = s.id
+      WHERE s.is_benchmark = 1
+      GROUP BY o.vendor_canonical_id ORDER BY total DESC
+    `).all() as BenchmarkVendorCompRow[];
+  } catch { return []; }
+}
+
+export function getBenchmarkStats() {
+  const db = getDb();
+  if (!db) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
+  try {
+    const cols = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+    if (!cols.some(c => c.name === "is_benchmark")) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} };
+    const sessions = (db.prepare("SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = 1").get() as { c: number }).c;
+    const observations = (db.prepare("SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = 1)").get() as { c: number }).c;
+    const platforms = db.prepare("SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = 1 GROUP BY source_platform").all() as Array<{ source_platform: string; c: number }>;
+    const platformBreakdown: Record<string, number> = {};
+    for (const p of platforms) platformBreakdown[p.source_platform] = p.c;
+    return { totalBenchmarkSessions: sessions, totalBenchmarkObservations: observations, platformBreakdown };
+  } catch { return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} }; }
+}

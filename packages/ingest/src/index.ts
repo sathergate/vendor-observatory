@@ -10,6 +10,7 @@ import { ObservatoryDB } from "./db.js";
 import { scanForTranscripts, scanAllTranscripts } from "./scanner.js";
 import { parseClaudeCodeFile } from "./parsers/claude-code.js";
 import { parseCodexCliFile } from "./parsers/codex-cli.js";
+import { parseCursorAgentFile } from "./parsers/cursor-agent.js";
 
 const program = new Command();
 
@@ -68,10 +69,11 @@ program
       source === "all" ? scanAllTranscripts()
       : source === "claude-code" ? scanForTranscripts("claude_code")
       : source === "codex-cli" ? scanForTranscripts("codex_cli")
+      : source === "cursor" ? scanForTranscripts("cursor")
       : null;
 
     if (!files) {
-      console.error(chalk.red(`Unknown source: ${source}. Use claude-code, codex-cli, or all.`));
+      console.error(chalk.red(`Unknown source: ${source}. Use claude-code, codex-cli, cursor, or all.`));
       process.exit(1);
     }
 
@@ -107,6 +109,8 @@ program
           sessions = parseClaudeCodeFile(file.path);
         } else if (file.platform === "codex_cli") {
           sessions = parseCodexCliFile(file.path);
+        } else if (file.platform === "cursor") {
+          sessions = parseCursorAgentFile(file.path);
         } else {
           console.log(chalk.gray(`    Skipping unknown platform: ${file.platform}`));
           continue;

@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   cwd TEXT,
   git_branch TEXT,
   turn_count INTEGER DEFAULT 0,
-  file_path TEXT NOT NULL
+  file_path TEXT NOT NULL,
+  is_benchmark INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS observations (
@@ -86,7 +87,18 @@ export class ObservatoryDB {
     this.init();
   }
 
-  private init(): void { this.db.exec(SCHEMA); }
+  private init(): void {
+    this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  private migrate(): void {
+    // Add is_benchmark column if missing (for existing databases)
+    const cols = this.db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === "is_benchmark")) {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN is_benchmark INTEGER NOT NULL DEFAULT 0");
+    }
+  }
 
   getIngestedFile(filePath: string): IngestedFileRow | null {
     return (this.db.prepare("SELECT * FROM ingested_files WHERE file_path = ?").get(filePath) as IngestedFileRow) || null;
@@ -108,12 +120,13 @@ export class ObservatoryDB {
   }
 
   upsertSession(session: { id: string; sourcePlatform: string; modelId: string | null; startedAt: string; endedAt: string | null; cwd: string | null; gitBranch: string | null; turnCount: number; filePath: string; }): void {
+    const isBenchmark = (session.cwd && session.cwd.includes("obs-bench")) || session.gitBranch === "__obs_bench__" ? 1 : 0;
     this.db.prepare(`
-      INSERT INTO sessions (id, source_platform, model_id, started_at, ended_at, cwd, git_branch, turn_count, file_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (id, source_platform, model_id, started_at, ended_at, cwd, git_branch, turn_count, file_path, is_benchmark)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET model_id = excluded.model_id, started_at = excluded.started_at, ended_at = excluded.ended_at,
-        cwd = excluded.cwd, git_branch = excluded.git_branch, turn_count = excluded.turn_count, file_path = excluded.file_path
-    `).run(session.id, session.sourcePlatform, session.modelId, session.startedAt, session.endedAt, session.cwd, session.gitBranch, session.turnCount, session.filePath);
+        cwd = excluded.cwd, git_branch = excluded.git_branch, turn_count = excluded.turn_count, file_path = excluded.file_path, is_benchmark = excluded.is_benchmark
+    `).run(session.id, session.sourcePlatform, session.modelId, session.startedAt, session.endedAt, session.cwd, session.gitBranch, session.turnCount, session.filePath, isBenchmark);
   }
 
   deleteSessionsByFilePath(filePath: string): void {

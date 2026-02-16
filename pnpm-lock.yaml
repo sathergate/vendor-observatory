@@ -52,6 +52,25 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/benchmark:
+    dependencies:
+      '@obs/shared':
+        specifier: workspace:*
+        version: link:../shared
+      chalk:
+        specifier: ^5.4.0
+        version: 5.6.2
+      commander:
+        specifier: ^13.0.0
+        version: 13.1.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.11
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/ingest:
     dependencies:
       '@obs/shared':

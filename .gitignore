@@ -9,3 +9,4 @@ db/*.sqlite-wal
 .vercel
 db/sync.log
 db/sync-launchd.log
+db/bench-cost.jsonl

@@ -21,6 +21,8 @@ function getTranscriptDirs(platform: SourcePlatform): string[] {
       return [join(home, ".claude", "projects")];
     case "codex_cli":
       return [join(home, ".codex", "sessions")];
+    case "cursor":
+      return [join(home, ".cursor-obs", "sessions")];
     default:
       return [];
   }
@@ -41,7 +43,7 @@ function findJsonlFiles(dir: string, maxDepth = 10, currentDepth = 0): string[] 
       const fullPath = join(dir, entry.name);
 
       if (entry.isDirectory()) {
-        if (entry.name.startsWith(".") && !entry.name.startsWith(".claude") && !entry.name.startsWith(".codex")) {
+        if (entry.name.startsWith(".") && !entry.name.startsWith(".claude") && !entry.name.startsWith(".codex") && !entry.name.startsWith(".cursor-obs")) {
           continue;
         }
         results.push(...findJsonlFiles(fullPath, maxDepth, currentDepth + 1));
@@ -89,6 +91,6 @@ export function scanForTranscripts(platform: SourcePlatform): TranscriptFile[] {
  * Scan for all transcript files across all platforms.
  */
 export function scanAllTranscripts(): TranscriptFile[] {
-  const platforms: SourcePlatform[] = ["claude_code", "codex_cli"];
+  const platforms: SourcePlatform[] = ["claude_code", "codex_cli", "cursor"];
   return platforms.flatMap(scanForTranscripts);
 }

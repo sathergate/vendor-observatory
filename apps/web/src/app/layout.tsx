@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/platforms", label: "Platforms" },
   { href: "/actions", label: "Actions" },
   { href: "/sessions", label: "Sessions" },
+  { href: "/benchmarks", label: "Benchmarks" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
