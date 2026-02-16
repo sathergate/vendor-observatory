@@ -136,6 +136,7 @@ jobs:
         run: sleep 5
 
       - name: Ingest transcripts
+        continue-on-error: true
         run: node packages/ingest/dist/index.js ingest
 
       # ── Commit + push ──────────────────────────────────────────
@@ -147,11 +148,18 @@ jobs:
           fi
 
           echo "DB changed — committing and pushing..."
+
+          # Stash our DB, pull latest main, then re-apply our DB on top.
+          # This avoids rebase conflicts on the binary sqlite file.
+          cp db/observatory.sqlite /tmp/observatory.sqlite.new
+          git checkout -- db/observatory.sqlite
+          git pull origin main
+          cp /tmp/observatory.sqlite.new db/observatory.sqlite
+
           git add db/observatory.sqlite
           git commit -m "chore: daily observatory data refresh
 
           Automated benchmark + transcript ingest via GitHub Actions."
-          git pull --rebase origin main
           git push origin main
 
       # ── Final artifacts: DB + cost log ─────────────────────────

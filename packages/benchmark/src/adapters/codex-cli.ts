@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { which } from "../util.js";
 import type { AssistantAdapter, RunOptions, BenchmarkResult } from "./types.js";
 
@@ -21,13 +21,17 @@ export class CodexCliAdapter implements AssistantAdapter {
       }
       args.push("-C", opts.workDir, opts.prompt);
 
-      const { stdout, stderr, exitCode } = await execAsync("codex", args, {
+      const { stdout, stderr, exitCode, timedOut } = await spawnWithTimeout("codex", args, {
         cwd: opts.workDir,
         timeout: opts.timeoutMs,
       });
 
       const endedAt = new Date().toISOString();
       const durationMs = Date.now() - start;
+
+      // Timeouts that produced output are not errors
+      const hasContent = stdout.length > 100;
+      const isError = exitCode !== 0 && !hasContent;
 
       return {
         promptId: opts.promptId,
@@ -40,7 +44,7 @@ export class CodexCliAdapter implements AssistantAdapter {
         stderr: stderr.slice(0, 2000),
         transcriptPath: null, // Codex auto-saves to ~/.codex/sessions/
         costUsd: null,
-        error: exitCode !== 0 ? `Exit code ${exitCode}` : null,
+        error: isError ? `Exit code ${exitCode}: ${stderr.slice(0, 200)}` : null,
       };
     } catch (err) {
       return {
@@ -60,22 +64,62 @@ export class CodexCliAdapter implements AssistantAdapter {
   }
 }
 
-function execAsync(
+/**
+ * Spawn a process with timeout, capturing stdout/stderr incrementally.
+ * Unlike execFile, this captures output even when the process is killed.
+ */
+function spawnWithTimeout(
   cmd: string,
   args: string[],
   options: { cwd: string; timeout: number },
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+): Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }> {
   return new Promise((resolve) => {
-    const proc = execFile(cmd, args, {
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    let timedOut = false;
+    let resolved = false;
+
+    const proc = spawn(cmd, args, {
       cwd: options.cwd,
-      timeout: options.timeout,
-      maxBuffer: 10 * 1024 * 1024,
       env: { ...process.env, NO_COLOR: "1" },
-    }, (error, stdout, stderr) => {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      stdoutChunks.push(chunk.toString());
+    });
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk.toString());
+    });
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill("SIGTERM");
+      setTimeout(() => {
+        if (!resolved) proc.kill("SIGKILL");
+      }, 5000);
+    }, options.timeout);
+
+    proc.on("close", (code) => {
+      resolved = true;
+      clearTimeout(timer);
       resolve({
-        stdout: stdout ?? "",
-        stderr: stderr ?? "",
-        exitCode: error ? (error as NodeJS.ErrnoException & { code?: number }).code ?? 1 : proc.exitCode ?? 0,
+        stdout: stdoutChunks.join(""),
+        stderr: stderrChunks.join(""),
+        exitCode: code ?? 1,
+        timedOut,
+      });
+    });
+
+    proc.on("error", (err) => {
+      resolved = true;
+      clearTimeout(timer);
+      resolve({
+        stdout: stdoutChunks.join(""),
+        stderr: stderrChunks.join("") + "\n" + String(err),
+        exitCode: 1,
+        timedOut: false,
       });
     });
   });
