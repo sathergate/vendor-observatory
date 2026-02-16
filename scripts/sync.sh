@@ -25,7 +25,7 @@ pnpm -r build >> "$LOG_FILE" 2>&1
 
 # 2. Run daily benchmark (generates new transcripts across all assistants)
 log "Running daily benchmark..."
-node packages/benchmark/dist/index.js run --budget 25 --timeout 120000 >> "$LOG_FILE" 2>&1 || log "Benchmark run had errors (continuing...)"
+node packages/benchmark/dist/index.js run --budget 25 >> "$LOG_FILE" 2>&1 || log "Benchmark run had errors (continuing...)"
 
 # 3. Wait for transcripts to be flushed to disk
 sleep 5

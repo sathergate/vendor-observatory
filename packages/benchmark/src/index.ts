@@ -22,7 +22,7 @@ program
   .description("Run the benchmark prompt set across all available assistants")
   .option("--budget <usd>", "Daily budget cap in USD", "25")
   .option("--per-prompt-budget <usd>", "Per-prompt budget in USD", "0.50")
-  .option("--timeout <ms>", "Per-prompt timeout in milliseconds", "120000")
+  .option("--timeout <ms>", "Per-prompt timeout in milliseconds", "600000")
   .option("--assistants <list>", "Comma-separated list of assistants to use", "claude_code,codex_cli,cursor")
   .option("--category <category>", "Only run prompts from this category")
   .option("--prompt-id <id>", "Only run a specific prompt by ID")

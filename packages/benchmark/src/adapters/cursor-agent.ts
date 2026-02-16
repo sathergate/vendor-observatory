@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -30,7 +30,7 @@ export class CursorAgentAdapter implements AssistantAdapter {
 
     try {
       const apiKey = process.env.CURSOR_API_KEY ?? "";
-      const { stdout, stderr, exitCode } = await execAsync("cursor", [
+      const { stdout, stderr, exitCode } = await spawnWithTimeout("cursor", [
         "agent",
         "--print",
         "--api-key", apiKey,
@@ -173,22 +173,58 @@ export class CursorAgentAdapter implements AssistantAdapter {
   }
 }
 
-function execAsync(
+/**
+ * Spawn a process with timeout, capturing stdout/stderr incrementally.
+ * Unlike execFile, this captures output even when the process is killed.
+ */
+function spawnWithTimeout(
   cmd: string,
   args: string[],
   options: { cwd: string; timeout: number },
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve) => {
-    const proc = execFile(cmd, args, {
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    let resolved = false;
+
+    const proc = spawn(cmd, args, {
       cwd: options.cwd,
-      timeout: options.timeout,
-      maxBuffer: 10 * 1024 * 1024,
       env: { ...process.env, NO_COLOR: "1" },
-    }, (error, stdout, stderr) => {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      stdoutChunks.push(chunk.toString());
+    });
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk.toString());
+    });
+
+    const timer = setTimeout(() => {
+      proc.kill("SIGTERM");
+      setTimeout(() => {
+        if (!resolved) proc.kill("SIGKILL");
+      }, 5000);
+    }, options.timeout);
+
+    proc.on("close", (code) => {
+      resolved = true;
+      clearTimeout(timer);
       resolve({
-        stdout: stdout ?? "",
-        stderr: stderr ?? "",
-        exitCode: error ? (error as NodeJS.ErrnoException & { code?: number }).code ?? 1 : proc.exitCode ?? 0,
+        stdout: stdoutChunks.join(""),
+        stderr: stderrChunks.join(""),
+        exitCode: code ?? 1,
+      });
+    });
+
+    proc.on("error", (err) => {
+      resolved = true;
+      clearTimeout(timer);
+      resolve({
+        stdout: stdoutChunks.join(""),
+        stderr: stderrChunks.join("") + "\n" + String(err),
+        exitCode: 1,
       });
     });
   });
