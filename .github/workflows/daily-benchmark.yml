@@ -133,11 +133,11 @@ jobs:
           fi
 
           echo "DB changed — committing and pushing..."
-          git pull --rebase origin main
           git add db/observatory.sqlite
           git commit -m "chore: daily observatory data refresh
 
           Automated benchmark + transcript ingest via GitHub Actions."
+          git pull --rebase origin main
           git push origin main
 
       # ── Artifacts ───────────────────────────────────────────────
