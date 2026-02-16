@@ -15,7 +15,18 @@ export class CodexCliAdapter implements AssistantAdapter {
     const start = Date.now();
 
     try {
-      const args = ["exec", "--full-auto"];
+      const args = ["exec"];
+
+      // On CI/GitHub Actions, the runner is already externally sandboxed.
+      // Use bypass mode so Codex can run commands with full network access.
+      // Without this, --full-auto's workspace-write sandbox blocks network,
+      // causing the model to produce null responses and exit code 1.
+      if (process.env.CI || process.env.GITHUB_ACTIONS) {
+        args.push("--dangerously-bypass-approvals-and-sandbox");
+      } else {
+        args.push("--full-auto");
+      }
+
       if (process.env.CODEX_MODEL) {
         args.push("-m", process.env.CODEX_MODEL);
       }
@@ -44,7 +55,7 @@ export class CodexCliAdapter implements AssistantAdapter {
         stderr: stderr.slice(0, 2000),
         transcriptPath: null, // Codex auto-saves to ~/.codex/sessions/
         costUsd: null,
-        error: isError ? `Exit code ${exitCode}: ${stderr.slice(0, 200)}` : null,
+        error: isError ? `Exit code ${exitCode}: ${stderr.slice(0, 500)}` : null,
       };
     } catch (err) {
       return {
