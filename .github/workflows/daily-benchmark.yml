@@ -1,0 +1,150 @@
+name: Daily Benchmark
+
+on:
+  schedule:
+    # 12:00 UTC = 5:00 AM PDT / 4:00 AM PST
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "Daily budget cap in USD"
+        required: false
+        default: "25"
+      assistants:
+        description: "Comma-separated assistant list"
+        required: false
+        default: "claude_code,codex_cli,cursor"
+      category:
+        description: "Only run prompts from this category (blank = all)"
+        required: false
+        default: ""
+
+# Prevent concurrent benchmark runs from overlapping
+concurrency:
+  group: daily-benchmark
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      # ── Checkout ─────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      # ── Node.js + pnpm ──────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      # ── Install + build ─────────────────────────────────────────
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm -r build
+
+      # ── Install AI assistant CLIs ───────────────────────────────
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Install Cursor CLI (optional)
+        continue-on-error: true
+        run: |
+          npm install -g @anthropic-ai/cursor-cli 2>/dev/null \
+            || npm install -g cursor-cli 2>/dev/null \
+            || echo "::warning::Cursor CLI not available — will be skipped"
+
+      - name: Verify CLI availability
+        run: |
+          echo "=== CLI availability ==="
+          which claude && claude --version || echo "claude: NOT FOUND"
+          which codex && codex --version || echo "codex: NOT FOUND"
+          which cursor && cursor --version || echo "cursor: NOT FOUND (optional)"
+
+      # ── Git identity ────────────────────────────────────────────
+      - name: Configure git identity
+        run: |
+          git config user.name "vendor-observatory[bot]"
+          git config user.email "vendor-observatory[bot]@users.noreply.github.com"
+
+      # ── Run benchmark ───────────────────────────────────────────
+      - name: Run benchmark suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          BUDGET="${{ github.event.inputs.budget || '25' }}"
+          ASSISTANTS="${{ github.event.inputs.assistants || 'claude_code,codex_cli,cursor' }}"
+          CATEGORY="${{ github.event.inputs.category || '' }}"
+
+          ARGS="run --budget $BUDGET --assistants $ASSISTANTS"
+          if [ -n "$CATEGORY" ]; then
+            ARGS="$ARGS --category $CATEGORY"
+          fi
+
+          echo "Running: node packages/benchmark/dist/index.js $ARGS"
+          node packages/benchmark/dist/index.js $ARGS || echo "::warning::Benchmark had errors (continuing to ingest...)"
+
+      # ── Ingest ──────────────────────────────────────────────────
+      - name: Wait for transcript flush
+        run: sleep 5
+
+      - name: Ingest transcripts
+        run: node packages/ingest/dist/index.js ingest
+
+      # ── Commit + push ──────────────────────────────────────────
+      - name: Commit and push if DB changed
+        run: |
+          if git diff --quiet -- db/observatory.sqlite 2>/dev/null; then
+            echo "No changes to observatory.sqlite — skipping push."
+            exit 0
+          fi
+
+          echo "DB changed — committing and pushing..."
+          git pull --rebase origin main
+          git add db/observatory.sqlite
+          git commit -m "chore: daily observatory data refresh
+
+          Automated benchmark + transcript ingest via GitHub Actions."
+          git push origin main
+
+      # ── Artifacts ───────────────────────────────────────────────
+      - name: Upload benchmark logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-logs-${{ github.run_number }}
+          path: |
+            db/bench-cost.jsonl
+          retention-days: 30
