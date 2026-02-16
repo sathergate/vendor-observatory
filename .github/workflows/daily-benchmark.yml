@@ -117,6 +117,20 @@ jobs:
           echo "Running: node packages/benchmark/dist/index.js $ARGS"
           node packages/benchmark/dist/index.js $ARGS || echo "::warning::Benchmark had errors (continuing to ingest...)"
 
+      # ── Checkpoint: save raw transcripts before ingest ──────────
+      - name: Upload raw transcripts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcripts-${{ github.run_number }}
+          path: |
+            /home/runner/.claude/projects/-tmp-obs-bench*/**/*.jsonl
+            /home/runner/.codex/sessions/**/*.jsonl
+            /home/runner/.cursor-obs/sessions/**/*.jsonl
+            db/bench-cost.jsonl
+          retention-days: 14
+          if-no-files-found: warn
+
       # ── Ingest ──────────────────────────────────────────────────
       - name: Wait for transcript flush
         run: sleep 5
@@ -140,13 +154,13 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
-      # ── Artifacts ───────────────────────────────────────────────
-      - name: Upload benchmark logs
+      # ── Final artifacts: DB + cost log ─────────────────────────
+      - name: Upload database and logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-logs-${{ github.run_number }}
+          name: benchmark-results-${{ github.run_number }}
           path: |
-            db/bench-cost.jsonl
             db/observatory.sqlite
+            db/bench-cost.jsonl
           retention-days: 30
