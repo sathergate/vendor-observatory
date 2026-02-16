@@ -148,4 +148,5 @@ jobs:
           name: benchmark-logs-${{ github.run_number }}
           path: |
             db/bench-cost.jsonl
+            db/observatory.sqlite
           retention-days: 30
