@@ -107,19 +107,20 @@ program
     console.log(chalk.bold("\nBenchmark Prompts\n"));
     console.log(
       chalk.bold(
-        "ID".padEnd(20) +
+        "ID".padEnd(12) +
         "Category".padEnd(22) +
-        "Style".padEnd(10) +
-        "Template".padEnd(12),
+        "Template".padEnd(14) +
+        "Prompt",
       ),
     );
-    console.log("─".repeat(64));
+    console.log("─".repeat(90));
     for (const p of prompts) {
+      const truncated = p.text.length > 60 ? p.text.slice(0, 57) + "..." : p.text;
       console.log(
-        p.id.padEnd(20) +
+        p.id.padEnd(12) +
         p.category.padEnd(22) +
-        p.style.padEnd(10) +
-        p.template.padEnd(12),
+        p.template.padEnd(14) +
+        truncated,
       );
     }
     console.log(`\nTotal: ${prompts.length} prompts`);
