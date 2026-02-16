@@ -15,7 +15,7 @@ export class CodexCliAdapter implements AssistantAdapter {
     const start = Date.now();
 
     try {
-      const model = process.env.CODEX_MODEL || "gpt-5.3-codex";
+      const model = process.env.CODEX_MODEL || "gpt-5.2-codex";
       const { stdout, stderr, exitCode } = await execAsync("codex", [
         "exec",
         "--full-auto",
