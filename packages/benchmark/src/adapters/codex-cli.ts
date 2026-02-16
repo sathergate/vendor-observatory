@@ -6,6 +6,7 @@ export class CodexCliAdapter implements AssistantAdapter {
   name = "codex_cli" as const;
 
   async isAvailable(): Promise<boolean> {
+    if (!process.env.OPENAI_API_KEY) return false;
     return (await which("codex")) !== null;
   }
 
@@ -14,9 +15,11 @@ export class CodexCliAdapter implements AssistantAdapter {
     const start = Date.now();
 
     try {
+      const model = process.env.CODEX_MODEL || "gpt-5.3-codex";
       const { stdout, stderr, exitCode } = await execAsync("codex", [
         "exec",
         "--full-auto",
+        "-m", model,
         "-C", opts.workDir,
         opts.prompt,
       ], {
