@@ -103,6 +103,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          CODEX_MODEL: ${{ secrets.CODEX_MODEL }}
         run: |
           BUDGET="${{ github.event.inputs.budget || '25' }}"
           ASSISTANTS="${{ github.event.inputs.assistants || 'claude_code,codex_cli,cursor' }}"

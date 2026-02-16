@@ -15,14 +15,13 @@ export class CodexCliAdapter implements AssistantAdapter {
     const start = Date.now();
 
     try {
-      const model = process.env.CODEX_MODEL || "gpt-5.2-codex";
-      const { stdout, stderr, exitCode } = await execAsync("codex", [
-        "exec",
-        "--full-auto",
-        "-m", model,
-        "-C", opts.workDir,
-        opts.prompt,
-      ], {
+      const args = ["exec", "--full-auto"];
+      if (process.env.CODEX_MODEL) {
+        args.push("-m", process.env.CODEX_MODEL);
+      }
+      args.push("-C", opts.workDir, opts.prompt);
+
+      const { stdout, stderr, exitCode } = await execAsync("codex", args, {
         cwd: opts.workDir,
         timeout: opts.timeoutMs,
       });
