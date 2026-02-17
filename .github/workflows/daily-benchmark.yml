@@ -84,6 +84,12 @@ jobs:
             || npm install -g cursor-cli 2>/dev/null \
             || echo "::warning::Cursor CLI not available — will be skipped"
 
+      - name: Authenticate Codex CLI
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "$OPENAI_API_KEY" | codex login --with-api-key
+
       - name: Verify CLI availability
         run: |
           echo "=== CLI availability ==="
@@ -102,6 +108,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           CODEX_MODEL: ${{ secrets.CODEX_MODEL }}
         run: |
