@@ -605,6 +605,21 @@ export interface VendorScorecard {
   rationaleSnippets: string[];
   promptsWon: Array<{ prompt_id: string; category: string }>;
   promptsLost: Array<{ prompt_id: string; category: string; winner: string }>;
+  lossContext: Array<{
+    prompt_id: string;
+    category: string;
+    winner: string;
+    winnerConstraintsAddressed: string[];
+    promptConstraints: string[];
+    platform: string;
+  }>;
+  implementationContext: Array<{
+    prompt_id: string;
+    category: string;
+    platform: string;
+    isImplemented: boolean;
+  }>;
+  allPromptConstraints: Record<string, string[]>;
 }
 
 export function getVendorScorecard(vendor: string): VendorScorecard | null {
@@ -742,6 +757,47 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       }
     }
 
+    // Loss context: for each loss, capture the winner's constraints and the prompt's constraints
+    const lossContext: VendorScorecard["lossContext"] = [];
+    for (const r of mentionedIn) {
+      if (r.primary_vendor && r.primary_vendor !== vendor) {
+        // Find the winner's response to get their constraints_addressed
+        const winnerResponse = allResponses.find(
+          wr => wr.prompt_id === r.prompt_id && wr.primary_vendor === r.primary_vendor
+        );
+        const winnerConstraints = winnerResponse
+          ? safeJsonParse<string[]>(winnerResponse.constraints_addressed, [])
+          : [];
+        lossContext.push({
+          prompt_id: r.prompt_id,
+          category: r.category || "unknown",
+          winner: r.primary_vendor,
+          winnerConstraintsAddressed: winnerConstraints,
+          promptConstraints: safeJsonParse<string[]>(r.constraints, []),
+          platform: r.source_platform,
+        });
+      }
+    }
+
+    // Implementation context: for each recommendation, track implementation status
+    const implementationContext: VendorScorecard["implementationContext"] = [];
+    for (const r of recommendedIn) {
+      implementationContext.push({
+        prompt_id: r.prompt_id,
+        category: r.category || "unknown",
+        platform: r.source_platform,
+        isImplemented: !!r.is_implemented,
+      });
+    }
+
+    // All prompt constraints: map prompt_id → constraints for all mentioned prompts
+    const allPromptConstraints: Record<string, string[]> = {};
+    for (const r of mentionedIn) {
+      if (!allPromptConstraints[r.prompt_id]) {
+        allPromptConstraints[r.prompt_id] = safeJsonParse<string[]>(r.constraints, []);
+      }
+    }
+
     return {
       vendor,
       totalRecommendations: recommendedIn.length,
@@ -758,6 +814,9 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       rationaleSnippets,
       promptsWon,
       promptsLost,
+      lossContext,
+      implementationContext,
+      allPromptConstraints,
     };
   } catch { return null; }
 }

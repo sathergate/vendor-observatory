@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getVendorScorecard, getVendorHeadToHead } from "@/lib/db";
+import { generateRecommendations, type Recommendation } from "@/lib/recommendations";
 import { vendorDisplayName, VENDOR_META, vendorCategory } from "../../vendor-taxonomy";
 import { CATEGORY_META } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
@@ -10,56 +11,107 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-function generateRecommendations(scorecard: NonNullable<ReturnType<typeof getVendorScorecard>>): string[] {
-  const recs: string[] = [];
+const IMPACT_STYLES = {
+  high: {
+    border: "border-l-red-500",
+    bg: "bg-red-900/10",
+    pill: "bg-red-500/20 text-red-300",
+    badge: "bg-red-500/30 text-red-200",
+  },
+  medium: {
+    border: "border-l-yellow-500",
+    bg: "bg-yellow-900/10",
+    pill: "bg-yellow-500/20 text-yellow-300",
+    badge: "bg-yellow-500/30 text-yellow-200",
+  },
+  low: {
+    border: "border-l-gray-600",
+    bg: "bg-gray-800/50",
+    pill: "bg-gray-700 text-gray-400",
+    badge: "bg-gray-700 text-gray-300",
+  },
+} as const;
 
-  // 1. Low implementation rate
-  if (scorecard.totalRecommendations > 0 && scorecard.implementationRate < 0.5) {
-    recs.push(
-      `Implementation rate is ${pct(scorecard.implementationRate)} — AI assistants recommend your tool but often don't write the setup code. Consider simplifying your SDK initialization or providing better AI-friendly documentation.`
-    );
-  }
+function RecommendationCard({ rec, index }: { rec: Recommendation; index: number }) {
+  const style = IMPACT_STYLES[rec.impact];
+  const hasEvidence =
+    (rec.evidence.scenarios && rec.evidence.scenarios.length > 0) ||
+    (rec.evidence.constraints && rec.evidence.constraints.length > 0) ||
+    (rec.evidence.competitors && rec.evidence.competitors.length > 0) ||
+    rec.evidence.winRateDelta !== undefined;
 
-  // 2. Constraint gaps — constraints that appear in prompts where vendor lost
-  const topMissed = scorecard.constraintsMissed.slice(0, 3);
-  for (const m of topMissed) {
-    const label = m.constraint.replace(/_/g, " ");
-    recs.push(
-      `You are mentioned but not recommended in ${m.count} scenario${m.count > 1 ? "s" : ""} requiring "${label}". Consider improving your ${label} support or documentation.`
-    );
-  }
+  return (
+    <div className={`border-l-4 ${style.border} ${style.bg} rounded-r-lg p-4`}>
+      <div className="flex items-start gap-3">
+        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${style.badge} shrink-0 mt-0.5`}>
+          P{rec.priority}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-100">{rec.title}</h3>
+            <span className={`text-xs px-1.5 py-0.5 rounded ${style.pill}`}>
+              {rec.impact.toUpperCase()}
+            </span>
+          </div>
+          <p className="text-sm text-gray-400 mt-1">{rec.detail}</p>
 
-  // 3. Competitor losses
-  for (const comp of scorecard.competitorWins.slice(0, 2)) {
-    const compName = vendorDisplayName(comp.competitor);
-    recs.push(
-      `You lose to ${compName} in ${comp.count} head-to-head scenario${comp.count > 1 ? "s" : ""}. Review scenarios: ${comp.scenarios.map(s => PROMPT_SUMMARIES[s]?.title || s).join(", ")}.`
-    );
-  }
-
-  // 4. Low win rate with high mentions
-  if (scorecard.totalMentions > 3 && scorecard.winRate < 0.4) {
-    recs.push(
-      `Win rate is ${pct(scorecard.winRate)} across ${scorecard.totalMentions} mentions — you're considered but often lose to competitors. Analyze which constraints and scenarios you're losing on.`
-    );
-  }
-
-  // 5. Gotcha themes
-  if (scorecard.gotchaSnippets.length >= 2) {
-    recs.push(
-      `AI assistants flag ${scorecard.gotchaSnippets.length} gotcha${scorecard.gotchaSnippets.length > 1 ? "s" : ""} about your tool. Address these concerns in your documentation or product.`
-    );
-  }
-
-  // 6. Single platform
-  const platforms = Object.keys(scorecard.platformSplit);
-  if (platforms.length === 1 && scorecard.totalRecommendations > 1) {
-    recs.push(
-      `Only recommended on ${platforms[0]} — consider improving discoverability for other AI assistants (documentation, npm package naming, example code).`
-    );
-  }
-
-  return recs;
+          {hasEvidence && (
+            <details className="mt-2">
+              <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-400">
+                Evidence
+              </summary>
+              <div className="mt-2 space-y-1.5">
+                {rec.evidence.winRateDelta !== undefined && (
+                  <div className="text-xs text-gray-400">
+                    Win rate impact: {rec.evidence.currentWinRate !== undefined && (
+                      <span className="text-red-400">{pct(rec.evidence.currentWinRate)}</span>
+                    )} → {rec.evidence.potentialWinRate !== undefined && (
+                      <span className="text-green-400">{pct(rec.evidence.potentialWinRate)}</span>
+                    )} (delta: +{pct(rec.evidence.winRateDelta)})
+                  </div>
+                )}
+                {rec.evidence.scenarios && rec.evidence.scenarios.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {rec.evidence.scenarios.map((s) => (
+                      <Link
+                        key={s}
+                        href={`/benchmarks/${PROMPT_SUMMARIES[s]?.scenario ? s.split("-")[0] : "database"}`}
+                        className="text-xs px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-400 hover:text-blue-400"
+                      >
+                        {PROMPT_SUMMARIES[s]?.title || s}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                {rec.evidence.constraints && rec.evidence.constraints.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {rec.evidence.constraints.map((c) => (
+                      <span key={c} className="text-xs px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-300">
+                        {c.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {rec.evidence.competitors && rec.evidence.competitors.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {rec.evidence.competitors.map((comp) => (
+                      <Link
+                        key={comp}
+                        href={`/benchmarks/vendors/${encodeURIComponent(comp)}`}
+                        className="text-xs px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-300 hover:bg-blue-900/50"
+                      >
+                        vs {vendorDisplayName(comp)}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default async function VendorScorecardPage({ params }: { params: Promise<{ vendor: string }> }) {
@@ -472,17 +524,27 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           <h2 className="text-lg font-semibold mb-3">
             🎯 Actionable Recommendations
           </h2>
-          <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg p-5 space-y-4">
-            <p className="text-xs text-gray-400">
-              Generated from benchmark data — specific actions to improve AI recommendation ranking
-            </p>
-            {recommendations.map((rec, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span className="text-blue-400 font-bold mt-0.5">{i + 1}.</span>
-                <p className="text-sm text-gray-200">{rec}</p>
-              </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Prioritized by estimated impact on AI recommendation ranking • Based on {scorecard.totalMentions} benchmark responses
+          </p>
+          <div className="space-y-3">
+            {recommendations.slice(0, 5).map((rec, i) => (
+              <RecommendationCard key={i} rec={rec} index={i} />
             ))}
           </div>
+
+          {recommendations.length > 5 && (
+            <details className="mt-3">
+              <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-400 px-4">
+                Show {recommendations.length - 5} more recommendation{recommendations.length - 5 > 1 ? "s" : ""}
+              </summary>
+              <div className="space-y-3 mt-3">
+                {recommendations.slice(5).map((rec, i) => (
+                  <RecommendationCard key={i + 5} rec={rec} index={i + 5} />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </div>
