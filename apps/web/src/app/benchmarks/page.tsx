@@ -6,6 +6,7 @@ import {
   getCategorySummaries,
 } from "@/lib/db";
 import { CATEGORY_META } from "./categories";
+import { PROMPT_COUNTS } from "./prompt-summaries";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,23 @@ export default function BenchmarksPage() {
   const stats = getBenchmarkStats();
   const sessions = getBenchmarkSessions(50);
   const vendorComp = getBenchmarkVendorComparison();
-  const categories = getCategorySummaries();
+  const dbCategories = getCategorySummaries();
+
+  // Merge all categories from CATEGORY_META with any DB data
+  const allCategories = Object.entries(CATEGORY_META).map(([key, meta]) => {
+    const dbData = dbCategories.find((c) => c.category === key);
+    return {
+      key,
+      meta,
+      promptCount: dbData?.prompt_count ?? PROMPT_COUNTS[key] ?? 0,
+      responseCount: dbData?.response_count ?? 0,
+      topVendor: dbData?.top_vendor ?? null,
+      topVendorCount: dbData?.top_vendor_count ?? 0,
+      avgConstraintCoverage: dbData?.avg_constraint_coverage ?? 0,
+      totalConstraints: dbData?.total_constraints ?? 0,
+      hasData: !!dbData && dbData.response_count > 0,
+    };
+  });
 
   return (
     <div className="space-y-8">
@@ -50,68 +67,77 @@ export default function BenchmarksPage() {
         </div>
       </div>
 
-      {/* Category cards */}
-      {categories.length > 0 ? (
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Categories</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {categories.map((cat) => {
-              const meta = CATEGORY_META[cat.category] ?? { label: cat.category, icon: "📦", description: "" };
-              return (
-                <Link
-                  key={cat.category}
-                  href={`/benchmarks/${cat.category}`}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 hover:ring-1 hover:ring-gray-600 transition-all group"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">{meta.icon}</span>
-                    <h3 className="font-semibold text-gray-100 group-hover:text-blue-400 transition-colors">
-                      {meta.label}
-                    </h3>
+      {/* Category cards — always show all 13 */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Categories</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {allCategories.map((cat) => (
+            <Link
+              key={cat.key}
+              href={`/benchmarks/${cat.key}`}
+              className={`rounded-lg p-4 transition-all group ${
+                cat.hasData
+                  ? "bg-gray-800 hover:bg-gray-750 hover:ring-1 hover:ring-gray-600"
+                  : "bg-gray-800/50 border border-dashed border-gray-700 hover:border-gray-500 hover:bg-gray-800/70"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">{cat.meta.icon}</span>
+                <h3 className="font-semibold text-gray-100 group-hover:text-blue-400 transition-colors">
+                  {cat.meta.label}
+                </h3>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">{cat.meta.description}</p>
+
+              {cat.hasData ? (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">{cat.promptCount} prompts</span>
+                    <span className="text-gray-400">{cat.responseCount} responses</span>
                   </div>
-                  <p className="text-xs text-gray-500 mb-3">{meta.description}</p>
-                  <div className="space-y-2">
+                  {cat.topVendor ? (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">{cat.prompt_count} prompts</span>
-                      <span className="text-gray-400">{cat.response_count} responses</span>
+                      <span className="text-gray-500">Top vendor</span>
+                      <span className="text-blue-400 font-medium">
+                        {cat.topVendor}
+                        <span className="text-gray-500 ml-1">({cat.topVendorCount})</span>
+                      </span>
                     </div>
-                    {cat.top_vendor ? (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Top vendor</span>
-                        <span className="text-blue-400 font-medium">
-                          {cat.top_vendor}
-                          <span className="text-gray-500 ml-1">({cat.top_vendor_count})</span>
-                        </span>
+                  ) : (
+                    <div className="text-sm text-gray-600">No recommendations yet</div>
+                  )}
+                  {cat.totalConstraints > 0 && (
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>Constraint coverage</span>
+                        <span>{Math.round(cat.avgConstraintCoverage * 100)}%</span>
                       </div>
-                    ) : (
-                      <div className="text-sm text-gray-600">No recommendations yet</div>
-                    )}
-                    {cat.total_constraints > 0 && (
-                      <div>
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>Constraint coverage</span>
-                          <span>{Math.round(cat.avg_constraint_coverage * 100)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-700 rounded-full h-1.5">
-                          <div
-                            className="bg-blue-500 h-1.5 rounded-full transition-all"
-                            style={{ width: `${Math.min(100, Math.round(cat.avg_constraint_coverage * 100))}%` }}
-                          />
-                        </div>
+                      <div className="w-full bg-gray-700 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-500 h-1.5 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, Math.round(cat.avgConstraintCoverage * 100))}%` }}
+                        />
                       </div>
-                    )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">{cat.promptCount} prompts</span>
+                    <span className="text-gray-600">0 responses</span>
                   </div>
-                </Link>
-              );
-            })}
-          </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-0.5 rounded bg-gray-700/50 text-gray-500">
+                      Awaiting data
+                    </span>
+                  </div>
+                </div>
+              )}
+            </Link>
+          ))}
         </div>
-      ) : (
-        <div className="bg-gray-800 rounded-lg p-6 text-center">
-          <p className="text-gray-400">Category enrichment data will appear after the next benchmark run</p>
-          <p className="text-xs text-gray-500 mt-1">Prompts have been updated with enrichment metadata</p>
-        </div>
-      )}
+      </div>
 
       {/* Cross-assistant vendor comparison */}
       {vendorComp.length > 0 && (
