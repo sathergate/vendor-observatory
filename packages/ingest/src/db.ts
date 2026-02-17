@@ -13,6 +13,9 @@ import type {
   TimelinePoint,
   FunnelStats,
   DashboardStats,
+  PromptMetadataRow,
+  ResponseContextRow,
+  ExtractedResponseContext,
 } from "@obs/shared";
 
 const SCHEMA = `
@@ -66,12 +69,44 @@ CREATE TABLE IF NOT EXISTS tool_actions (
   FOREIGN KEY (session_id) REFERENCES sessions(id)
 );
 
+CREATE TABLE IF NOT EXISTS prompt_metadata (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  prompt_id TEXT NOT NULL UNIQUE,
+  category TEXT NOT NULL,
+  content_tags TEXT NOT NULL DEFAULT '[]',
+  pattern_tags TEXT NOT NULL DEFAULT '[]',
+  constraints TEXT NOT NULL DEFAULT '[]',
+  existing_stack TEXT NOT NULL DEFAULT '[]',
+  failure_mode TEXT,
+  vendors_named_in_prompt TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS response_context (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  prompt_id TEXT NOT NULL,
+  primary_vendor TEXT,
+  is_implemented INTEGER NOT NULL DEFAULT 0,
+  rationale_snippet TEXT,
+  vendors_mentioned TEXT NOT NULL DEFAULT '[]',
+  trade_offs_snippet TEXT,
+  gotchas_snippet TEXT,
+  constraints_addressed TEXT NOT NULL DEFAULT '[]',
+  extracted_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id),
+  UNIQUE(session_id, prompt_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_observations_vendor ON observations(vendor_canonical_id);
 CREATE INDEX IF NOT EXISTS idx_observations_session ON observations(session_id);
 CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(mention_type);
 CREATE INDEX IF NOT EXISTS idx_sessions_platform ON sessions(source_platform);
 CREATE INDEX IF NOT EXISTS idx_tool_actions_session ON tool_actions(session_id);
 CREATE INDEX IF NOT EXISTS idx_tool_actions_vendor ON tool_actions(vendor_canonical_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_metadata_category ON prompt_metadata(category);
+CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id);
+CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor);
 `;
 
 export class ObservatoryDB {
@@ -97,6 +132,48 @@ export class ObservatoryDB {
     const cols = this.db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
     if (!cols.some((c) => c.name === "is_benchmark")) {
       this.db.exec("ALTER TABLE sessions ADD COLUMN is_benchmark INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Ensure prompt_metadata and response_context tables exist (for DBs created before enrichment)
+    const tables = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
+    const tableNames = new Set(tables.map((t) => t.name));
+    if (!tableNames.has("prompt_metadata")) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS prompt_metadata (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          prompt_id TEXT NOT NULL UNIQUE,
+          category TEXT NOT NULL,
+          content_tags TEXT NOT NULL DEFAULT '[]',
+          pattern_tags TEXT NOT NULL DEFAULT '[]',
+          constraints TEXT NOT NULL DEFAULT '[]',
+          existing_stack TEXT NOT NULL DEFAULT '[]',
+          failure_mode TEXT,
+          vendors_named_in_prompt TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE INDEX IF NOT EXISTS idx_prompt_metadata_category ON prompt_metadata(category);
+      `);
+    }
+    if (!tableNames.has("response_context")) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS response_context (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL,
+          prompt_id TEXT NOT NULL,
+          primary_vendor TEXT,
+          is_implemented INTEGER NOT NULL DEFAULT 0,
+          rationale_snippet TEXT,
+          vendors_mentioned TEXT NOT NULL DEFAULT '[]',
+          trade_offs_snippet TEXT,
+          gotchas_snippet TEXT,
+          constraints_addressed TEXT NOT NULL DEFAULT '[]',
+          extracted_at TEXT NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES sessions(id),
+          UNIQUE(session_id, prompt_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id);
+        CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id);
+        CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor);
+      `);
     }
   }
 
@@ -267,6 +344,122 @@ export class ObservatoryDB {
 
   getToolActionsBySessionId(sessionId: string): ToolActionRow[] {
     return this.db.prepare("SELECT * FROM tool_actions WHERE session_id = ? ORDER BY timestamp").all(sessionId) as ToolActionRow[];
+  }
+
+  // ── Prompt Metadata ──────────────────────────────────────────────
+
+  upsertPromptMetadata(meta: {
+    promptId: string;
+    category: string;
+    contentTags: string[];
+    patternTags: string[];
+    constraints: string[];
+    existingStack: string[];
+    failureMode: string | null;
+    vendorsNamedInPrompt: string[];
+  }): void {
+    this.db.prepare(`
+      INSERT INTO prompt_metadata (prompt_id, category, content_tags, pattern_tags, constraints, existing_stack, failure_mode, vendors_named_in_prompt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(prompt_id) DO UPDATE SET
+        category = excluded.category,
+        content_tags = excluded.content_tags,
+        pattern_tags = excluded.pattern_tags,
+        constraints = excluded.constraints,
+        existing_stack = excluded.existing_stack,
+        failure_mode = excluded.failure_mode,
+        vendors_named_in_prompt = excluded.vendors_named_in_prompt
+    `).run(
+      meta.promptId,
+      meta.category,
+      JSON.stringify(meta.contentTags),
+      JSON.stringify(meta.patternTags),
+      JSON.stringify(meta.constraints),
+      JSON.stringify(meta.existingStack),
+      meta.failureMode,
+      JSON.stringify(meta.vendorsNamedInPrompt),
+    );
+  }
+
+  getPromptMetadata(promptId: string): PromptMetadataRow | null {
+    return (this.db.prepare("SELECT * FROM prompt_metadata WHERE prompt_id = ?").get(promptId) as PromptMetadataRow) || null;
+  }
+
+  getAllPromptMetadata(): PromptMetadataRow[] {
+    return this.db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataRow[];
+  }
+
+  // ── Response Context ──────────────────────────────────────────────
+
+  upsertResponseContext(ctx: {
+    sessionId: string;
+    promptId: string;
+    primaryVendor: string | null;
+    isImplemented: boolean;
+    rationaleSnippet: string | null;
+    vendorsMentioned: Array<{ vendor: string; disposition: string }>;
+    tradeOffsSnippet: string | null;
+    gotchasSnippet: string | null;
+    constraintsAddressed: string[];
+  }): void {
+    this.db.prepare(`
+      INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, rationale_snippet,
+        vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed, extracted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(session_id, prompt_id) DO UPDATE SET
+        primary_vendor = excluded.primary_vendor,
+        is_implemented = excluded.is_implemented,
+        rationale_snippet = excluded.rationale_snippet,
+        vendors_mentioned = excluded.vendors_mentioned,
+        trade_offs_snippet = excluded.trade_offs_snippet,
+        gotchas_snippet = excluded.gotchas_snippet,
+        constraints_addressed = excluded.constraints_addressed,
+        extracted_at = datetime('now')
+    `).run(
+      ctx.sessionId,
+      ctx.promptId,
+      ctx.primaryVendor,
+      ctx.isImplemented ? 1 : 0,
+      ctx.rationaleSnippet,
+      JSON.stringify(ctx.vendorsMentioned),
+      ctx.tradeOffsSnippet,
+      ctx.gotchasSnippet,
+      JSON.stringify(ctx.constraintsAddressed),
+    );
+  }
+
+  getResponseContextBySession(sessionId: string): ResponseContextRow[] {
+    return this.db.prepare("SELECT * FROM response_context WHERE session_id = ?").all(sessionId) as ResponseContextRow[];
+  }
+
+  getResponseContextByPrompt(promptId: string): ResponseContextRow[] {
+    return this.db.prepare("SELECT * FROM response_context WHERE prompt_id = ? ORDER BY extracted_at DESC").all(promptId) as ResponseContextRow[];
+  }
+
+  // ── Enrichment Queries ────────────────────────────────────────────
+
+  getPrimaryVendorCounts(filters?: { promptId?: string; category?: string; platform?: string }): Array<{ primary_vendor: string; count: number }> {
+    let where = "rc.primary_vendor IS NOT NULL";
+    const params: string[] = [];
+    if (filters?.promptId) { where += " AND rc.prompt_id = ?"; params.push(filters.promptId); }
+    if (filters?.category) { where += " AND pm.category = ?"; params.push(filters.category); }
+    if (filters?.platform) { where += " AND s.source_platform = ?"; params.push(filters.platform); }
+    return this.db.prepare(`
+      SELECT rc.primary_vendor, COUNT(*) AS count
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      WHERE ${where}
+      GROUP BY rc.primary_vendor ORDER BY count DESC
+    `).all(...params) as Array<{ primary_vendor: string; count: number }>;
+  }
+
+  getConstraintCoverage(promptId: string): Array<{ session_id: string; source_platform: string; constraints_addressed: string }> {
+    return this.db.prepare(`
+      SELECT rc.session_id, s.source_platform, rc.constraints_addressed
+      FROM response_context rc JOIN sessions s ON rc.session_id = s.id
+      WHERE rc.prompt_id = ?
+    `).all(promptId) as Array<{ session_id: string; source_platform: string; constraints_addressed: string }>;
   }
 
   close(): void { this.db.close(); }

@@ -20,10 +20,23 @@ export type {
   TimelinePoint,
   FunnelStats,
   DashboardStats,
+  // Enrichment types
+  ContentTag,
+  PatternTag,
+  VendorDisposition,
+  PromptMetadataRow,
+  ResponseContextRow,
+  VendorDispositionEntry,
+  ExtractedResponseContext,
+  EnrichmentFilterOptions,
+  PromptEnrichmentStats,
 } from "./types.js";
 
 // ── Extractor ───────────────────────────────────────────────────────
 export { extractVendorMentions } from "./extractor.js";
+
+// ── Reasoning Extractor ─────────────────────────────────────────────
+export { extractResponseContext } from "./reasoning-extractor.js";
 
 // ── Package Map ─────────────────────────────────────────────────────
 export { PACKAGE_TO_VENDOR, resolvePackageToVendor } from "./package-map.js";

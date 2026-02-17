@@ -2,9 +2,9 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { resolve } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
-import { loadVendorTaxonomy, extractVendorMentions } from "@obs/shared";
+import { resolve, join, basename, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { loadVendorTaxonomy, extractVendorMentions, extractResponseContext } from "@obs/shared";
 import type { VendorTaxonomy } from "@obs/shared";
 import { ObservatoryDB } from "./db.js";
 import { scanForTranscripts, scanAllTranscripts } from "./scanner.js";
@@ -177,6 +177,74 @@ program
           totalObservations += sessionObservations;
           if (sessionObservations > 0) {
             console.log(chalk.green(`    Session ${session.id.slice(0, 8)}... → ${sessionObservations} vendor observations`));
+          }
+
+          // ── Enrichment: Store prompt metadata + response context for benchmark sessions ──
+          const isBenchmark = (session.cwd && session.cwd.includes("obs-bench")) || session.gitBranch === "__obs_bench__";
+          if (isBenchmark && session.cwd) {
+            try {
+              // Extract prompt ID from workspace path: /tmp/obs-bench/YYYY-MM-DD/{promptId}-{assistant}/
+              const workDir = session.cwd;
+              const dirName = basename(workDir);
+              // dirName looks like "db-01-claude_code" — split at last dash before platform
+              const promptId = dirName.replace(/-(?:claude_code|codex_cli|cursor)$/, "");
+
+              // Try to load sidecar metadata
+              const sidecarPath = join(workDir, "prompt-metadata.json");
+              if (existsSync(sidecarPath)) {
+                try {
+                  const raw = readFileSync(sidecarPath, "utf-8");
+                  const sidecar = JSON.parse(raw) as {
+                    promptId: string;
+                    category: string;
+                    metadata: {
+                      contentTags: string[];
+                      patternTags: string[];
+                      constraints: string[];
+                      existingStack: string[];
+                      failureMode: string | null;
+                      vendorsNamedInPrompt: string[];
+                    };
+                  };
+                  db.upsertPromptMetadata({
+                    promptId: sidecar.promptId,
+                    category: sidecar.category,
+                    contentTags: sidecar.metadata.contentTags,
+                    patternTags: sidecar.metadata.patternTags,
+                    constraints: sidecar.metadata.constraints,
+                    existingStack: sidecar.metadata.existingStack,
+                    failureMode: sidecar.metadata.failureMode,
+                    vendorsNamedInPrompt: sidecar.metadata.vendorsNamedInPrompt,
+                  });
+                } catch {
+                  // Sidecar parse failure is non-fatal
+                }
+              }
+
+              // Run reasoning extractor on assistant turns
+              const promptMeta = db.getPromptMetadata(promptId);
+              const constraints = promptMeta ? JSON.parse(promptMeta.constraints) as string[] : [];
+              const responseCtx = extractResponseContext(session.turns, taxonomy, constraints);
+
+              db.upsertResponseContext({
+                sessionId: session.id,
+                promptId,
+                primaryVendor: responseCtx.primaryVendor,
+                isImplemented: responseCtx.isImplemented,
+                rationaleSnippet: responseCtx.rationaleSnippet,
+                vendorsMentioned: responseCtx.vendorsMentioned,
+                tradeOffsSnippet: responseCtx.tradeOffsSnippet,
+                gotchasSnippet: responseCtx.gotchasSnippet,
+                constraintsAddressed: responseCtx.constraintsAddressed,
+              });
+
+              if (responseCtx.primaryVendor) {
+                console.log(chalk.cyan(`    Enrichment: ${promptId} → primary=${responseCtx.primaryVendor}, constraints=${responseCtx.constraintsAddressed.length}/${constraints.length}`));
+              }
+            } catch (enrichErr) {
+              // Enrichment failure is non-fatal — don't break ingestion
+              console.log(chalk.gray(`    Enrichment skipped: ${enrichErr}`));
+            }
           }
         }
 

@@ -131,6 +131,94 @@ export interface VendorTaxonomy {
   vendors: VendorEntry[];
 }
 
+// ── Enrichment: Content & Pattern Tags ──────────────────────────────
+
+export type ContentTag =
+  | "existing_system"       // 1: existing stack + failure mode
+  | "compliance_security"   // 2: SOC2/HIPAA/GDPR, residency, encryption, audit
+  | "workload_shape"        // 3: RPS, concurrency, read/write mix, burstiness
+  | "ecosystem_coupling"    // 4: framework, ORM, hosting, CI/preview env
+  | "compatibility";        // 5: true Postgres vs wire-compat, extensions, dialect
+
+export type PatternTag =
+  | "pain_point"            // A: starts from concrete production/dev pain
+  | "constraint_driven"     // B: leads with non-negotiables
+  | "workload_driven"       // C: specifies traffic/data shape
+  | "llm_era"              // D: embeddings, vector, hybrid transactional+vector
+  | "existing_vendor";      // E: already using X, asks for setup/migration
+
+export type VendorDisposition =
+  | "recommended"
+  | "compared"
+  | "rejected"
+  | "mentioned"
+  | "implemented";
+
+// ── Enrichment: DB Row Types ────────────────────────────────────────
+
+export interface PromptMetadataRow {
+  id: number;
+  prompt_id: string;
+  category: string;
+  content_tags: string;    // JSON array of ContentTag
+  pattern_tags: string;    // JSON array of PatternTag
+  constraints: string;     // JSON array of strings
+  existing_stack: string;  // JSON array of strings
+  failure_mode: string | null;
+  vendors_named_in_prompt: string; // JSON array of strings
+}
+
+export interface ResponseContextRow {
+  id: number;
+  session_id: string;
+  prompt_id: string;
+  primary_vendor: string | null;
+  is_implemented: number;  // 0 or 1
+  rationale_snippet: string | null;
+  vendors_mentioned: string;    // JSON array of { vendor, disposition }
+  trade_offs_snippet: string | null;
+  gotchas_snippet: string | null;
+  constraints_addressed: string; // JSON array of strings
+  extracted_at: string;
+}
+
+// ── Enrichment: Parsed Types (for runtime use) ─────────────────────
+
+export interface VendorDispositionEntry {
+  vendor: string;
+  disposition: VendorDisposition;
+}
+
+export interface ExtractedResponseContext {
+  primaryVendor: string | null;
+  isImplemented: boolean;
+  rationaleSnippet: string | null;
+  vendorsMentioned: VendorDispositionEntry[];
+  tradeOffsSnippet: string | null;
+  gotchasSnippet: string | null;
+  constraintsAddressed: string[];
+}
+
+// ── Enrichment: Aggregated Stats ────────────────────────────────────
+
+export interface EnrichmentFilterOptions {
+  contentTag?: ContentTag;
+  patternTag?: PatternTag;
+  constraint?: string;
+  category?: string;
+  platform?: string;
+}
+
+export interface PromptEnrichmentStats {
+  prompt_id: string;
+  category: string;
+  content_tags: ContentTag[];
+  pattern_tags: PatternTag[];
+  constraints: string[];
+  session_count: number;
+  primary_vendor_counts: Record<string, number>;
+}
+
 // ── Aggregated Stats (for web layer) ────────────────────────────────
 
 export interface VendorStats {

@@ -324,3 +324,259 @@ export function getBenchmarkStats() {
     return { totalBenchmarkSessions: sessions, totalBenchmarkObservations: observations, platformBreakdown };
   } catch { return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} }; }
 }
+
+// ── Enrichment: Prompt Metadata ────────────────────────────────────
+
+function hasTable(db: import("better-sqlite3").Database, name: string): boolean {
+  const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) as { name: string } | undefined;
+  return !!row;
+}
+
+export interface PromptMetadataWebRow {
+  prompt_id: string;
+  category: string;
+  content_tags: string;
+  pattern_tags: string;
+  constraints: string;
+  existing_stack: string;
+  failure_mode: string | null;
+  vendors_named_in_prompt: string;
+}
+
+export function getPromptMetadata(): PromptMetadataWebRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "prompt_metadata")) return [];
+    return db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataWebRow[];
+  } catch { return []; }
+}
+
+export function getPromptMetadataById(promptId: string): PromptMetadataWebRow | null {
+  const db = getDb();
+  if (!db) return null;
+  try {
+    if (!hasTable(db, "prompt_metadata")) return null;
+    return (db.prepare("SELECT * FROM prompt_metadata WHERE prompt_id = ?").get(promptId) as PromptMetadataWebRow) || null;
+  } catch { return null; }
+}
+
+// ── Enrichment: Response Context ───────────────────────────────────
+
+export interface ResponseContextWebRow {
+  id: number;
+  session_id: string;
+  prompt_id: string;
+  primary_vendor: string | null;
+  is_implemented: number;
+  rationale_snippet: string | null;
+  vendors_mentioned: string;
+  trade_offs_snippet: string | null;
+  gotchas_snippet: string | null;
+  constraints_addressed: string;
+  extracted_at: string;
+}
+
+export function getResponseContextByPrompt(promptId: string): ResponseContextWebRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "response_context")) return [];
+    return db.prepare(`
+      SELECT rc.*, s.source_platform
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      WHERE rc.prompt_id = ?
+      ORDER BY rc.extracted_at DESC
+    `).all(promptId) as (ResponseContextWebRow & { source_platform: string })[];
+  } catch { return []; }
+}
+
+export function getResponseContextBySession(sessionId: string): ResponseContextWebRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "response_context")) return [];
+    return db.prepare("SELECT * FROM response_context WHERE session_id = ?").all(sessionId) as ResponseContextWebRow[];
+  } catch { return []; }
+}
+
+// ── Enrichment: Primary Vendor Leaderboard ─────────────────────────
+
+export interface PrimaryVendorCountRow {
+  primary_vendor: string;
+  count: number;
+}
+
+export function getPrimaryVendorCounts(filters?: {
+  category?: string;
+  platform?: string;
+  contentTag?: string;
+  patternTag?: string;
+}): PrimaryVendorCountRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    let where = "rc.primary_vendor IS NOT NULL";
+    const params: string[] = [];
+    if (filters?.category) {
+      where += " AND pm.category = ?";
+      params.push(filters.category);
+    }
+    if (filters?.platform) {
+      where += " AND s.source_platform = ?";
+      params.push(filters.platform);
+    }
+    if (filters?.contentTag) {
+      where += " AND pm.content_tags LIKE ?";
+      params.push(`%"${filters.contentTag}"%`);
+    }
+    if (filters?.patternTag) {
+      where += " AND pm.pattern_tags LIKE ?";
+      params.push(`%"${filters.patternTag}"%`);
+    }
+    return db.prepare(`
+      SELECT rc.primary_vendor, COUNT(*) AS count
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      WHERE ${where}
+      GROUP BY rc.primary_vendor
+      ORDER BY count DESC
+    `).all(...params) as PrimaryVendorCountRow[];
+  } catch { return []; }
+}
+
+// ── Enrichment: Constraint Coverage Stats ──────────────────────────
+
+export interface ConstraintCoverageRow {
+  constraint: string;
+  addressed_count: number;
+  total_count: number;
+  coverage_pct: number;
+}
+
+export function getConstraintCoverage(promptId?: string): ConstraintCoverageRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+
+    // Get all prompt constraints and their coverage from response_context
+    let metaQuery = "SELECT prompt_id, constraints FROM prompt_metadata";
+    const metaParams: string[] = [];
+    if (promptId) {
+      metaQuery += " WHERE prompt_id = ?";
+      metaParams.push(promptId);
+    }
+    const metas = db.prepare(metaQuery).all(...metaParams) as Array<{ prompt_id: string; constraints: string }>;
+
+    let rcQuery = "SELECT prompt_id, constraints_addressed FROM response_context";
+    const rcParams: string[] = [];
+    if (promptId) {
+      rcQuery += " WHERE prompt_id = ?";
+      rcParams.push(promptId);
+    }
+    const contexts = db.prepare(rcQuery).all(...rcParams) as Array<{ prompt_id: string; constraints_addressed: string }>;
+
+    // Build constraint → coverage map
+    const constraintTotals = new Map<string, number>();
+    const constraintAddressed = new Map<string, number>();
+
+    for (const meta of metas) {
+      try {
+        const constraints = JSON.parse(meta.constraints) as string[];
+        // Count how many response_context rows exist for this prompt
+        const responseCount = contexts.filter(c => c.prompt_id === meta.prompt_id).length;
+        for (const c of constraints) {
+          constraintTotals.set(c, (constraintTotals.get(c) || 0) + responseCount);
+        }
+      } catch { /* skip bad JSON */ }
+    }
+
+    for (const ctx of contexts) {
+      try {
+        const addressed = JSON.parse(ctx.constraints_addressed) as string[];
+        for (const c of addressed) {
+          constraintAddressed.set(c, (constraintAddressed.get(c) || 0) + 1);
+        }
+      } catch { /* skip bad JSON */ }
+    }
+
+    const result: ConstraintCoverageRow[] = [];
+    for (const [constraint, total] of constraintTotals.entries()) {
+      const addressed = constraintAddressed.get(constraint) || 0;
+      result.push({
+        constraint,
+        addressed_count: addressed,
+        total_count: total,
+        coverage_pct: total > 0 ? addressed / total : 0,
+      });
+    }
+
+    return result.sort((a, b) => b.coverage_pct - a.coverage_pct);
+  } catch { return []; }
+}
+
+// ── Enrichment: Prompt-Level Summary ───────────────────────────────
+
+export interface PromptEnrichmentSummary {
+  prompt_id: string;
+  category: string;
+  content_tags: string[];
+  pattern_tags: string[];
+  constraints: string[];
+  response_count: number;
+  primary_vendors: Record<string, number>;
+  avg_constraints_covered: number;
+  implementation_rate: number;
+}
+
+export function getPromptEnrichmentSummaries(): PromptEnrichmentSummary[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+
+    const metas = db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataWebRow[];
+    const allContexts = db.prepare("SELECT * FROM response_context").all() as ResponseContextWebRow[];
+
+    const results: PromptEnrichmentSummary[] = [];
+
+    for (const meta of metas) {
+      const contexts = allContexts.filter(c => c.prompt_id === meta.prompt_id);
+      const constraints = safeJsonParse<string[]>(meta.constraints, []);
+      const vendorCounts: Record<string, number> = {};
+      let totalConstraintsCovered = 0;
+      let implementedCount = 0;
+
+      for (const ctx of contexts) {
+        if (ctx.primary_vendor) {
+          vendorCounts[ctx.primary_vendor] = (vendorCounts[ctx.primary_vendor] || 0) + 1;
+        }
+        const addressed = safeJsonParse<string[]>(ctx.constraints_addressed, []);
+        totalConstraintsCovered += addressed.length;
+        if (ctx.is_implemented) implementedCount++;
+      }
+
+      results.push({
+        prompt_id: meta.prompt_id,
+        category: meta.category,
+        content_tags: safeJsonParse<string[]>(meta.content_tags, []),
+        pattern_tags: safeJsonParse<string[]>(meta.pattern_tags, []),
+        constraints,
+        response_count: contexts.length,
+        primary_vendors: vendorCounts,
+        avg_constraints_covered: contexts.length > 0 ? totalConstraintsCovered / contexts.length : 0,
+        implementation_rate: contexts.length > 0 ? implementedCount / contexts.length : 0,
+      });
+    }
+
+    return results;
+  } catch { return []; }
+}
+
+function safeJsonParse<T>(json: string, fallback: T): T {
+  try { return JSON.parse(json) as T; } catch { return fallback; }
+}

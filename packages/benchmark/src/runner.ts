@@ -1,4 +1,6 @@
 import chalk from "chalk";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AssistantAdapter, BenchmarkResult } from "./adapters/types.js";
 import type { BenchmarkPrompt } from "./prompts.js";
 import { createWorkspace, cleanupOldWorkspaces } from "./workspace.js";
@@ -83,6 +85,20 @@ export async function runBenchmark(opts: RunnerOptions): Promise<RunSummary> {
         console.log(chalk.red(`    ✗ Workspace creation failed: ${err}`));
         failedRuns++;
         continue;
+      }
+
+      // Write prompt metadata sidecar for the ingest pipeline
+      try {
+        writeFileSync(
+          join(workDir, "prompt-metadata.json"),
+          JSON.stringify({
+            promptId: prompt.id,
+            category: prompt.category,
+            metadata: prompt.metadata,
+          }, null, 2),
+        );
+      } catch {
+        // Non-fatal — enrichment just won't be available for this run
       }
 
       // Run the prompt
