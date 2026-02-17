@@ -539,6 +539,99 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
   return recs;
 }
 
+// ── AI-Readiness Score ───────────────────────────────────────────────
+
+export interface AIReadinessScore {
+  overall: number;             // 0-100
+  breakdown: {
+    implementationRate: { score: number; raw: number; weight: number };
+    winRate: { score: number; raw: number; weight: number };
+    constraintCoverage: { score: number; raw: number; weight: number };
+    gotchaRate: { score: number; raw: number; weight: number };
+    crossPlatformConsistency: { score: number; raw: number; weight: number };
+  };
+  grade: "A" | "B" | "C" | "D" | "F";
+  gradeColor: string;
+}
+
+export function computeAIReadinessScore(scorecard: VendorScorecard): AIReadinessScore {
+  // 1. Implementation Rate (weight 0.30): when recommended, how often is code written?
+  const implRaw = scorecard.implementationRate;
+  const implScore = implRaw * 100;
+  const implWeight = 0.30;
+
+  // 2. Win Rate (weight 0.20): how often selected as primary choice
+  const winRaw = scorecard.winRate;
+  const winScore = winRaw * 100;
+  const winWeight = 0.20;
+
+  // 3. Constraint Coverage (weight 0.20): avg % of prompt constraints addressed
+  const totalAddressed = scorecard.constraintsAddressed.reduce((s, c) => s + c.count, 0);
+  const totalPossible = scorecard.constraintsAddressed.reduce((s, c) => s + c.count, 0)
+    + scorecard.constraintsMissed.reduce((s, c) => s + c.count, 0);
+  const constraintRaw = totalPossible > 0 ? totalAddressed / totalPossible : 0.5;
+  const constraintScore = constraintRaw * 100;
+  const constraintWeight = 0.20;
+
+  // 4. Gotcha Rate (weight -0.15): fewer gotchas = better
+  const gotchaCount = scorecard.gotchaSnippets.length;
+  const maxGotchas = Math.max(scorecard.totalRecommendations, 1);
+  const gotchaRaw = gotchaCount / maxGotchas; // 0=no gotchas (good), 1+=many gotchas (bad)
+  const gotchaScore = Math.max(0, 100 - gotchaRaw * 100); // Invert: 100=no gotchas, 0=many
+  const gotchaWeight = 0.15;
+
+  // 5. Cross-Platform Consistency (weight 0.15): recommended on multiple platforms equally?
+  const platforms = Object.values(scorecard.platformSplit);
+  let crossPlatRaw = 0;
+  if (platforms.length === 0) {
+    crossPlatRaw = 0;
+  } else if (platforms.length === 1) {
+    crossPlatRaw = 0.3; // present on one platform = partial credit
+  } else {
+    // Compute coefficient of variation (lower = more consistent)
+    const mean = platforms.reduce((s, v) => s + v, 0) / platforms.length;
+    const variance = platforms.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / platforms.length;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
+    // cv=0 means perfectly consistent, cv=1+ means very inconsistent
+    crossPlatRaw = Math.max(0, 1 - cv);
+    // Bonus for being on multiple platforms
+    crossPlatRaw = crossPlatRaw * 0.7 + (Math.min(platforms.length, 3) / 3) * 0.3;
+  }
+  const crossPlatScore = crossPlatRaw * 100;
+  const crossPlatWeight = 0.15;
+
+  // Compute overall score
+  const overall = Math.round(
+    implScore * implWeight +
+    winScore * winWeight +
+    constraintScore * constraintWeight +
+    gotchaScore * gotchaWeight +
+    crossPlatScore * crossPlatWeight
+  );
+
+  // Grade assignment
+  let grade: AIReadinessScore["grade"];
+  let gradeColor: string;
+  if (overall >= 80) { grade = "A"; gradeColor = "text-green-400"; }
+  else if (overall >= 60) { grade = "B"; gradeColor = "text-blue-400"; }
+  else if (overall >= 40) { grade = "C"; gradeColor = "text-yellow-400"; }
+  else if (overall >= 20) { grade = "D"; gradeColor = "text-orange-400"; }
+  else { grade = "F"; gradeColor = "text-red-400"; }
+
+  return {
+    overall,
+    breakdown: {
+      implementationRate: { score: Math.round(implScore), raw: implRaw, weight: implWeight },
+      winRate: { score: Math.round(winScore), raw: winRaw, weight: winWeight },
+      constraintCoverage: { score: Math.round(constraintScore), raw: constraintRaw, weight: constraintWeight },
+      gotchaRate: { score: Math.round(gotchaScore), raw: gotchaRaw, weight: gotchaWeight },
+      crossPlatformConsistency: { score: Math.round(crossPlatScore), raw: crossPlatRaw, weight: crossPlatWeight },
+    },
+    grade,
+    gradeColor,
+  };
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function pct(n: number): string {

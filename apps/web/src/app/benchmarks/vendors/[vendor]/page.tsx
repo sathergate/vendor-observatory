@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { getVendorScorecard, getVendorHeadToHead } from "@/lib/db";
-import { generateRecommendations, type Recommendation } from "@/lib/recommendations";
+import { getVendorScorecard, getVendorHeadToHead, getVendorTrend } from "@/lib/db";
+import { generateRecommendations, computeAIReadinessScore, type Recommendation } from "@/lib/recommendations";
 import { vendorDisplayName, VENDOR_META, vendorCategory } from "../../vendor-taxonomy";
 import { CATEGORY_META } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
@@ -139,6 +139,8 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
   const meta = VENDOR_META[vendorId];
   const recommendations = generateRecommendations(scorecard);
+  const aiReadiness = computeAIReadinessScore(scorecard);
+  const trend = getVendorTrend(vendorId);
 
   // Find top competitor for head-to-head
   const topCompetitor = scorecard.competitorWins[0];
@@ -225,6 +227,132 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           </div>
         )}
       </div>
+
+      {/* ── AI-Readiness Score ───────────────────────────────── */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">AI-Readiness Score</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          How well your documentation and SDK help AI assistants recommend and implement your tool
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Overall score */}
+          <div className="bg-gray-800 rounded-lg p-6 flex flex-col items-center justify-center">
+            <div className={`text-5xl font-bold ${aiReadiness.gradeColor}`}>
+              {aiReadiness.overall}
+            </div>
+            <div className={`text-2xl font-bold mt-1 ${aiReadiness.gradeColor}`}>
+              Grade: {aiReadiness.grade}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">out of 100</p>
+          </div>
+
+          {/* Breakdown */}
+          <div className="bg-gray-800 rounded-lg p-4 md:col-span-2">
+            <div className="space-y-3">
+              {[
+                { label: "Implementation Rate", data: aiReadiness.breakdown.implementationRate, desc: "How often AI writes code after recommending" },
+                { label: "Win Rate", data: aiReadiness.breakdown.winRate, desc: "How often selected as primary choice" },
+                { label: "Constraint Coverage", data: aiReadiness.breakdown.constraintCoverage, desc: "% of prompt constraints addressed" },
+                { label: "Gotcha Avoidance", data: aiReadiness.breakdown.gotchaRate, desc: "Fewer gotchas = more AI-friendly" },
+                { label: "Cross-Platform", data: aiReadiness.breakdown.crossPlatformConsistency, desc: "Consistency across assistants" },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-300">
+                      {item.label}
+                      <span className="text-gray-600 ml-1">({Math.round(item.data.weight * 100)}%)</span>
+                    </span>
+                    <span className={
+                      item.data.score >= 70 ? "text-green-400" :
+                      item.data.score >= 40 ? "text-yellow-400" :
+                      "text-red-400"
+                    }>
+                      {item.data.score}/100
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        item.data.score >= 70 ? "bg-green-500" :
+                        item.data.score >= 40 ? "bg-yellow-500" :
+                        "bg-red-500"
+                      }`}
+                      style={{ width: `${Math.max(2, item.data.score)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-600 mt-0.5">{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Temporal Trend ────────────────────────────────────── */}
+      {trend && trend.dataPoints.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Trend</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-800 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Win Rate Trend</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold">
+                  {trend.trend === "rising" ? "↑" : trend.trend === "falling" ? "↓" : "→"}
+                </span>
+                <span className={`text-xl font-bold ${
+                  trend.trend === "rising" ? "text-green-400" :
+                  trend.trend === "falling" ? "text-red-400" :
+                  "text-gray-400"
+                }`}>
+                  {trend.winRateDelta >= 0 ? "+" : ""}{pct(trend.winRateDelta)}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {pct(trend.previousWinRate)} → {pct(trend.currentWinRate)}
+              </p>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Mention Volume</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className={`text-2xl font-bold ${
+                  trend.mentionDelta > 0 ? "text-green-400" :
+                  trend.mentionDelta < 0 ? "text-red-400" :
+                  "text-gray-400"
+                }`}>
+                  {trend.currentMentions}
+                </span>
+                <span className="text-sm text-gray-500">
+                  ({trend.mentionDelta >= 0 ? "+" : ""}{trend.mentionDelta} vs prior)
+                </span>
+              </div>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <p className="text-sm text-gray-400">Weekly Activity</p>
+              <div className="flex items-end gap-1 mt-2 h-12">
+                {trend.dataPoints.map((dp, i) => {
+                  const maxMentions = Math.max(...trend.dataPoints.map(p => p.mentions), 1);
+                  const height = Math.max(4, (dp.mentions / maxMentions) * 48);
+                  return (
+                    <div
+                      key={i}
+                      className={`flex-1 rounded-sm ${
+                        dp.winRate > 0.5 ? "bg-green-500/70" :
+                        dp.winRate > 0 ? "bg-yellow-500/70" :
+                        "bg-gray-600"
+                      }`}
+                      style={{ height: `${height}px` }}
+                      title={`${dp.weekStart}: ${dp.mentions} mentions, ${pct(dp.winRate)} win rate`}
+                    />
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-600 mt-1">
+                {trend.dataPoints.length} week{trend.dataPoints.length !== 1 ? "s" : ""} of data
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 2. Category Breakdown ──────────────────────────────── */}
       {scorecard.categoryBreakdown.length > 0 && (

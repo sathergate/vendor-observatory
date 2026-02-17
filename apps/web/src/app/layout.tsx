@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 const navLinks = [
   { href: "/benchmarks", label: "Benchmarks" },
   { href: "/benchmarks/vendors", label: "Vendor Intel" },
+  { href: "/benchmarks/prompts", label: "Prompt Intel" },
   { href: "/", label: "Dashboard" },
   { href: "/vendors", label: "Vendors" },
   { href: "/platforms", label: "Platforms" },
