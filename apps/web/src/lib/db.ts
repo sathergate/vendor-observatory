@@ -581,6 +581,333 @@ function safeJsonParse<T>(json: string, fallback: T): T {
   try { return JSON.parse(json) as T; } catch { return fallback; }
 }
 
+// ── Vendor Intelligence ─────────────────────────────────────────────
+
+export interface VendorScorecard {
+  vendor: string;
+  totalRecommendations: number;
+  totalMentions: number;
+  winRate: number;
+  implementationRate: number;
+  categoryBreakdown: Array<{
+    category: string;
+    recommendations: number;
+    rejections: number;
+    comparisons: number;
+    totalInCategory: number;
+  }>;
+  platformSplit: Record<string, number>;
+  constraintsAddressed: Array<{ constraint: string; count: number }>;
+  constraintsMissed: Array<{ constraint: string; count: number }>;
+  competitorWins: Array<{ competitor: string; count: number; scenarios: string[] }>;
+  tradeOffSnippets: string[];
+  gotchaSnippets: string[];
+  rationaleSnippets: string[];
+  promptsWon: Array<{ prompt_id: string; category: string }>;
+  promptsLost: Array<{ prompt_id: string; category: string; winner: string }>;
+}
+
+export function getVendorScorecard(vendor: string): VendorScorecard | null {
+  const db = getDb();
+  if (!db) return null;
+  try {
+    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return null;
+
+    // All responses where this vendor is mentioned in vendors_mentioned JSON or is primary_vendor
+    const allResponses = db.prepare(`
+      SELECT rc.*, s.source_platform, pm.category, pm.constraints
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+    `).all() as Array<ResponseContextWebRow & { source_platform: string; category: string; constraints: string }>;
+
+    // Find all responses mentioning this vendor
+    const mentionedIn: typeof allResponses = [];
+    const recommendedIn: typeof allResponses = [];
+    const rejectedIn: typeof allResponses = [];
+    const comparedIn: typeof allResponses = [];
+    let implementedCount = 0;
+
+    for (const r of allResponses) {
+      const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
+      const vendorEntry = vendors.find(v => v.vendor === vendor);
+      const isPrimary = r.primary_vendor === vendor;
+
+      if (isPrimary || vendorEntry) {
+        mentionedIn.push(r);
+        if (isPrimary) {
+          recommendedIn.push(r);
+          if (r.is_implemented) implementedCount++;
+        }
+        if (vendorEntry?.disposition === "rejected") rejectedIn.push(r);
+        if (vendorEntry?.disposition === "compared") comparedIn.push(r);
+      }
+    }
+
+    if (mentionedIn.length === 0) return null;
+
+    // Category breakdown
+    const catMap = new Map<string, { recommendations: number; rejections: number; comparisons: number; total: number }>();
+    for (const r of mentionedIn) {
+      const cat = r.category || "unknown";
+      if (!catMap.has(cat)) catMap.set(cat, { recommendations: 0, rejections: 0, comparisons: 0, total: 0 });
+      const entry = catMap.get(cat)!;
+      entry.total++;
+      if (r.primary_vendor === vendor) entry.recommendations++;
+    }
+    for (const r of rejectedIn) {
+      const cat = r.category || "unknown";
+      catMap.get(cat)!.rejections++;
+    }
+    for (const r of comparedIn) {
+      const cat = r.category || "unknown";
+      if (catMap.has(cat)) catMap.get(cat)!.comparisons++;
+    }
+
+    const categoryBreakdown = Array.from(catMap.entries()).map(([category, data]) => ({
+      category,
+      recommendations: data.recommendations,
+      rejections: data.rejections,
+      comparisons: data.comparisons,
+      totalInCategory: data.total,
+    })).sort((a, b) => b.recommendations - a.recommendations);
+
+    // Platform split
+    const platformSplit: Record<string, number> = {};
+    for (const r of recommendedIn) {
+      platformSplit[r.source_platform] = (platformSplit[r.source_platform] || 0) + 1;
+    }
+
+    // Constraints addressed (when this vendor wins)
+    const addressedMap = new Map<string, number>();
+    for (const r of recommendedIn) {
+      const addressed = safeJsonParse<string[]>(r.constraints_addressed, []);
+      for (const c of addressed) {
+        addressedMap.set(c, (addressedMap.get(c) || 0) + 1);
+      }
+    }
+    const constraintsAddressed = Array.from(addressedMap.entries())
+      .map(([constraint, count]) => ({ constraint, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Constraints missed (constraints in prompts where this vendor was mentioned but didn't win)
+    const missedMap = new Map<string, number>();
+    for (const r of mentionedIn) {
+      if (r.primary_vendor !== vendor) {
+        const constraints = safeJsonParse<string[]>(r.constraints, []);
+        for (const c of constraints) {
+          missedMap.set(c, (missedMap.get(c) || 0) + 1);
+        }
+      }
+    }
+    const constraintsMissed = Array.from(missedMap.entries())
+      .map(([constraint, count]) => ({ constraint, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Competitor wins: who won when this vendor was mentioned but lost
+    const competitorMap = new Map<string, { count: number; scenarios: Set<string> }>();
+    for (const r of mentionedIn) {
+      if (r.primary_vendor && r.primary_vendor !== vendor) {
+        const comp = r.primary_vendor;
+        if (!competitorMap.has(comp)) competitorMap.set(comp, { count: 0, scenarios: new Set() });
+        const entry = competitorMap.get(comp)!;
+        entry.count++;
+        entry.scenarios.add(r.prompt_id);
+      }
+    }
+    const competitorWins = Array.from(competitorMap.entries())
+      .map(([competitor, data]) => ({ competitor, count: data.count, scenarios: Array.from(data.scenarios) }))
+      .sort((a, b) => b.count - a.count);
+
+    // Snippets
+    const tradeOffSnippets = allResponses
+      .filter(r => r.primary_vendor === vendor && r.trade_offs_snippet)
+      .map(r => r.trade_offs_snippet!)
+      .filter(s => s.length > 5);
+    const gotchaSnippets = allResponses
+      .filter(r => r.primary_vendor === vendor && r.gotchas_snippet)
+      .map(r => r.gotchas_snippet!)
+      .filter(s => s.length > 5);
+    const rationaleSnippets = allResponses
+      .filter(r => r.primary_vendor === vendor && r.rationale_snippet)
+      .map(r => r.rationale_snippet!)
+      .filter(s => s.length > 5);
+
+    // Prompts won and lost
+    const promptsWon = recommendedIn.map(r => ({ prompt_id: r.prompt_id, category: r.category || "unknown" }));
+    const promptsLost: Array<{ prompt_id: string; category: string; winner: string }> = [];
+    for (const r of mentionedIn) {
+      if (r.primary_vendor && r.primary_vendor !== vendor) {
+        promptsLost.push({ prompt_id: r.prompt_id, category: r.category || "unknown", winner: r.primary_vendor });
+      }
+    }
+
+    return {
+      vendor,
+      totalRecommendations: recommendedIn.length,
+      totalMentions: mentionedIn.length,
+      winRate: mentionedIn.length > 0 ? recommendedIn.length / mentionedIn.length : 0,
+      implementationRate: recommendedIn.length > 0 ? implementedCount / recommendedIn.length : 0,
+      categoryBreakdown,
+      platformSplit,
+      constraintsAddressed,
+      constraintsMissed,
+      competitorWins,
+      tradeOffSnippets,
+      gotchaSnippets,
+      rationaleSnippets,
+      promptsWon,
+      promptsLost,
+    };
+  } catch { return null; }
+}
+
+export interface VendorListItem {
+  vendor: string;
+  totalRecommendations: number;
+  totalMentions: number;
+  winRate: number;
+  implementationRate: number;
+  topCategory: string | null;
+  platforms: string[];
+}
+
+export function getAllVendorNames(): VendorListItem[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+
+    const allResponses = db.prepare(`
+      SELECT rc.primary_vendor, rc.vendors_mentioned, rc.is_implemented,
+             s.source_platform, pm.category
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+    `).all() as Array<{
+      primary_vendor: string | null;
+      vendors_mentioned: string;
+      is_implemented: number;
+      source_platform: string;
+      category: string;
+    }>;
+
+    const vendorMap = new Map<string, {
+      recommendations: number;
+      mentions: number;
+      implementations: number;
+      categories: Record<string, number>;
+      platforms: Set<string>;
+    }>();
+
+    function ensureVendor(v: string) {
+      if (!vendorMap.has(v)) {
+        vendorMap.set(v, { recommendations: 0, mentions: 0, implementations: 0, categories: {}, platforms: new Set() });
+      }
+      return vendorMap.get(v)!;
+    }
+
+    for (const r of allResponses) {
+      // Track primary vendor
+      if (r.primary_vendor) {
+        const entry = ensureVendor(r.primary_vendor);
+        entry.recommendations++;
+        entry.mentions++;
+        entry.platforms.add(r.source_platform);
+        if (r.category) {
+          entry.categories[r.category] = (entry.categories[r.category] || 0) + 1;
+        }
+        if (r.is_implemented) entry.implementations++;
+      }
+
+      // Track all mentioned vendors
+      const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
+      for (const v of vendors) {
+        if (v.vendor === r.primary_vendor) continue; // already counted
+        const entry = ensureVendor(v.vendor);
+        entry.mentions++;
+        entry.platforms.add(r.source_platform);
+        if (r.category) {
+          entry.categories[r.category] = (entry.categories[r.category] || 0) + 1;
+        }
+      }
+    }
+
+    return Array.from(vendorMap.entries()).map(([vendor, data]) => {
+      const topCat = Object.entries(data.categories).sort((a, b) => b[1] - a[1])[0];
+      return {
+        vendor,
+        totalRecommendations: data.recommendations,
+        totalMentions: data.mentions,
+        winRate: data.mentions > 0 ? data.recommendations / data.mentions : 0,
+        implementationRate: data.recommendations > 0 ? data.implementations / data.recommendations : 0,
+        topCategory: topCat?.[0] ?? null,
+        platforms: Array.from(data.platforms),
+      };
+    }).sort((a, b) => b.totalRecommendations - a.totalRecommendations || b.totalMentions - a.totalMentions);
+  } catch { return []; }
+}
+
+export interface HeadToHeadResult {
+  vendorA: string;
+  vendorB: string;
+  scenarios: Array<{
+    prompt_id: string;
+    category: string;
+    winner: string | null;
+    rationale: string | null;
+  }>;
+  aWins: number;
+  bWins: number;
+  ties: number;
+}
+
+export function getVendorHeadToHead(vendorA: string, vendorB: string): HeadToHeadResult {
+  const db = getDb();
+  const empty: HeadToHeadResult = { vendorA, vendorB, scenarios: [], aWins: 0, bWins: 0, ties: 0 };
+  if (!db) return empty;
+  try {
+    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return empty;
+
+    const allResponses = db.prepare(`
+      SELECT rc.prompt_id, rc.primary_vendor, rc.vendors_mentioned, rc.rationale_snippet,
+             pm.category
+      FROM response_context rc
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+    `).all() as Array<{
+      prompt_id: string;
+      primary_vendor: string | null;
+      vendors_mentioned: string;
+      rationale_snippet: string | null;
+      category: string;
+    }>;
+
+    const scenarios: HeadToHeadResult["scenarios"] = [];
+    let aWins = 0, bWins = 0, ties = 0;
+
+    for (const r of allResponses) {
+      const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
+      const allVendors = new Set([r.primary_vendor, ...vendors.map(v => v.vendor)].filter(Boolean));
+
+      if (allVendors.has(vendorA) && allVendors.has(vendorB)) {
+        let winner: string | null = null;
+        if (r.primary_vendor === vendorA) { winner = vendorA; aWins++; }
+        else if (r.primary_vendor === vendorB) { winner = vendorB; bWins++; }
+        else { ties++; }
+
+        scenarios.push({
+          prompt_id: r.prompt_id,
+          category: r.category || "unknown",
+          winner,
+          rationale: r.rationale_snippet,
+        });
+      }
+    }
+
+    return { vendorA, vendorB, scenarios, aWins, bWins, ties };
+  } catch { return empty; }
+}
+
 // ── Enrichment: Category Summaries ─────────────────────────────────
 
 export interface CategorySummary {
