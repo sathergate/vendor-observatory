@@ -1,0 +1,15 @@
+export const CATEGORY_META: Record<string, { label: string; icon: string; description: string }> = {
+  database:            { label: "Database",            icon: "🗄", description: "Postgres, serverless DBs, vector search, branching" },
+  agent_dev:           { label: "Agentic Tooling",     icon: "🤖", description: "AI agent frameworks, orchestration, tool ecosystems" },
+  ci_cd:               { label: "CI/CD",               icon: "🔄", description: "Build pipelines, deployment automation, preview environments" },
+  edge_compute:        { label: "Edge Compute",        icon: "⚡", description: "Edge runtimes, serverless functions, CDN compute" },
+  error_monitoring:    { label: "Error Monitoring",    icon: "🐛", description: "Error tracking, crash reporting, alerting" },
+  feature_flags:       { label: "Feature Flags",       icon: "🚩", description: "Feature management, A/B testing, rollouts" },
+  llm_observability:   { label: "LLM Observability",   icon: "🔭", description: "LLM tracing, prompt analytics, cost tracking" },
+  observability:       { label: "Observability",       icon: "📊", description: "APM, distributed tracing, metrics, logging" },
+  secrets_management:  { label: "Secrets Management",  icon: "🔑", description: "Secret rotation, env var management, vaults" },
+  security_scanning:   { label: "Security Scanning",   icon: "🛡", description: "SAST, dependency scanning, container security" },
+  developer_portal:    { label: "Developer Portal",    icon: "📖", description: "API docs, developer experience, documentation" },
+  incident_management: { label: "Incident Management", icon: "🚨", description: "On-call, incident response, status pages" },
+  "cross-category":    { label: "Cross-Category",      icon: "🔀", description: "Multi-domain prompts spanning several tool categories" },
+};

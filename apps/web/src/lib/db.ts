@@ -580,3 +580,144 @@ export function getPromptEnrichmentSummaries(): PromptEnrichmentSummary[] {
 function safeJsonParse<T>(json: string, fallback: T): T {
   try { return JSON.parse(json) as T; } catch { return fallback; }
 }
+
+// ── Enrichment: Category Summaries ─────────────────────────────────
+
+export interface CategorySummary {
+  category: string;
+  prompt_count: number;
+  response_count: number;
+  top_vendor: string | null;
+  top_vendor_count: number;
+  avg_constraint_coverage: number;
+  total_constraints: number;
+}
+
+export function getCategorySummaries(): CategorySummary[] {
+  const summaries = getPromptEnrichmentSummaries();
+  if (summaries.length === 0) return [];
+
+  const catMap = new Map<string, {
+    prompts: PromptEnrichmentSummary[];
+    vendorCounts: Record<string, number>;
+    totalConstraints: number;
+    totalConstraintsCovered: number;
+    totalResponses: number;
+  }>();
+
+  for (const s of summaries) {
+    if (!catMap.has(s.category)) {
+      catMap.set(s.category, { prompts: [], vendorCounts: {}, totalConstraints: 0, totalConstraintsCovered: 0, totalResponses: 0 });
+    }
+    const cat = catMap.get(s.category)!;
+    cat.prompts.push(s);
+    cat.totalResponses += s.response_count;
+    cat.totalConstraints += s.constraints.length;
+    cat.totalConstraintsCovered += s.avg_constraints_covered * s.response_count;
+    for (const [vendor, count] of Object.entries(s.primary_vendors)) {
+      cat.vendorCounts[vendor] = (cat.vendorCounts[vendor] || 0) + count;
+    }
+  }
+
+  const results: CategorySummary[] = [];
+  for (const [category, data] of catMap.entries()) {
+    const topEntry = Object.entries(data.vendorCounts).sort((a, b) => b[1] - a[1])[0];
+    const totalPossibleConstraints = data.totalConstraints * (data.totalResponses / data.prompts.length || 1);
+    results.push({
+      category,
+      prompt_count: data.prompts.length,
+      response_count: data.totalResponses,
+      top_vendor: topEntry?.[0] ?? null,
+      top_vendor_count: topEntry?.[1] ?? 0,
+      avg_constraint_coverage: data.totalResponses > 0 ? data.totalConstraintsCovered / data.totalResponses : 0,
+      total_constraints: data.totalConstraints,
+    });
+  }
+
+  return results.sort((a, b) => b.response_count - a.response_count);
+}
+
+// ── Enrichment: Category Detail ────────────────────────────────────
+
+export interface CategoryDetail {
+  prompts: PromptEnrichmentSummary[];
+  promptMetadata: PromptMetadataWebRow[];
+  responses: (ResponseContextWebRow & { source_platform?: string })[];
+  vendorCounts: PrimaryVendorCountRow[];
+  constraintCoverage: ConstraintCoverageRow[];
+}
+
+export function getEnrichmentByCategory(category: string): CategoryDetail {
+  const allSummaries = getPromptEnrichmentSummaries();
+  const prompts = allSummaries.filter(s => s.category === category);
+
+  const db = getDb();
+  if (!db || prompts.length === 0) {
+    return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
+  }
+
+  try {
+    if (!hasTable(db, "prompt_metadata") || !hasTable(db, "response_context")) {
+      return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
+    }
+
+    const promptIds = prompts.map(p => p.prompt_id);
+    const placeholders = promptIds.map(() => "?").join(",");
+
+    const promptMetadata = db.prepare(
+      `SELECT * FROM prompt_metadata WHERE category = ? ORDER BY prompt_id`
+    ).all(category) as PromptMetadataWebRow[];
+
+    const responses = db.prepare(
+      `SELECT rc.*, s.source_platform
+       FROM response_context rc
+       JOIN sessions s ON rc.session_id = s.id
+       WHERE rc.prompt_id IN (${placeholders})
+       ORDER BY rc.prompt_id, s.source_platform`
+    ).all(...promptIds) as (ResponseContextWebRow & { source_platform: string })[];
+
+    const vendorCounts = getPrimaryVendorCounts({ category });
+    const constraintCoverage = getConstraintCoverageForCategory(category, promptMetadata, responses);
+
+    return { prompts, promptMetadata, responses, vendorCounts, constraintCoverage };
+  } catch {
+    return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
+  }
+}
+
+function getConstraintCoverageForCategory(
+  category: string,
+  metas: PromptMetadataWebRow[],
+  responses: ResponseContextWebRow[],
+): ConstraintCoverageRow[] {
+  const constraintTotals = new Map<string, number>();
+  const constraintAddressed = new Map<string, number>();
+
+  for (const meta of metas) {
+    const constraints = safeJsonParse<string[]>(meta.constraints, []);
+    const responseCount = responses.filter(r => r.prompt_id === meta.prompt_id).length;
+    for (const c of constraints) {
+      constraintTotals.set(c, (constraintTotals.get(c) || 0) + responseCount);
+    }
+  }
+
+  for (const r of responses) {
+    const addressed = safeJsonParse<string[]>(r.constraints_addressed, []);
+    for (const c of addressed) {
+      constraintAddressed.set(c, (constraintAddressed.get(c) || 0) + 1);
+    }
+  }
+
+  const result: ConstraintCoverageRow[] = [];
+  for (const [constraint, total] of constraintTotals.entries()) {
+    const addressed = constraintAddressed.get(constraint) || 0;
+    result.push({
+      constraint,
+      addressed_count: addressed,
+      total_count: total,
+      coverage_pct: total > 0 ? addressed / total : 0,
+    });
+  }
+
+  return result.sort((a, b) => b.coverage_pct - a.coverage_pct);
+}

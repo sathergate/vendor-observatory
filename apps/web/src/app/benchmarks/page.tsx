@@ -1,4 +1,11 @@
-import { getBenchmarkStats, getBenchmarkSessions, getBenchmarkVendorComparison } from "@/lib/db";
+import Link from "next/link";
+import {
+  getBenchmarkStats,
+  getBenchmarkSessions,
+  getBenchmarkVendorComparison,
+  getCategorySummaries,
+} from "@/lib/db";
+import { CATEGORY_META } from "./categories";
 
 export const dynamic = "force-dynamic";
 
@@ -6,6 +13,7 @@ export default function BenchmarksPage() {
   const stats = getBenchmarkStats();
   const sessions = getBenchmarkSessions(50);
   const vendorComp = getBenchmarkVendorComparison();
+  const categories = getCategorySummaries();
 
   return (
     <div className="space-y-8">
@@ -41,6 +49,69 @@ export default function BenchmarksPage() {
           </div>
         </div>
       </div>
+
+      {/* Category cards */}
+      {categories.length > 0 ? (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Categories</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {categories.map((cat) => {
+              const meta = CATEGORY_META[cat.category] ?? { label: cat.category, icon: "📦", description: "" };
+              return (
+                <Link
+                  key={cat.category}
+                  href={`/benchmarks/${cat.category}`}
+                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 hover:ring-1 hover:ring-gray-600 transition-all group"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{meta.icon}</span>
+                    <h3 className="font-semibold text-gray-100 group-hover:text-blue-400 transition-colors">
+                      {meta.label}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">{meta.description}</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">{cat.prompt_count} prompts</span>
+                      <span className="text-gray-400">{cat.response_count} responses</span>
+                    </div>
+                    {cat.top_vendor ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Top vendor</span>
+                        <span className="text-blue-400 font-medium">
+                          {cat.top_vendor}
+                          <span className="text-gray-500 ml-1">({cat.top_vendor_count})</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-600">No recommendations yet</div>
+                    )}
+                    {cat.total_constraints > 0 && (
+                      <div>
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>Constraint coverage</span>
+                          <span>{Math.round(cat.avg_constraint_coverage * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-1.5">
+                          <div
+                            className="bg-blue-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${Math.min(100, Math.round(cat.avg_constraint_coverage * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-gray-800 rounded-lg p-6 text-center">
+          <p className="text-gray-400">Category enrichment data will appear after the next benchmark run</p>
+          <p className="text-xs text-gray-500 mt-1">Prompts have been updated with enrichment metadata</p>
+        </div>
+      )}
 
       {/* Cross-assistant vendor comparison */}
       {vendorComp.length > 0 && (
