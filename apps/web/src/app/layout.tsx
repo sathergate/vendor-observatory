@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 };
 
 const navLinks = [
+  { href: "/benchmarks", label: "Benchmarks" },
   { href: "/", label: "Dashboard" },
   { href: "/vendors", label: "Vendors" },
   { href: "/platforms", label: "Platforms" },
   { href: "/actions", label: "Actions" },
   { href: "/sessions", label: "Sessions" },
-  { href: "/benchmarks", label: "Benchmarks" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
