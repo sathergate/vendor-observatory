@@ -85,10 +85,11 @@ jobs:
             || echo "::warning::Cursor CLI not available — will be skipped"
 
       - name: Authenticate Codex CLI
+        continue-on-error: true
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          codex login --api-key "$OPENAI_API_KEY"
+          printenv OPENAI_API_KEY | codex login --with-api-key
 
       - name: Verify CLI availability
         run: |
