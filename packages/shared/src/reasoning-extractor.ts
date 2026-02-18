@@ -106,6 +106,10 @@ export function extractResponseContext(
     tradeOffsSnippet: tradeOffsSnippet?.slice(0, 500) ?? null,
     gotchasSnippet: gotchasSnippet?.slice(0, 500) ?? null,
     constraintsAddressed,
+    // Regex extractor doesn't produce these — LLM enrichment fills them
+    reasoningChain: null,
+    disqualificationReasons: [],
+    confidenceScore: null,
   };
 }
 
@@ -120,6 +124,9 @@ function emptyContext(): ExtractedResponseContext {
     tradeOffsSnippet: null,
     gotchasSnippet: null,
     constraintsAddressed: [],
+    reasoningChain: null,
+    disqualificationReasons: [],
+    confidenceScore: null,
   };
 }
 

@@ -4,7 +4,14 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { resolve, join, basename, dirname } from "node:path";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { loadVendorTaxonomy, extractVendorMentions, extractResponseContext } from "@obs/shared";
+import {
+  loadVendorTaxonomy,
+  extractVendorMentions,
+  extractResponseContext,
+  isEnrichmentEnabled,
+  extractResponseContextWithLLM,
+  classifyIntent,
+} from "@obs/shared";
 import type { VendorTaxonomy } from "@obs/shared";
 import { ObservatoryDB } from "./db.js";
 import { scanForTranscripts, scanAllTranscripts } from "./scanner.js";
@@ -122,6 +129,15 @@ program
 
       console.log(chalk.gray(`    Found ${sessions.length} sessions`));
 
+      // Collect benchmark sessions that need async LLM enrichment (done after transaction)
+      const pendingLLMEnrichments: Array<{
+        sessionId: string;
+        promptId: string;
+        turns: typeof sessions[0]["turns"];
+        constraints: string[];
+        promptText: string;
+      }> = [];
+
       db.runInTransaction(() => {
         db.deleteSessionsByFilePath(file.path);
 
@@ -221,7 +237,7 @@ program
                 }
               }
 
-              // Run reasoning extractor on assistant turns
+              // Run regex-based reasoning extractor (synchronous, always runs)
               const promptMeta = db.getPromptMetadata(promptId);
               const constraints = promptMeta ? JSON.parse(promptMeta.constraints) as string[] : [];
               const responseCtx = extractResponseContext(session.turns, taxonomy, constraints);
@@ -241,6 +257,38 @@ program
               if (responseCtx.primaryVendor) {
                 console.log(chalk.cyan(`    Enrichment: ${promptId} → primary=${responseCtx.primaryVendor}, constraints=${responseCtx.constraintsAddressed.length}/${constraints.length}`));
               }
+
+              // ── Intent Classification (rule-based, synchronous) ──
+              const userPromptText = session.turns
+                .filter((t) => t.role === "user" && t.textContent)
+                .map((t) => t.textContent)
+                .join("\n");
+              if (userPromptText) {
+                const intent = classifyIntent(userPromptText);
+                db.upsertPromptIntent({
+                  sessionId: session.id,
+                  promptId,
+                  intent,
+                });
+                if (intent.intent !== "unknown") {
+                  console.log(chalk.magenta(`    Intent: ${promptId} → ${intent.intent} (${Math.round(intent.confidence * 100)}%${intent.subIntent ? `, ${intent.subIntent}` : ""})`));
+                }
+              }
+
+              // Queue for async LLM enrichment if enabled
+              if (isEnrichmentEnabled()) {
+                const promptText = session.turns
+                  .filter((t) => t.role === "user" && t.textContent)
+                  .map((t) => t.textContent)
+                  .join("\n");
+                pendingLLMEnrichments.push({
+                  sessionId: session.id,
+                  promptId,
+                  turns: session.turns,
+                  constraints,
+                  promptText,
+                });
+              }
             } catch (enrichErr) {
               // Enrichment failure is non-fatal — don't break ingestion
               console.log(chalk.gray(`    Enrichment skipped: ${enrichErr}`));
@@ -251,6 +299,42 @@ program
         totalSessions += sessions.length;
         db.upsertIngestedFile(file.path, file.size, file.mtime, file.platform, sessions.length);
       });
+
+      // ── Async LLM enrichment pass (outside transaction) ──
+      if (pendingLLMEnrichments.length > 0) {
+        console.log(chalk.blue(`  LLM enrichment: processing ${pendingLLMEnrichments.length} sessions...`));
+        let llmSuccesses = 0;
+        for (const pending of pendingLLMEnrichments) {
+          try {
+            const llmCtx = await extractResponseContextWithLLM(
+              pending.turns,
+              taxonomy,
+              pending.constraints,
+            );
+            if (llmCtx) {
+              db.upsertResponseContext({
+                sessionId: pending.sessionId,
+                promptId: pending.promptId,
+                primaryVendor: llmCtx.primaryVendor,
+                isImplemented: llmCtx.isImplemented,
+                rationaleSnippet: llmCtx.rationaleSnippet,
+                vendorsMentioned: llmCtx.vendorsMentioned,
+                tradeOffsSnippet: llmCtx.tradeOffsSnippet,
+                gotchasSnippet: llmCtx.gotchasSnippet,
+                constraintsAddressed: llmCtx.constraintsAddressed,
+                reasoningChain: llmCtx.reasoningChain,
+                disqualificationReasons: llmCtx.disqualificationReasons,
+                confidenceScore: llmCtx.confidenceScore,
+              });
+              llmSuccesses++;
+              console.log(chalk.green(`    LLM: ${pending.promptId} → primary=${llmCtx.primaryVendor} (conf=${llmCtx.confidenceScore?.toFixed(2)})`));
+            }
+          } catch (llmErr) {
+            console.log(chalk.gray(`    LLM enrichment failed for ${pending.promptId}: ${llmErr}`));
+          }
+        }
+        console.log(chalk.green(`  LLM enrichment complete: ${llmSuccesses}/${pendingLLMEnrichments.length} succeeded`));
+      }
 
       processedFiles++;
     }

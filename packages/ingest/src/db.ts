@@ -16,6 +16,8 @@ import type {
   PromptMetadataRow,
   ResponseContextRow,
   ExtractedResponseContext,
+  IntentClassification,
+  DisqualificationReason,
 } from "@obs/shared";
 
 const SCHEMA = `
@@ -92,7 +94,23 @@ CREATE TABLE IF NOT EXISTS response_context (
   trade_offs_snippet TEXT,
   gotchas_snippet TEXT,
   constraints_addressed TEXT NOT NULL DEFAULT '[]',
+  reasoning_chain TEXT,
+  disqualification_reasons TEXT,
+  confidence_score REAL,
   extracted_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id),
+  UNIQUE(session_id, prompt_id)
+);
+
+CREATE TABLE IF NOT EXISTS prompt_intents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  prompt_id TEXT NOT NULL,
+  intent TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0,
+  sub_intent TEXT,
+  classifier TEXT NOT NULL DEFAULT 'rule',
+  classified_at TEXT NOT NULL,
   FOREIGN KEY (session_id) REFERENCES sessions(id),
   UNIQUE(session_id, prompt_id)
 );
@@ -107,6 +125,9 @@ CREATE INDEX IF NOT EXISTS idx_prompt_metadata_category ON prompt_metadata(categ
 CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id);
 CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id);
 CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor);
+CREATE INDEX IF NOT EXISTS idx_prompt_intents_session ON prompt_intents(session_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_intents_prompt ON prompt_intents(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_intents_intent ON prompt_intents(intent);
 `;
 
 export class ObservatoryDB {
@@ -166,6 +187,9 @@ export class ObservatoryDB {
           trade_offs_snippet TEXT,
           gotchas_snippet TEXT,
           constraints_addressed TEXT NOT NULL DEFAULT '[]',
+          reasoning_chain TEXT,
+          disqualification_reasons TEXT,
+          confidence_score REAL,
           extracted_at TEXT NOT NULL,
           FOREIGN KEY (session_id) REFERENCES sessions(id),
           UNIQUE(session_id, prompt_id)
@@ -173,6 +197,41 @@ export class ObservatoryDB {
         CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id);
         CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id);
         CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor);
+      `);
+    }
+
+    // Add LLM enrichment columns to response_context if missing
+    if (tableNames.has("response_context")) {
+      const rcCols = this.db.prepare("PRAGMA table_info(response_context)").all() as Array<{ name: string }>;
+      if (!rcCols.some((c) => c.name === "reasoning_chain")) {
+        this.db.exec("ALTER TABLE response_context ADD COLUMN reasoning_chain TEXT");
+      }
+      if (!rcCols.some((c) => c.name === "disqualification_reasons")) {
+        this.db.exec("ALTER TABLE response_context ADD COLUMN disqualification_reasons TEXT");
+      }
+      if (!rcCols.some((c) => c.name === "confidence_score")) {
+        this.db.exec("ALTER TABLE response_context ADD COLUMN confidence_score REAL");
+      }
+    }
+
+    // Create prompt_intents table if missing
+    if (!tableNames.has("prompt_intents")) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS prompt_intents (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id TEXT NOT NULL,
+          prompt_id TEXT NOT NULL,
+          intent TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0,
+          sub_intent TEXT,
+          classifier TEXT NOT NULL DEFAULT 'rule',
+          classified_at TEXT NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES sessions(id),
+          UNIQUE(session_id, prompt_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_prompt_intents_session ON prompt_intents(session_id);
+        CREATE INDEX IF NOT EXISTS idx_prompt_intents_prompt ON prompt_intents(prompt_id);
+        CREATE INDEX IF NOT EXISTS idx_prompt_intents_intent ON prompt_intents(intent);
       `);
     }
   }
@@ -401,11 +460,15 @@ export class ObservatoryDB {
     tradeOffsSnippet: string | null;
     gotchasSnippet: string | null;
     constraintsAddressed: string[];
+    reasoningChain?: string | null;
+    disqualificationReasons?: DisqualificationReason[];
+    confidenceScore?: number | null;
   }): void {
     this.db.prepare(`
       INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, rationale_snippet,
-        vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed, extracted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed,
+        reasoning_chain, disqualification_reasons, confidence_score, extracted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(session_id, prompt_id) DO UPDATE SET
         primary_vendor = excluded.primary_vendor,
         is_implemented = excluded.is_implemented,
@@ -414,6 +477,9 @@ export class ObservatoryDB {
         trade_offs_snippet = excluded.trade_offs_snippet,
         gotchas_snippet = excluded.gotchas_snippet,
         constraints_addressed = excluded.constraints_addressed,
+        reasoning_chain = excluded.reasoning_chain,
+        disqualification_reasons = excluded.disqualification_reasons,
+        confidence_score = excluded.confidence_score,
         extracted_at = datetime('now')
     `).run(
       ctx.sessionId,
@@ -425,6 +491,35 @@ export class ObservatoryDB {
       ctx.tradeOffsSnippet,
       ctx.gotchasSnippet,
       JSON.stringify(ctx.constraintsAddressed),
+      ctx.reasoningChain ?? null,
+      ctx.disqualificationReasons ? JSON.stringify(ctx.disqualificationReasons) : null,
+      ctx.confidenceScore ?? null,
+    );
+  }
+
+  // ── Prompt Intents ──────────────────────────────────────────────
+
+  upsertPromptIntent(ctx: {
+    sessionId: string;
+    promptId: string;
+    intent: IntentClassification;
+  }): void {
+    this.db.prepare(`
+      INSERT INTO prompt_intents (session_id, prompt_id, intent, confidence, sub_intent, classifier, classified_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(session_id, prompt_id) DO UPDATE SET
+        intent = excluded.intent,
+        confidence = excluded.confidence,
+        sub_intent = excluded.sub_intent,
+        classifier = excluded.classifier,
+        classified_at = datetime('now')
+    `).run(
+      ctx.sessionId,
+      ctx.promptId,
+      ctx.intent.intent,
+      ctx.intent.confidence,
+      ctx.intent.subIntent,
+      ctx.intent.classifier,
     );
   }
 

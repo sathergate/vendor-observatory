@@ -179,7 +179,21 @@ export interface ResponseContextRow {
   trade_offs_snippet: string | null;
   gotchas_snippet: string | null;
   constraints_addressed: string; // JSON array of strings
+  reasoning_chain: string | null;
+  disqualification_reasons: string | null; // JSON array of { vendor, reason }
+  confidence_score: number | null;
   extracted_at: string;
+}
+
+export interface PromptIntentRow {
+  id: number;
+  session_id: string;
+  prompt_id: string;
+  intent: DeveloperIntent;
+  confidence: number;
+  sub_intent: string | null;
+  classifier: string; // "rule" or "llm"
+  classified_at: string;
 }
 
 // ── Enrichment: Parsed Types (for runtime use) ─────────────────────
@@ -187,6 +201,11 @@ export interface ResponseContextRow {
 export interface VendorDispositionEntry {
   vendor: string;
   disposition: VendorDisposition;
+}
+
+export interface DisqualificationReason {
+  vendor: string;
+  reason: string;
 }
 
 export interface ExtractedResponseContext {
@@ -197,6 +216,29 @@ export interface ExtractedResponseContext {
   tradeOffsSnippet: string | null;
   gotchasSnippet: string | null;
   constraintsAddressed: string[];
+  // LLM enrichment fields (optional — populated when ENRICHMENT_ENABLED=true)
+  reasoningChain: string | null;
+  disqualificationReasons: DisqualificationReason[];
+  confidenceScore: number | null;
+}
+
+// ── Developer Intent Classification ─────────────────────────────────
+
+export type DeveloperIntent =
+  | "evaluation"        // "compare X vs Y", "which is better"
+  | "migration"         // "migrate from X", "switch from"
+  | "greenfield"        // "set up from scratch", "new project"
+  | "debugging"         // "fix", "error", "not working"
+  | "architecture"      // "best practice", "how should I structure"
+  | "compliance"        // "SOC2", "HIPAA", "GDPR"
+  | "cost_optimization" // "cheaper", "reduce cost", "free tier"
+  | "unknown";
+
+export interface IntentClassification {
+  intent: DeveloperIntent;
+  confidence: number;  // 0-1
+  subIntent: string | null;
+  classifier: "rule" | "llm";
 }
 
 // ── Enrichment: Aggregated Stats ────────────────────────────────────

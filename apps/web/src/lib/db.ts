@@ -1377,6 +1377,107 @@ export function getConstraintDemand(): ConstraintDemandRow[] {
   } catch { return []; }
 }
 
+// ── Developer Intent Analytics ──────────────────────────────────────
+
+export interface IntentDistributionRow {
+  intent: string;
+  count: number;
+  pct: number;
+  avg_confidence: number;
+  top_vendor: string | null;
+  top_vendor_count: number;
+}
+
+export interface IntentVendorRow {
+  intent: string;
+  vendor: string;
+  wins: number;
+  total: number;
+  win_rate: number;
+}
+
+export function getIntentDistribution(): IntentDistributionRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "prompt_intents")) return [];
+
+    const rows = db.prepare(`
+      SELECT
+        pi.intent,
+        COUNT(*) AS count,
+        AVG(pi.confidence) AS avg_confidence
+      FROM prompt_intents pi
+      WHERE pi.intent != 'unknown'
+      GROUP BY pi.intent
+      ORDER BY count DESC
+    `).all() as Array<{ intent: string; count: number; avg_confidence: number }>;
+
+    const total = rows.reduce((s, r) => s + r.count, 0);
+
+    // For each intent, find the top vendor
+    const results: IntentDistributionRow[] = [];
+    for (const row of rows) {
+      let topVendor: string | null = null;
+      let topVendorCount = 0;
+      try {
+        const vendorRow = db.prepare(`
+          SELECT rc.primary_vendor, COUNT(*) AS cnt
+          FROM prompt_intents pi
+          JOIN response_context rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
+          WHERE pi.intent = ? AND rc.primary_vendor IS NOT NULL
+          GROUP BY rc.primary_vendor
+          ORDER BY cnt DESC
+          LIMIT 1
+        `).get(row.intent) as { primary_vendor: string; cnt: number } | undefined;
+        if (vendorRow) {
+          topVendor = vendorRow.primary_vendor;
+          topVendorCount = vendorRow.cnt;
+        }
+      } catch { /* join may fail if tables misaligned */ }
+
+      results.push({
+        intent: row.intent,
+        count: row.count,
+        pct: total > 0 ? row.count / total : 0,
+        avg_confidence: row.avg_confidence,
+        top_vendor: topVendor,
+        top_vendor_count: topVendorCount,
+      });
+    }
+
+    return results;
+  } catch { return []; }
+}
+
+export function getIntentVendorMatrix(): IntentVendorRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "prompt_intents") || !hasTable(db, "response_context")) return [];
+
+    const rows = db.prepare(`
+      SELECT
+        pi.intent,
+        rc.primary_vendor AS vendor,
+        COUNT(*) AS wins,
+        (SELECT COUNT(*) FROM prompt_intents pi2
+         JOIN response_context rc2 ON pi2.session_id = rc2.session_id AND pi2.prompt_id = rc2.prompt_id
+         WHERE pi2.intent = pi.intent AND rc2.primary_vendor IS NOT NULL) AS total
+      FROM prompt_intents pi
+      JOIN response_context rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
+      WHERE pi.intent != 'unknown' AND rc.primary_vendor IS NOT NULL
+      GROUP BY pi.intent, rc.primary_vendor
+      ORDER BY pi.intent, wins DESC
+    `).all() as Array<{ intent: string; vendor: string; wins: number; total: number }>;
+
+    return rows.map((r) => ({
+      ...r,
+      win_rate: r.total > 0 ? r.wins / r.total : 0,
+    }));
+  } catch { return []; }
+}
+
 function getConstraintCoverageForCategory(
   category: string,
   metas: PromptMetadataWebRow[],

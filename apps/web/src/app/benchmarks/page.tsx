@@ -4,7 +4,9 @@ import {
   getBenchmarkSessions,
   getBenchmarkVendorComparison,
   getCategorySummaries,
+  getIntentDistribution,
 } from "@/lib/db";
+import { vendorDisplayName } from "./vendor-taxonomy";
 import { CATEGORY_META } from "./categories";
 import { PROMPT_COUNTS } from "./prompt-summaries";
 
@@ -15,6 +17,7 @@ export default function BenchmarksPage() {
   const sessions = getBenchmarkSessions(50);
   const vendorComp = getBenchmarkVendorComparison();
   const dbCategories = getCategorySummaries();
+  const intentDist = getIntentDistribution();
 
   // Merge all categories from CATEGORY_META with any DB data
   const allCategories = Object.entries(CATEGORY_META).map(([key, meta]) => {
@@ -66,6 +69,61 @@ export default function BenchmarksPage() {
           </div>
         </div>
       </div>
+
+      {/* Developer Intent Distribution */}
+      {intentDist.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-1">
+            Developer Intent Distribution
+          </h2>
+          <p className="text-sm text-gray-500 mb-3">
+            What kinds of help developers seek — classified from prompt text
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {intentDist.map((d) => {
+              const intentLabels: Record<string, { label: string; icon: string; color: string }> = {
+                evaluation: { label: "Evaluation", icon: "⚖️", color: "text-yellow-400" },
+                migration: { label: "Migration", icon: "🔄", color: "text-orange-400" },
+                greenfield: { label: "Greenfield", icon: "🌱", color: "text-green-400" },
+                debugging: { label: "Debugging", icon: "🐛", color: "text-red-400" },
+                architecture: { label: "Architecture", icon: "🏗️", color: "text-blue-400" },
+                compliance: { label: "Compliance", icon: "🔒", color: "text-purple-400" },
+                cost_optimization: { label: "Cost Optimization", icon: "💰", color: "text-emerald-400" },
+              };
+              const meta = intentLabels[d.intent] || { label: d.intent, icon: "❓", color: "text-gray-400" };
+
+              return (
+                <div key={d.intent} className="bg-gray-800 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">{meta.icon}</span>
+                    <span className={`text-sm font-medium ${meta.color}`}>{meta.label}</span>
+                  </div>
+                  <p className="text-2xl font-bold">{d.count}</p>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-500">{Math.round(d.pct * 100)}% of prompts</span>
+                    <span className="text-xs text-gray-500">
+                      conf: {Math.round(d.avg_confidence * 100)}%
+                    </span>
+                  </div>
+                  {d.top_vendor && (
+                    <div className="mt-2 pt-2 border-t border-gray-700">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-gray-500">Top vendor</span>
+                        <Link
+                          href={`/benchmarks/vendors/${encodeURIComponent(d.top_vendor)}`}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          {vendorDisplayName(d.top_vendor)} ({d.top_vendor_count})
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Category cards — always show all 13 */}
       <div>
