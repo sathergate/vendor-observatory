@@ -577,7 +577,8 @@ export function getPromptEnrichmentSummaries(): PromptEnrichmentSummary[] {
   } catch { return []; }
 }
 
-function safeJsonParse<T>(json: string, fallback: T): T {
+function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
+  if (!json) return fallback;
   try { return JSON.parse(json) as T; } catch { return fallback; }
 }
 
