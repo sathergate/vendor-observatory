@@ -1478,6 +1478,164 @@ export function getIntentVendorMatrix(): IntentVendorRow[] {
   } catch { return []; }
 }
 
+// ── FTS5 Search ──────────────────────────────────────────────────────
+
+export interface SearchResult {
+  source_type: string;
+  source_id: string;
+  vendor: string;
+  category: string;
+  platform: string;
+  prompt_id: string;
+  snippet: string;
+  rank: number;
+}
+
+export function searchCorpus(
+  query: string,
+  filters?: { vendor?: string; category?: string; platform?: string; sourceType?: string },
+  limit = 20,
+): SearchResult[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "search_index")) return [];
+
+    let whereClause = "";
+    const params: (string | number)[] = [];
+
+    if (filters?.vendor) {
+      whereClause += " AND vendor = ?";
+      params.push(filters.vendor);
+    }
+    if (filters?.category) {
+      whereClause += " AND category = ?";
+      params.push(filters.category);
+    }
+    if (filters?.platform) {
+      whereClause += " AND platform = ?";
+      params.push(filters.platform);
+    }
+    if (filters?.sourceType) {
+      whereClause += " AND source_type = ?";
+      params.push(filters.sourceType);
+    }
+
+    params.push(limit);
+
+    return db.prepare(`
+      SELECT source_type, source_id, vendor, category, platform, prompt_id,
+             snippet(search_index, 6, '<mark>', '</mark>', '...', 40) AS snippet,
+             bm25(search_index) AS rank
+      FROM search_index
+      WHERE search_index MATCH ?
+      ${whereClause}
+      ORDER BY rank
+      LIMIT ?
+    `).all(query, ...params) as SearchResult[];
+  } catch { return []; }
+}
+
+// ── Cross-Session Insights ──────────────────────────────────────────
+
+export interface DivergenceInsight {
+  promptId: string;
+  platforms: Record<string, string | null>;
+  isDivergent: boolean;
+  divergenceScore: number;
+}
+
+export interface ConstraintInfluenceInsight {
+  constraint: string;
+  influenceScore: number;
+  vendorShifts: Array<{
+    vendor: string;
+    winRateWith: number;
+    winRateWithout: number;
+    delta: number;
+  }>;
+}
+
+export interface DriftInsight {
+  vendor: string;
+  earlyWinRate: number;
+  lateWinRate: number;
+  delta: number;
+  isSignificant: boolean;
+}
+
+export function getDivergenceMatrix(): DivergenceInsight[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "cross_session_insights")) return [];
+    const rows = db.prepare(
+      "SELECT insight_data FROM cross_session_insights WHERE insight_type = 'divergence' ORDER BY generated_at DESC"
+    ).all() as Array<{ insight_data: string }>;
+    return rows.map((r) => safeJsonParse<DivergenceInsight>(r.insight_data, { promptId: "", platforms: {}, isDivergent: false, divergenceScore: 0 }));
+  } catch { return []; }
+}
+
+export function getConstraintInfluence(): ConstraintInfluenceInsight[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "cross_session_insights")) return [];
+    const rows = db.prepare(
+      "SELECT insight_data FROM cross_session_insights WHERE insight_type = 'constraint_influence' ORDER BY generated_at DESC"
+    ).all() as Array<{ insight_data: string }>;
+    return rows.map((r) => safeJsonParse<ConstraintInfluenceInsight>(r.insight_data, { constraint: "", influenceScore: 0, vendorShifts: [] }));
+  } catch { return []; }
+}
+
+export function getTemporalDrift(): DriftInsight[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "cross_session_insights")) return [];
+    const rows = db.prepare(
+      "SELECT insight_data FROM cross_session_insights WHERE insight_type = 'temporal_drift' ORDER BY generated_at DESC"
+    ).all() as Array<{ insight_data: string }>;
+    return rows.map((r) => safeJsonParse<DriftInsight>(r.insight_data, { vendor: "", earlyWinRate: 0, lateWinRate: 0, delta: 0, isSignificant: false }));
+  } catch { return []; }
+}
+
+// ── Daily Digest ────────────────────────────────────────────────────
+
+export interface DigestRow {
+  run_date: string;
+  summary: string | null;
+  significant_changes: unknown[];
+  alerts: Array<{
+    alertType: string;
+    vendor: string;
+    severity: string;
+    message: string;
+  }>;
+}
+
+export function getLatestDigests(limit = 5): DigestRow[] {
+  const db = getDb();
+  if (!db) return [];
+  try {
+    if (!hasTable(db, "daily_digests")) return [];
+    const rows = db.prepare(
+      "SELECT * FROM daily_digests ORDER BY run_date DESC LIMIT ?"
+    ).all(limit) as Array<{
+      run_date: string;
+      summary: string | null;
+      significant_changes: string;
+      alerts: string;
+    }>;
+    return rows.map((r) => ({
+      run_date: r.run_date,
+      summary: r.summary,
+      significant_changes: safeJsonParse<unknown[]>(r.significant_changes, []),
+      alerts: safeJsonParse<DigestRow["alerts"]>(r.alerts, []),
+    }));
+  } catch { return []; }
+}
+
 function getConstraintCoverageForCategory(
   category: string,
   metas: PromptMetadataWebRow[],

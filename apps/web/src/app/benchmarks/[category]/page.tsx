@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEnrichmentByCategory } from "@/lib/db";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { CATEGORY_META } from "../categories";
 import { PROMPT_SUMMARIES, PROMPTS_BY_CATEGORY } from "../prompt-summaries";
 import { CONTENT_TAG_LABELS, PATTERN_TAG_LABELS } from "../tag-labels";
@@ -35,9 +36,7 @@ export default async function CategoryDetailPage({
     <div className="space-y-8">
       {/* Breadcrumb + Header */}
       <div>
-        <Link href="/benchmarks" className="text-sm text-gray-500 hover:text-gray-300 transition-colors">
-          &larr; Benchmarks
-        </Link>
+        <Breadcrumb items={[{ label: "Home", href: "/" }, { label: meta.label }]} />
         <div className="flex items-center gap-3 mt-2">
           <span className="text-2xl">{meta.icon}</span>
           <div>

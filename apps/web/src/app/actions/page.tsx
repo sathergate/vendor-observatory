@@ -1,4 +1,6 @@
 import { getActionFunnel } from "@/lib/db";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +9,7 @@ export default function ActionsPage() {
 
   return (
     <div>
+      <Breadcrumb items={[{ label: "Actions" }]} />
       <h1 className="text-2xl font-bold mb-2">Chosen vs Mentioned</h1>
       <p className="text-gray-400 mb-6">Which vendors get recommended AND then actually installed?</p>
 
@@ -29,7 +32,7 @@ export default function ActionsPage() {
                   : 0;
                 return (
                   <tr key={row.vendor_canonical_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                    <td className="px-4 py-2 font-medium">{row.vendor_canonical_id}</td>
+                    <td className="px-4 py-2 font-medium">{vendorDisplayName(row.vendor_canonical_id)}</td>
                     <td className="px-4 py-2 text-right">{row.mentioned_total}</td>
                     <td className="px-4 py-2 text-right text-blue-400">{row.recommended_total || "\u2014"}</td>
                     <td className="px-4 py-2 text-right text-green-400">{row.installed_total || "\u2014"}</td>

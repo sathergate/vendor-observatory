@@ -1,5 +1,9 @@
 import { getSessionDetail } from "@/lib/db";
 import { notFound } from "next/navigation";
+import { Breadcrumb } from "@/components/Breadcrumb";
+import { PlatformBadge } from "@/components/PlatformBadge";
+import { MentionBadge } from "@/components/MentionBadge";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +16,13 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div>
+      <Breadcrumb items={[
+        { label: "Sessions", href: "/sessions" },
+        { label: session.id.slice(0, 8) + "\u2026" },
+      ]} />
       <h1 className="text-2xl font-bold mb-2">Session {session.id.slice(0, 12)}...</h1>
       <div className="flex gap-4 text-sm text-gray-400 mb-6">
-        <span>{session.source_platform}</span>
+        <PlatformBadge platform={session.source_platform} />
         <span>{session.model_id ?? "unknown model"}</span>
         <span>{new Date(session.started_at).toLocaleString()}</span>
         <span>{session.turn_count} turns</span>
@@ -37,7 +45,7 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
             <tbody>
               {observations.map((obs, i) => (
                 <tr key={i} className="border-b border-gray-700/50">
-                  <td className="px-4 py-2 font-medium">{obs.vendor_canonical_id}</td>
+                  <td className="px-4 py-2 font-medium">{vendorDisplayName(obs.vendor_canonical_id)}</td>
                   <td className="px-4 py-2">
                     <MentionBadge type={obs.mention_type} />
                   </td>
@@ -71,7 +79,7 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
                 <tr key={i} className="border-b border-gray-700/50">
                   <td className="px-4 py-2 text-gray-400">{ta.tool_name}</td>
                   <td className="px-4 py-2 font-mono text-xs max-w-md truncate">{ta.command_or_path ?? "\u2014"}</td>
-                  <td className="px-4 py-2">{ta.vendor_canonical_id ?? "\u2014"}</td>
+                  <td className="px-4 py-2">{ta.vendor_canonical_id ? vendorDisplayName(ta.vendor_canonical_id) : "\u2014"}</td>
                   <td className="px-4 py-2 text-gray-400">{ta.action_type ?? "\u2014"}</td>
                 </tr>
               ))}
@@ -82,22 +90,5 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
         <p className="text-gray-500">No tool actions recorded.</p>
       )}
     </div>
-  );
-}
-
-function MentionBadge({ type }: { type: string }) {
-  const colors: Record<string, string> = {
-    installed: "bg-green-900 text-green-300",
-    configured: "bg-yellow-900 text-yellow-300",
-    implemented: "bg-purple-900 text-purple-300",
-    recommended: "bg-blue-900 text-blue-300",
-    compared: "bg-cyan-900 text-cyan-300",
-    mentioned: "bg-gray-700 text-gray-300",
-    rejected: "bg-red-900 text-red-300",
-  };
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs ${colors[type] ?? "bg-gray-700 text-gray-300"}`}>
-      {type}
-    </span>
   );
 }

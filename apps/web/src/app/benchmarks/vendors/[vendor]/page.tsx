@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { getVendorScorecard, getVendorHeadToHead, getVendorTrend } from "@/lib/db";
 import { generateRecommendations, computeAIReadinessScore, type Recommendation } from "@/lib/recommendations";
-import { vendorDisplayName, VENDOR_META, vendorCategory } from "../../vendor-taxonomy";
+import { vendorDisplayName, VENDOR_META, vendorCategory } from "@/lib/vendor-taxonomy";
+import { Breadcrumb } from "@/components/Breadcrumb";
+import { SectionNav } from "@/components/SectionNav";
 import { CATEGORY_META } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
 
@@ -122,13 +124,11 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
   if (!scorecard) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-          <Link href="/benchmarks" className="hover:text-blue-400">Benchmarks</Link>
-          <span>/</span>
-          <Link href="/benchmarks/vendors" className="hover:text-blue-400">Vendor Intel</Link>
-          <span>/</span>
-          <span className="text-gray-200">{vendorDisplayName(vendorId)}</span>
-        </div>
+        <Breadcrumb items={[
+          { label: "Home", href: "/" },
+          { label: "Vendor Intel", href: "/benchmarks/vendors" },
+          { label: vendorDisplayName(vendorId) },
+        ]} />
         <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
           <p className="text-lg">No data found for &ldquo;{vendorDisplayName(vendorId)}&rdquo;</p>
           <p className="text-sm mt-2">This vendor hasn&apos;t appeared in any benchmark responses yet.</p>
@@ -149,13 +149,11 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
   return (
     <div className="space-y-8">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/benchmarks" className="hover:text-blue-400 transition-colors">Benchmarks</Link>
-        <span>/</span>
-        <Link href="/benchmarks/vendors" className="hover:text-blue-400 transition-colors">Vendor Intel</Link>
-        <span>/</span>
-        <span className="text-gray-200">{vendorDisplayName(vendorId)}</span>
-      </div>
+      <Breadcrumb items={[
+        { label: "Home", href: "/" },
+        { label: "Vendor Intel", href: "/benchmarks/vendors" },
+        { label: vendorDisplayName(vendorId) },
+      ]} />
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -177,8 +175,22 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
         </div>
       </div>
 
+      {/* Section Navigation */}
+      <SectionNav sections={[
+        { id: "profile", label: "Profile" },
+        { id: "ai-readiness", label: "AI-Readiness" },
+        ...(trend && trend.dataPoints.length > 0 ? [{ id: "trend", label: "Trend" }] : []),
+        ...(scorecard.categoryBreakdown.length > 0 ? [{ id: "categories", label: "Categories" }] : []),
+        ...((scorecard.constraintsAddressed.length > 0 || scorecard.constraintsMissed.length > 0) ? [{ id: "constraints", label: "Constraints" }] : []),
+        ...(scorecard.competitorWins.length > 0 ? [{ id: "competitive", label: "Competitive" }] : []),
+        { id: "scenarios", label: "Scenarios" },
+        ...((scorecard.tradeOffSnippets.length > 0 || scorecard.gotchaSnippets.length > 0) ? [{ id: "tradeoffs", label: "Trade-offs" }] : []),
+        ...(scorecard.rationaleSnippets.length > 0 ? [{ id: "rationale", label: "Rationale" }] : []),
+        ...(recommendations.length > 0 ? [{ id: "recommendations", label: "Recommendations" }] : []),
+      ]} />
+
       {/* ── 1. Recommendation Profile ──────────────────────────── */}
-      <div>
+      <div id="profile">
         <h2 className="text-lg font-semibold mb-3">Recommendation Profile</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-gray-800 rounded-lg p-4">
@@ -229,7 +241,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
       </div>
 
       {/* ── AI-Readiness Score ───────────────────────────────── */}
-      <div>
+      <div id="ai-readiness">
         <h2 className="text-lg font-semibold mb-3">AI-Readiness Score</h2>
         <p className="text-xs text-gray-500 mb-3">
           How well your documentation and SDK help AI assistants recommend and implement your tool
@@ -290,7 +302,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── Temporal Trend ────────────────────────────────────── */}
       {trend && trend.dataPoints.length > 0 && (
-        <div>
+        <div id="trend">
           <h2 className="text-lg font-semibold mb-3">Trend</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-gray-800 rounded-lg p-4">
@@ -356,7 +368,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── 2. Category Breakdown ──────────────────────────────── */}
       {scorecard.categoryBreakdown.length > 0 && (
-        <div>
+        <div id="categories">
           <h2 className="text-lg font-semibold mb-3">Category Breakdown</h2>
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
@@ -409,7 +421,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── 3. Constraint Scorecard ────────────────────────────── */}
       {(scorecard.constraintsAddressed.length > 0 || scorecard.constraintsMissed.length > 0) && (
-        <div>
+        <div id="constraints">
           <h2 className="text-lg font-semibold mb-3">Constraint Scorecard</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Addressed */}
@@ -450,7 +462,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── 4. Competitive Landscape ───────────────────────────── */}
       {scorecard.competitorWins.length > 0 && (
-        <div>
+        <div id="competitive">
           <h2 className="text-lg font-semibold mb-3">Competitive Landscape</h2>
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
@@ -537,7 +549,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
       )}
 
       {/* ── 5. Prompts Won & Lost ──────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div id="scenarios" className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {scorecard.promptsWon.length > 0 && (
           <div className="bg-gray-800 rounded-lg p-4">
             <h3 className="text-sm font-medium text-green-400 mb-3">
@@ -600,7 +612,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── 6. Trade-offs & Gotchas ────────────────────────────── */}
       {(scorecard.tradeOffSnippets.length > 0 || scorecard.gotchaSnippets.length > 0) && (
-        <div>
+        <div id="tradeoffs">
           <h2 className="text-lg font-semibold mb-3">Trade-offs &amp; Gotchas Cited</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {scorecard.tradeOffSnippets.length > 0 && (
@@ -634,7 +646,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── 7. Rationale Snippets ──────────────────────────────── */}
       {scorecard.rationaleSnippets.length > 0 && (
-        <div>
+        <div id="rationale">
           <h2 className="text-lg font-semibold mb-3">Why AI Recommends This Vendor</h2>
           <div className="bg-gray-800 rounded-lg p-4 space-y-3">
             {scorecard.rationaleSnippets.map((s, i) => (
@@ -648,7 +660,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
       {/* ── 8. Actionable Recommendations ──────────────────────── */}
       {recommendations.length > 0 && (
-        <div>
+        <div id="recommendations">
           <h2 className="text-lg font-semibold mb-3">
             🎯 Actionable Recommendations
           </h2>

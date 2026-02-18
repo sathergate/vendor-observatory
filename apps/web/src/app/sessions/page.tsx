@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getSessionList } from "@/lib/db";
+import { Breadcrumb } from "@/components/Breadcrumb";
+import { PlatformBadge } from "@/components/PlatformBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +10,7 @@ export default function SessionsPage() {
 
   return (
     <div>
+      <Breadcrumb items={[{ label: "Sessions" }]} />
       <h1 className="text-2xl font-bold mb-6">Sessions</h1>
 
       {sessions.length > 0 ? (
@@ -32,7 +35,7 @@ export default function SessionsPage() {
                       {s.id.slice(0, 12)}...
                     </Link>
                   </td>
-                  <td className="px-4 py-2 text-gray-400">{s.source_platform}</td>
+                  <td className="px-4 py-2"><PlatformBadge platform={s.source_platform} /></td>
                   <td className="px-4 py-2 text-gray-400 text-xs">{s.model_id ?? "\u2014"}</td>
                   <td className="px-4 py-2 text-gray-400">{new Date(s.started_at).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-right">{s.turn_count}</td>

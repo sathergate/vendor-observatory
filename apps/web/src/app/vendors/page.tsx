@@ -1,4 +1,6 @@
 import { getVendorStats, getCategories } from "@/lib/db";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +10,7 @@ export default function VendorsPage() {
 
   return (
     <div>
+      <Breadcrumb items={[{ label: "Vendors" }]} />
       <h1 className="text-2xl font-bold mb-6">Vendor Frequency</h1>
 
       {vendors.length > 0 ? (
@@ -30,7 +33,7 @@ export default function VendorsPage() {
               <tbody>
                 {vendors.map((v) => (
                   <tr key={v.vendor_canonical_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                    <td className="px-4 py-2 font-medium">{v.vendor_canonical_id}</td>
+                    <td className="px-4 py-2 font-medium">{vendorDisplayName(v.vendor_canonical_id)}</td>
                     <td className="px-4 py-2 text-gray-400">{v.work_category ?? "\u2014"}</td>
                     <td className="px-4 py-2 text-right font-bold">{v.total}</td>
                     <td className="px-4 py-2 text-right text-green-400">{v.installed || "\u2014"}</td>

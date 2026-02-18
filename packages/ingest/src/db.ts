@@ -214,6 +214,65 @@ export class ObservatoryDB {
       }
     }
 
+    // Create search_index FTS5 virtual table if missing
+    if (!tableNames.has("search_index")) {
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+          source_type,
+          source_id UNINDEXED,
+          vendor,
+          category,
+          platform,
+          prompt_id,
+          text_content,
+          tokenize='porter unicode61'
+        );
+      `);
+    }
+
+    // Create cross_session_insights table if missing
+    if (!tableNames.has("cross_session_insights")) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS cross_session_insights (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          insight_type TEXT NOT NULL,
+          prompt_id TEXT,
+          insight_data TEXT NOT NULL,
+          generated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_insights_type ON cross_session_insights(insight_type);
+      `);
+    }
+
+    // Create analysis_snapshots table if missing
+    if (!tableNames.has("analysis_snapshots")) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS analysis_snapshots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          snapshot_date TEXT NOT NULL,
+          prompt_id TEXT NOT NULL,
+          platform TEXT NOT NULL,
+          primary_vendor TEXT,
+          constraints_addressed TEXT,
+          UNIQUE(snapshot_date, prompt_id, platform)
+        );
+      `);
+    }
+
+    // Create daily_digests table if missing
+    if (!tableNames.has("daily_digests")) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS daily_digests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_date TEXT NOT NULL UNIQUE,
+          summary TEXT,
+          significant_changes TEXT,
+          alerts TEXT,
+          generated_at TEXT NOT NULL
+        );
+      `);
+    }
+
     // Create prompt_intents table if missing
     if (!tableNames.has("prompt_intents")) {
       this.db.exec(`
@@ -555,6 +614,139 @@ export class ObservatoryDB {
       FROM response_context rc JOIN sessions s ON rc.session_id = s.id
       WHERE rc.prompt_id = ?
     `).all(promptId) as Array<{ session_id: string; source_platform: string; constraints_addressed: string }>;
+  }
+
+  // ── FTS5 Search Index ────────────────────────────────────────────
+
+  populateSearchIndex(entries: Array<{
+    sourceType: string;
+    sourceId: string;
+    vendor: string;
+    category: string;
+    platform: string;
+    promptId: string;
+    textContent: string;
+  }>): void {
+    const insert = this.db.prepare(`
+      INSERT INTO search_index (source_type, source_id, vendor, category, platform, prompt_id, text_content)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    // Clear existing entries for these source IDs to avoid duplicates
+    const deleteBySource = this.db.prepare("DELETE FROM search_index WHERE source_id = ?");
+    for (const entry of entries) {
+      if (!entry.textContent || entry.textContent.trim().length < 10) continue;
+      deleteBySource.run(entry.sourceId);
+      insert.run(
+        entry.sourceType,
+        entry.sourceId,
+        entry.vendor,
+        entry.category,
+        entry.platform,
+        entry.promptId,
+        entry.textContent,
+      );
+    }
+  }
+
+  // ── Cross-Session Insights ─────────────────────────────────────────
+
+  upsertInsight(type: string, promptId: string | null, data: unknown): void {
+    if (promptId) {
+      // Delete existing insight of this type for this prompt
+      this.db.prepare(
+        "DELETE FROM cross_session_insights WHERE insight_type = ? AND prompt_id = ?"
+      ).run(type, promptId);
+    } else {
+      // Delete all insights of this type (global insights)
+      this.db.prepare(
+        "DELETE FROM cross_session_insights WHERE insight_type = ? AND prompt_id IS NULL"
+      ).run(type);
+    }
+    this.db.prepare(`
+      INSERT INTO cross_session_insights (insight_type, prompt_id, insight_data, generated_at)
+      VALUES (?, ?, ?, datetime('now'))
+    `).run(type, promptId, JSON.stringify(data));
+  }
+
+  getInsightsByType(type: string): Array<{ id: number; insight_type: string; prompt_id: string | null; insight_data: string; generated_at: string }> {
+    return this.db.prepare(
+      "SELECT * FROM cross_session_insights WHERE insight_type = ? ORDER BY generated_at DESC"
+    ).all(type) as Array<{ id: number; insight_type: string; prompt_id: string | null; insight_data: string; generated_at: string }>;
+  }
+
+  // ── Analysis Snapshots ────────────────────────────────────────────
+
+  upsertSnapshot(snapshotDate: string, promptId: string, platform: string, primaryVendor: string | null, constraintsAddressed: string[]): void {
+    this.db.prepare(`
+      INSERT INTO analysis_snapshots (snapshot_date, prompt_id, platform, primary_vendor, constraints_addressed)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(snapshot_date, prompt_id, platform) DO UPDATE SET
+        primary_vendor = excluded.primary_vendor,
+        constraints_addressed = excluded.constraints_addressed
+    `).run(snapshotDate, promptId, platform, primaryVendor, JSON.stringify(constraintsAddressed));
+  }
+
+  getSnapshot(date: string): Array<{ prompt_id: string; platform: string; primary_vendor: string | null; constraints_addressed: string }> {
+    return this.db.prepare(
+      "SELECT prompt_id, platform, primary_vendor, constraints_addressed FROM analysis_snapshots WHERE snapshot_date = ?"
+    ).all(date) as Array<{ prompt_id: string; platform: string; primary_vendor: string | null; constraints_addressed: string }>;
+  }
+
+  getPreviousSnapshotDate(beforeDate: string): string | null {
+    const row = this.db.prepare(
+      "SELECT DISTINCT snapshot_date FROM analysis_snapshots WHERE snapshot_date < ? ORDER BY snapshot_date DESC LIMIT 1"
+    ).get(beforeDate) as { snapshot_date: string } | undefined;
+    return row?.snapshot_date ?? null;
+  }
+
+  // ── Daily Digests ─────────────────────────────────────────────────
+
+  upsertDailyDigest(runDate: string, summary: string | null, significantChanges: unknown, alerts: unknown): void {
+    this.db.prepare(`
+      INSERT INTO daily_digests (run_date, summary, significant_changes, alerts, generated_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(run_date) DO UPDATE SET
+        summary = excluded.summary,
+        significant_changes = excluded.significant_changes,
+        alerts = excluded.alerts,
+        generated_at = datetime('now')
+    `).run(runDate, summary, JSON.stringify(significantChanges), JSON.stringify(alerts));
+  }
+
+  getLatestDigests(limit = 10): Array<{ run_date: string; summary: string | null; significant_changes: string; alerts: string; generated_at: string }> {
+    return this.db.prepare(
+      "SELECT * FROM daily_digests ORDER BY run_date DESC LIMIT ?"
+    ).all(limit) as Array<{ run_date: string; summary: string | null; significant_changes: string; alerts: string; generated_at: string }>;
+  }
+
+  // ── All Response Contexts (for analyzer) ──────────────────────────
+
+  getAllResponseContexts(): Array<{
+    session_id: string;
+    prompt_id: string;
+    primary_vendor: string | null;
+    vendors_mentioned: string;
+    constraints_addressed: string;
+    is_implemented: number;
+    rationale_snippet: string | null;
+    trade_offs_snippet: string | null;
+    gotchas_snippet: string | null;
+    extracted_at: string;
+    source_platform: string;
+    category: string | null;
+  }> {
+    return this.db.prepare(`
+      SELECT rc.*, s.source_platform, pm.category
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+    `).all() as Array<{
+      session_id: string; prompt_id: string; primary_vendor: string | null;
+      vendors_mentioned: string; constraints_addressed: string; is_implemented: number;
+      rationale_snippet: string | null; trade_offs_snippet: string | null;
+      gotchas_snippet: string | null; extracted_at: string; source_platform: string;
+      category: string | null;
+    }>;
   }
 
   close(): void { this.db.close(); }

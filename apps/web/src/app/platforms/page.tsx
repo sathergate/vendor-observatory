@@ -1,4 +1,6 @@
 import { getPlatformComparison } from "@/lib/db";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +9,7 @@ export default function PlatformsPage() {
 
   return (
     <div>
+      <Breadcrumb items={[{ label: "Platforms" }]} />
       <h1 className="text-2xl font-bold mb-6">Platform Comparison</h1>
       <p className="text-gray-400 mb-4">Side-by-side: what does Claude Code recommend vs Codex CLI?</p>
 
@@ -28,7 +31,7 @@ export default function PlatformsPage() {
                 return (
                   <tr key={row.vendor_canonical_id} className={`border-b border-gray-700/50 hover:bg-gray-700/30 ${unique ? "bg-gray-800/50" : ""}`}>
                     <td className="px-4 py-2 font-medium">
-                      {row.vendor_canonical_id}
+                      {vendorDisplayName(row.vendor_canonical_id)}
                       {unique && <span className="ml-2 text-xs text-yellow-500">unique</span>}
                     </td>
                     <td className="px-4 py-2 text-right text-blue-400">{row.claude_code_count || "\u2014"}</td>

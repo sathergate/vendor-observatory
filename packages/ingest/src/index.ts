@@ -300,6 +300,41 @@ program
         db.upsertIngestedFile(file.path, file.size, file.mtime, file.platform, sessions.length);
       });
 
+      // ── Populate search index from enrichment data ──
+      try {
+        const allCtxs = db.getAllResponseContexts();
+        const searchEntries: Array<{
+          sourceType: string; sourceId: string; vendor: string;
+          category: string; platform: string; promptId: string; textContent: string;
+        }> = [];
+
+        for (const ctx of allCtxs) {
+          const baseEntry = {
+            vendor: ctx.primary_vendor || "",
+            category: ctx.category || "",
+            platform: ctx.source_platform,
+            promptId: ctx.prompt_id,
+          };
+
+          if (ctx.rationale_snippet) {
+            searchEntries.push({ ...baseEntry, sourceType: "rationale", sourceId: `rationale-${ctx.session_id}-${ctx.prompt_id}`, textContent: ctx.rationale_snippet });
+          }
+          if (ctx.trade_offs_snippet) {
+            searchEntries.push({ ...baseEntry, sourceType: "trade_off", sourceId: `tradeoff-${ctx.session_id}-${ctx.prompt_id}`, textContent: ctx.trade_offs_snippet });
+          }
+          if (ctx.gotchas_snippet) {
+            searchEntries.push({ ...baseEntry, sourceType: "gotcha", sourceId: `gotcha-${ctx.session_id}-${ctx.prompt_id}`, textContent: ctx.gotchas_snippet });
+          }
+        }
+
+        if (searchEntries.length > 0) {
+          db.populateSearchIndex(searchEntries);
+          console.log(chalk.cyan(`    Search index: ${searchEntries.length} entries indexed`));
+        }
+      } catch (searchErr) {
+        console.log(chalk.gray(`    Search index population failed: ${searchErr}`));
+      }
+
       // ── Async LLM enrichment pass (outside transaction) ──
       if (pendingLLMEnrichments.length > 0) {
         console.log(chalk.blue(`  LLM enrichment: processing ${pendingLLMEnrichments.length} sessions...`));
@@ -468,6 +503,88 @@ program
         console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, or action.`));
         process.exit(1);
     }
+
+    db.close();
+  });
+
+// ── Analyze Command ─────────────────────────────────────────────────
+
+program
+  .command("analyze")
+  .description("Run cross-session divergence analysis")
+  .option("--type <type>", "Analysis type: divergences, constraints, drift, all", "all")
+  .option("--db <path>", "Path to SQLite database")
+  .action(async (opts) => {
+    const dbPath = getDbPath(opts);
+    if (!existsSync(dbPath)) {
+      console.error(chalk.red("No database found. Run 'obs ingest' first."));
+      process.exit(1);
+    }
+    const db = new ObservatoryDB(dbPath);
+    const { analyzePlatformDivergence, analyzeConstraintInfluence, analyzeTemporalDrift } = await import("./analyzer.js");
+    const type = opts.type as string;
+
+    console.log(chalk.blue("\nVendor Observatory — Cross-Session Analysis\n"));
+
+    if (type === "all" || type === "divergences") {
+      console.log(chalk.cyan("Analyzing platform divergence..."));
+      const results = analyzePlatformDivergence(db);
+      console.log(chalk.green(`  ${results.length} prompts analyzed, ${results.filter(r => r.isDivergent).length} divergent`));
+    }
+    if (type === "all" || type === "constraints") {
+      console.log(chalk.cyan("Analyzing constraint influence..."));
+      const results = analyzeConstraintInfluence(db);
+      console.log(chalk.green(`  ${results.length} constraints analyzed`));
+    }
+    if (type === "all" || type === "drift") {
+      console.log(chalk.cyan("Analyzing temporal drift..."));
+      const results = analyzeTemporalDrift(db);
+      console.log(chalk.green(`  ${results.length} vendor drift signals detected`));
+    }
+
+    db.close();
+    console.log(chalk.green("\n✓ Analysis complete"));
+  });
+
+// ── Digest Command ──────────────────────────────────────────────────
+
+program
+  .command("digest")
+  .description("Generate post-benchmark daily digest")
+  .option("--date <date>", "Digest date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10))
+  .option("--db <path>", "Path to SQLite database")
+  .action(async (opts) => {
+    const dbPath = getDbPath(opts);
+    if (!existsSync(dbPath)) {
+      console.error(chalk.red("No database found. Run 'obs ingest' first."));
+      process.exit(1);
+    }
+    const db = new ObservatoryDB(dbPath);
+    const { createSnapshot, detectDeltas, scoreSignificance, generateNarrative, emitAlerts } = await import("./digest.js");
+    const date = opts.date as string;
+
+    console.log(chalk.blue(`\nVendor Observatory — Daily Digest (${date})\n`));
+
+    console.log(chalk.cyan("Creating snapshot..."));
+    const snapshotCount = createSnapshot(db, date);
+    console.log(chalk.green(`  ${snapshotCount} snapshot entries created`));
+
+    console.log(chalk.cyan("Detecting deltas..."));
+    const deltas = detectDeltas(db, date);
+    console.log(chalk.green(`  ${deltas.length} vendor position changes detected`));
+
+    const significant = scoreSignificance(deltas);
+    console.log(chalk.green(`  ${significant.length} significant changes`));
+
+    console.log(chalk.cyan("Generating narrative..."));
+    const summary = await generateNarrative(significant);
+    console.log(chalk.green(`  Summary: ${summary?.slice(0, 100) ?? "(template)"}`));
+
+    const alerts = emitAlerts(deltas);
+    console.log(chalk.green(`  ${alerts.length} alerts emitted`));
+
+    db.upsertDailyDigest(date, summary, significant, alerts);
+    console.log(chalk.green("\n✓ Digest stored in database"));
 
     db.close();
   });

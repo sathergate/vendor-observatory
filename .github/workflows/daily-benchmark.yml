@@ -147,6 +147,17 @@ jobs:
         continue-on-error: true
         run: node packages/ingest/dist/index.js ingest
 
+      # ── Post-benchmark analysis ───────────────────────────────
+      - name: Post-benchmark analysis
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "Running cross-session analysis..."
+          node packages/ingest/dist/index.js analyze --type all || echo "::warning::Analysis had errors"
+          echo "Generating daily digest..."
+          node packages/ingest/dist/index.js digest || echo "::warning::Digest generation had errors"
+
       # ── Commit + push ──────────────────────────────────────────
       - name: Commit and push if DB changed
         run: |

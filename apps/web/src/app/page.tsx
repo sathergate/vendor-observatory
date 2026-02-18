@@ -1,7 +1,2 @@
-import { redirect } from "next/navigation";
-
-export const dynamic = "force-dynamic";
-
-export default function DashboardPage() {
-  redirect("/benchmarks");
-}
+export { default } from "./benchmarks/page";
+export { dynamic } from "./benchmarks/page";

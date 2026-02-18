@@ -5,8 +5,10 @@ import {
   getBenchmarkVendorComparison,
   getCategorySummaries,
   getIntentDistribution,
+  getLatestDigests,
 } from "@/lib/db";
-import { vendorDisplayName } from "./vendor-taxonomy";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
+import { PlatformBadge } from "@/components/PlatformBadge";
 import { CATEGORY_META } from "./categories";
 import { PROMPT_COUNTS } from "./prompt-summaries";
 
@@ -18,6 +20,7 @@ export default function BenchmarksPage() {
   const vendorComp = getBenchmarkVendorComparison();
   const dbCategories = getCategorySummaries();
   const intentDist = getIntentDistribution();
+  const digests = getLatestDigests(3);
 
   // Merge all categories from CATEGORY_META with any DB data
   const allCategories = Object.entries(CATEGORY_META).map(([key, meta]) => {
@@ -58,8 +61,8 @@ export default function BenchmarksPage() {
           <p className="text-sm text-gray-400">Platforms</p>
           <div className="flex gap-3 mt-1">
             {Object.entries(stats.platformBreakdown).map(([platform, count]) => (
-              <span key={platform} className="text-sm">
-                <span className="text-gray-300 font-medium">{platform}</span>{" "}
+              <span key={platform} className="flex items-center gap-1 text-sm">
+                <PlatformBadge platform={platform} size="xs" />{" "}
                 <span className="text-gray-500">{count}</span>
               </span>
             ))}
@@ -135,7 +138,7 @@ export default function BenchmarksPage() {
               href={`/benchmarks/${cat.key}`}
               className={`rounded-lg p-4 transition-all group ${
                 cat.hasData
-                  ? "bg-gray-800 hover:bg-gray-750 hover:ring-1 hover:ring-gray-600"
+                  ? "bg-gray-800 hover:bg-gray-700/80 hover:ring-1 hover:ring-gray-600"
                   : "bg-gray-800/50 border border-dashed border-gray-700 hover:border-gray-500 hover:bg-gray-800/70"
               }`}
             >
@@ -215,7 +218,7 @@ export default function BenchmarksPage() {
               <tbody>
                 {vendorComp.slice(0, 30).map((row) => (
                   <tr key={row.vendor_canonical_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                    <td className="px-4 py-2 font-medium">{row.vendor_canonical_id}</td>
+                    <td className="px-4 py-2 font-medium">{vendorDisplayName(row.vendor_canonical_id)}</td>
                     <td className="px-4 py-2 text-right">
                       {row.claude_code_count > 0 ? (
                         <span className="text-blue-400">{row.claude_code_count}</span>
@@ -242,6 +245,43 @@ export default function BenchmarksPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Digest */}
+      {digests.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Daily Digest</h2>
+          <div className="space-y-3">
+            {digests.map((d) => (
+              <div key={d.run_date} className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-300">{d.run_date}</span>
+                  {d.alerts.length > 0 && (
+                    <div className="flex gap-1">
+                      {d.alerts.map((alert, i) => (
+                        <span
+                          key={i}
+                          className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            alert.severity === "high"
+                              ? "bg-red-900/50 text-red-300"
+                              : alert.severity === "medium"
+                                ? "bg-yellow-900/50 text-yellow-300"
+                                : "bg-gray-700 text-gray-300"
+                          }`}
+                        >
+                          {alert.message}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {d.summary && (
+                  <p className="text-sm text-gray-400 leading-relaxed">{d.summary}</p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -274,13 +314,7 @@ export default function BenchmarksPage() {
                   <tr key={s.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
                     <td className="px-4 py-2 font-mono text-xs">{s.id.slice(0, 12)}...</td>
                     <td className="px-4 py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        s.source_platform === "claude_code" ? "bg-blue-900/50 text-blue-300" :
-                        s.source_platform === "codex_cli" ? "bg-green-900/50 text-green-300" :
-                        "bg-purple-900/50 text-purple-300"
-                      }`}>
-                        {s.source_platform}
-                      </span>
+                      <PlatformBadge platform={s.source_platform} />
                     </td>
                     <td className="px-4 py-2 text-gray-400 text-xs">{s.model_id ?? "-"}</td>
                     <td className="px-4 py-2 text-right">{s.observation_count}</td>

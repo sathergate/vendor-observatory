@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { getAllVendorNames, getAllVendorTrends, getVendorScorecard } from "@/lib/db";
 import { computeAIReadinessScore } from "@/lib/recommendations";
-import { vendorDisplayName, vendorCategory, VENDOR_META } from "../vendor-taxonomy";
+import { vendorDisplayName, vendorCategory, VENDOR_META } from "@/lib/vendor-taxonomy";
+import { Breadcrumb } from "@/components/Breadcrumb";
+import { PlatformBadge } from "@/components/PlatformBadge";
 import { CATEGORY_META } from "../categories";
 
 export const dynamic = "force-dynamic";
@@ -47,13 +49,7 @@ export default function VendorIndexPage() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-          <Link href="/benchmarks" className="hover:text-blue-400 transition-colors">
-            Benchmarks
-          </Link>
-          <span>/</span>
-          <span className="text-gray-200">Vendor Intel</span>
-        </div>
+        <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Vendor Intel" }]} />
         <h1 className="text-2xl font-bold">Vendor Intelligence</h1>
         <p className="text-gray-400 mt-1">
           Per-vendor scorecards showing recommendation rates, constraint coverage,
@@ -233,7 +229,7 @@ export default function VendorIndexPage() {
                 <Link
                   key={v.vendor}
                   href={`/benchmarks/vendors/${encodeURIComponent(v.vendor)}`}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-750 hover:ring-1 hover:ring-gray-600 transition-all group"
+                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700/80 hover:ring-1 hover:ring-gray-600 transition-all group"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -289,18 +285,7 @@ export default function VendorIndexPage() {
                     {v.platforms.length > 0 && (
                       <div className="flex gap-1 mt-1">
                         {v.platforms.map((p) => (
-                          <span
-                            key={p}
-                            className={`text-xs px-1.5 py-0.5 rounded ${
-                              p === "claude_code"
-                                ? "bg-blue-900/50 text-blue-300"
-                                : p === "codex_cli"
-                                ? "bg-green-900/50 text-green-300"
-                                : "bg-purple-900/50 text-purple-300"
-                            }`}
-                          >
-                            {p}
-                          </span>
+                          <PlatformBadge key={p} platform={p} size="xs" />
                         ))}
                       </div>
                     )}

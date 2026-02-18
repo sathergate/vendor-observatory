@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPromptLeaderboard, getConstraintDemand } from "@/lib/db";
-import { vendorDisplayName } from "../vendor-taxonomy";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { CATEGORY_META } from "../categories";
 import { PROMPT_SUMMARIES } from "../prompt-summaries";
 
@@ -24,13 +25,7 @@ export default function PromptIntelligencePage() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-          <Link href="/benchmarks" className="hover:text-blue-400 transition-colors">
-            Benchmarks
-          </Link>
-          <span>/</span>
-          <span className="text-gray-200">Prompt Intelligence</span>
-        </div>
+        <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Prompt Intelligence" }]} />
         <h1 className="text-2xl font-bold">Prompt Intelligence</h1>
         <p className="text-gray-400 mt-1">
           Analysis of benchmark prompts: competitiveness, vendor dominance, constraint demand, and implementation rates
