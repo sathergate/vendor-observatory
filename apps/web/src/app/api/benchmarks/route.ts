@@ -4,10 +4,15 @@ import { getBenchmarkStats, getBenchmarkSessions, getBenchmarkVendorComparison, 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const stats = getBenchmarkStats();
-  const sessions = getBenchmarkSessions(100);
-  const vendorComparison = getBenchmarkVendorComparison();
-  const primaryVendorCounts = getPrimaryVendorCounts();
-  const enrichmentSummaries = getPromptEnrichmentSummaries();
-  return NextResponse.json({ stats, sessions, vendorComparison, primaryVendorCounts, enrichmentSummaries });
+  try {
+    const stats = getBenchmarkStats();
+    const sessions = getBenchmarkSessions(100);
+    const vendorComparison = getBenchmarkVendorComparison();
+    const primaryVendorCounts = getPrimaryVendorCounts();
+    const enrichmentSummaries = getPromptEnrichmentSummaries();
+    return NextResponse.json({ stats, sessions, vendorComparison, primaryVendorCounts, enrichmentSummaries });
+  } catch (err) {
+    console.error("/api/benchmarks error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

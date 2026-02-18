@@ -20,80 +20,85 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing required parameter: type" }, { status: 400 });
   }
 
-  switch (type) {
-    case "autocomplete": {
-      const data = getQueryAutocompleteData();
-      return NextResponse.json(data);
-    }
-
-    case "vendorWinRate": {
-      const vendor = searchParams.get("vendor");
-      if (!vendor) {
-        return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
+  try {
+    switch (type) {
+      case "autocomplete": {
+        const data = getQueryAutocompleteData();
+        return NextResponse.json(data);
       }
-      const result = queryVendorWinRate(vendor, {
-        category: searchParams.get("category") || undefined,
-        platform: searchParams.get("platform") || undefined,
-        constraint: searchParams.get("constraint") || undefined,
-      });
-      return NextResponse.json({ result });
-    }
 
-    case "constraintCorrelation": {
-      const constraint = searchParams.get("constraint");
-      if (!constraint) {
-        return NextResponse.json({ error: "Missing required parameter: constraint" }, { status: 400 });
+      case "vendorWinRate": {
+        const vendor = searchParams.get("vendor");
+        if (!vendor) {
+          return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
+        }
+        const result = queryVendorWinRate(vendor, {
+          category: searchParams.get("category") || undefined,
+          platform: searchParams.get("platform") || undefined,
+          constraint: searchParams.get("constraint") || undefined,
+        });
+        return NextResponse.json({ result });
       }
-      const result = queryConstraintCorrelation(constraint);
-      return NextResponse.json({ result });
-    }
 
-    case "platformComparison": {
-      const key = searchParams.get("key");
-      if (!key) {
-        return NextResponse.json({ error: "Missing required parameter: key (prompt_id or category)" }, { status: 400 });
+      case "constraintCorrelation": {
+        const constraint = searchParams.get("constraint");
+        if (!constraint) {
+          return NextResponse.json({ error: "Missing required parameter: constraint" }, { status: 400 });
+        }
+        const result = queryConstraintCorrelation(constraint);
+        return NextResponse.json({ result });
       }
-      const keyType = (searchParams.get("keyType") || "prompt") as "prompt" | "category";
-      const result = queryPlatformComparison(key, keyType);
-      return NextResponse.json({ result });
-    }
 
-    case "headToHead": {
-      const vendorA = searchParams.get("vendorA");
-      const vendorB = searchParams.get("vendorB");
-      if (!vendorA || !vendorB) {
-        return NextResponse.json({ error: "Missing required parameters: vendorA, vendorB" }, { status: 400 });
+      case "platformComparison": {
+        const key = searchParams.get("key");
+        if (!key) {
+          return NextResponse.json({ error: "Missing required parameter: key (prompt_id or category)" }, { status: 400 });
+        }
+        const keyType = (searchParams.get("keyType") || "prompt") as "prompt" | "category";
+        const result = queryPlatformComparison(key, keyType);
+        return NextResponse.json({ result });
       }
-      const result = getVendorHeadToHead(vendorA, vendorB);
-      return NextResponse.json({ result });
-    }
 
-    case "promptDifficulty": {
-      const promptId = searchParams.get("promptId");
-      if (!promptId) {
-        return NextResponse.json({ error: "Missing required parameter: promptId" }, { status: 400 });
+      case "headToHead": {
+        const vendorA = searchParams.get("vendorA");
+        const vendorB = searchParams.get("vendorB");
+        if (!vendorA || !vendorB) {
+          return NextResponse.json({ error: "Missing required parameters: vendorA, vendorB" }, { status: 400 });
+        }
+        const result = getVendorHeadToHead(vendorA, vendorB);
+        return NextResponse.json({ result });
       }
-      const result = queryPromptDifficulty(promptId);
-      return NextResponse.json({ result });
-    }
 
-    case "whatIf": {
-      const vendor = searchParams.get("vendor");
-      if (!vendor) {
-        return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
+      case "promptDifficulty": {
+        const promptId = searchParams.get("promptId");
+        if (!promptId) {
+          return NextResponse.json({ error: "Missing required parameter: promptId" }, { status: 400 });
+        }
+        const result = queryPromptDifficulty(promptId);
+        return NextResponse.json({ result });
       }
-      const result = queryWhatIf(
-        vendor,
-        searchParams.get("addConstraint") || undefined,
-        searchParams.get("removeConstraint") || undefined,
-      );
-      return NextResponse.json({ result });
-    }
 
-    default:
-      return NextResponse.json(
-        { error: `Unknown query type: ${type}. Valid types: autocomplete, vendorWinRate, constraintCorrelation, platformComparison, headToHead, promptDifficulty, whatIf` },
-        { status: 400 },
-      );
+      case "whatIf": {
+        const vendor = searchParams.get("vendor");
+        if (!vendor) {
+          return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
+        }
+        const result = queryWhatIf(
+          vendor,
+          searchParams.get("addConstraint") || undefined,
+          searchParams.get("removeConstraint") || undefined,
+        );
+        return NextResponse.json({ result });
+      }
+
+      default:
+        return NextResponse.json(
+          { error: `Unknown query type: ${type}. Valid types: autocomplete, vendorWinRate, constraintCorrelation, platformComparison, headToHead, promptDifficulty, whatIf` },
+          { status: 400 },
+        );
+    }
+  } catch (err) {
+    console.error("/api/query error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

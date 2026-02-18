@@ -13,6 +13,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import { existsSync, copyFileSync } from "fs";
+import { safeJsonParse } from "./db";
 
 // ── Lazy DB (same pattern as db.ts) ──────────────────────────────────
 
@@ -54,11 +55,6 @@ function getDb(): Database.Database | null {
 function hasTable(db: Database.Database, name: string): boolean {
   const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) as { name: string } | undefined;
   return !!row;
-}
-
-function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
-  if (!json) return fallback;
-  try { return JSON.parse(json) as T; } catch { return fallback; }
 }
 
 // ── Types ─────────────────────────────────────────────────────────────

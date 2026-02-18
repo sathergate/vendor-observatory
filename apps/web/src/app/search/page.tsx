@@ -40,6 +40,7 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [vendorFilter, setVendorFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
@@ -66,12 +67,15 @@ export default function SearchPage() {
     if (platformFilter) params.set("platform", platformFilter);
     if (typeFilter) params.set("type", typeFilter);
 
+    setError(null);
     try {
       const resp = await fetch(`/api/search?${params.toString()}`);
       const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Search failed");
       setResults(data.results || []);
-    } catch {
+    } catch (err) {
       setResults([]);
+      setError(err instanceof Error ? err.message : "Search failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -167,8 +171,15 @@ export default function SearchPage() {
         </div>
       </form>
 
+      {/* Error Banner */}
+      {error && (
+        <div className="rounded-lg bg-red-900/50 border border-red-700 px-4 py-3 text-sm text-red-200">
+          {error}
+        </div>
+      )}
+
       {/* Results */}
-      {searched && (
+      {searched && !error && (
         <div className="space-y-3">
           <p className="text-sm text-gray-400">
             {results.length === 0

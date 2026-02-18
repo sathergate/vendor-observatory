@@ -1,17 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getEnrichmentByCategory } from "@/lib/db";
+import { getEnrichmentByCategory, safeJsonParse } from "@/lib/db";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { CATEGORY_META } from "../categories";
 import { PROMPT_SUMMARIES, PROMPTS_BY_CATEGORY } from "../prompt-summaries";
 import { CONTENT_TAG_LABELS, PATTERN_TAG_LABELS } from "../tag-labels";
 
 export const dynamic = "force-dynamic";
-
-function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
-  if (!json) return fallback;
-  try { return JSON.parse(json) as T; } catch { return fallback; }
-}
 
 export default async function CategoryDetailPage({
   params,

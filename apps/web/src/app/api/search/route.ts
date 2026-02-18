@@ -12,14 +12,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Query parameter 'q' is required (minimum 2 characters)" }, { status: 400 });
   }
 
-  const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 100);
-  const filters = {
-    vendor: searchParams.get("vendor") || undefined,
-    category: searchParams.get("category") || undefined,
-    platform: searchParams.get("platform") || undefined,
-    sourceType: searchParams.get("type") || undefined,
-  };
+  try {
+    const parsed = parseInt(searchParams.get("limit") || "20", 10);
+    const limit = Math.min(Number.isNaN(parsed) ? 20 : parsed, 100);
+    const filters = {
+      vendor: searchParams.get("vendor") || undefined,
+      category: searchParams.get("category") || undefined,
+      platform: searchParams.get("platform") || undefined,
+      sourceType: searchParams.get("type") || undefined,
+    };
 
-  const results = searchCorpus(q.trim(), filters, limit);
-  return NextResponse.json({ results, query: q, count: results.length });
+    const results = searchCorpus(q.trim(), filters, limit);
+    return NextResponse.json({ results, query: q, count: results.length });
+  } catch (err) {
+    console.error("/api/search error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

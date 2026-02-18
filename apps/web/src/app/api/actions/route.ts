@@ -4,5 +4,10 @@ import { getActionFunnel } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(getActionFunnel());
+  try {
+    return NextResponse.json(getActionFunnel());
+  } catch (err) {
+    console.error("/api/actions error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

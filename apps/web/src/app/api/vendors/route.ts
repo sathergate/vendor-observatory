@@ -4,9 +4,14 @@ import { getVendorStats } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const platform = url.searchParams.get("platform") ?? undefined;
-  const category = url.searchParams.get("category") ?? undefined;
-  const vendors = getVendorStats(platform, category);
-  return NextResponse.json(vendors);
+  try {
+    const url = new URL(request.url);
+    const platform = url.searchParams.get("platform") ?? undefined;
+    const category = url.searchParams.get("category") ?? undefined;
+    const vendors = getVendorStats(platform, category);
+    return NextResponse.json(vendors);
+  } catch (err) {
+    console.error("/api/vendors error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
