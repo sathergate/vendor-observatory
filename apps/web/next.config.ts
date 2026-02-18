@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+// Ensure outputFileTracingIncludes covers all routes that read the SQLite DB
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   outputFileTracingIncludes: {
