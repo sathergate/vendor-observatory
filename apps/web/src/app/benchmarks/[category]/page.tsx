@@ -8,7 +8,8 @@ import { CONTENT_TAG_LABELS, PATTERN_TAG_LABELS } from "../tag-labels";
 
 export const dynamic = "force-dynamic";
 
-function safeJsonParse<T>(json: string, fallback: T): T {
+function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
+  if (!json) return fallback;
   try { return JSON.parse(json) as T; } catch { return fallback; }
 }
 
