@@ -39,13 +39,13 @@ function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
 
 // ── Snapshot ────────────────────────────────────────────────────────
 
-export function createSnapshot(db: ObservatoryDB, date: string): number {
-  const allContexts = db.getAllResponseContexts();
+export async function createSnapshot(db: ObservatoryDB, date: string): Promise<number> {
+  const allContexts = await db.getAllResponseContexts();
 
   let count = 0;
   for (const ctx of allContexts) {
     const constraintsAddressed = safeJsonParse<string[]>(ctx.constraints_addressed, []);
-    db.upsertSnapshot(
+    await db.upsertSnapshot(
       date,
       ctx.prompt_id,
       ctx.source_platform,
@@ -60,12 +60,12 @@ export function createSnapshot(db: ObservatoryDB, date: string): number {
 
 // ── Delta Detection ────────────────────────────────────────────────
 
-export function detectDeltas(db: ObservatoryDB, currentDate: string): VendorDelta[] {
-  const prevDate = db.getPreviousSnapshotDate(currentDate);
+export async function detectDeltas(db: ObservatoryDB, currentDate: string): Promise<VendorDelta[]> {
+  const prevDate = await db.getPreviousSnapshotDate(currentDate);
   if (!prevDate) return [];
 
-  const currentSnapshot = db.getSnapshot(currentDate);
-  const previousSnapshot = db.getSnapshot(prevDate);
+  const currentSnapshot = await db.getSnapshot(currentDate);
+  const previousSnapshot = await db.getSnapshot(prevDate);
 
   // Build lookup maps
   const prevMap = new Map<string, string | null>();

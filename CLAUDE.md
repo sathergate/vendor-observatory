@@ -11,10 +11,9 @@ This file provides guidance to Claude Code when working with code in this reposi
 ```
 vendor-observatory/
 ├── packages/shared/     # Shared types, vendor extractor, package-map, normalizer
-├── packages/ingest/     # CLI: JSONL parsers, SQLite writer, transcript scanner
+├── packages/ingest/     # CLI: JSONL parsers, PostgreSQL writer, transcript scanner
 ├── apps/web/            # Next.js dashboard: vendor frequency, platform comparison, funnel
-├── taxonomy/            # Vendor taxonomy YAML (60 vendors, canonical IDs, synonyms)
-└── db/                  # SQLite database (auto-created by ingest CLI)
+└── taxonomy/            # Vendor taxonomy YAML (60 vendors, canonical IDs, synonyms)
 ```
 
 ## Commands
@@ -49,8 +48,8 @@ pnpm --filter web dev           # Start dev server at http://localhost:3000
    - **Tier 1**: Package install commands (`npm install @supabase/supabase-js` → "supabase", installed)
    - **Tier 2**: Config signals (connection strings, env vars, import statements → configured/implemented)
    - **Tier 3**: Text mentions matched against vendor taxonomy (recommended/compared/mentioned/rejected)
-5. Observations stored in SQLite with per-session deduplication
-6. Web dashboard reads SQLite and renders analytics
+5. Observations stored in PostgreSQL with per-session deduplication
+6. Web dashboard reads PostgreSQL and renders analytics
 
 ### Transcript Sources
 - **Claude Code**: `~/.claude/projects/**/*.jsonl` — line types: user, assistant, progress, system
@@ -67,9 +66,9 @@ pnpm --filter web dev           # Start dev server at http://localhost:3000
 - TypeScript (ESM, Node16 modules)
 - Node 20+
 - Next.js 15 (App Router) + Tailwind CSS 4 for web
-- SQLite via better-sqlite3
+- PostgreSQL via pg (node-postgres)
 - commander for CLI
 - chalk for CLI output
 
 ## Environment Variables
-- `OBS_DB_PATH` — SQLite path (default: ./db/observatory.sqlite)
+- `DATABASE_URL` — PostgreSQL connection string (e.g. `postgresql://user:password@host:5432/observatory`)

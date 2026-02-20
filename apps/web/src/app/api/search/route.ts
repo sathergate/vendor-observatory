@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       sourceType: searchParams.get("type") || undefined,
     };
 
-    const results = searchCorpus(q.trim(), filters, limit);
+    const results = await searchCorpus(q.trim(), filters, limit);
     return NextResponse.json({ results, query: q, count: results.length });
   } catch (err) {
     console.error("/api/search error:", err);

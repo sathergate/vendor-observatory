@@ -17,7 +17,7 @@ export default async function CategoryDetailPage({
   const meta = CATEGORY_META[category];
   if (!meta) notFound();
 
-  const data = getEnrichmentByCategory(category);
+  const data = await getEnrichmentByCategory(category);
   const promptIds = PROMPTS_BY_CATEGORY[category] ?? [];
   const hasResponses = data.responses.length > 0;
   const totalRecs = data.vendorCounts.reduce((sum, v) => sum + v.count, 0);

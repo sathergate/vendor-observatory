@@ -42,12 +42,10 @@ function findTaxonomyPath(): string {
   throw new Error(`Cannot find taxonomy/vendors.yaml. Tried: ${candidates.join(", ")}`);
 }
 
-function getDbPath(opts?: { db?: string }): string {
-  const envPath = opts?.db || process.env.OBS_DB_PATH;
-  if (envPath) return resolve(envPath);
-  const dbDir = resolve(process.cwd(), "db");
-  if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
-  return resolve(dbDir, "observatory.sqlite");
+function getDbUrl(opts?: { db?: string }): string {
+  const url = opts?.db || process.env.DATABASE_URL;
+  if (url) return url;
+  throw new Error("DATABASE_URL environment variable is required. Set it to a PostgreSQL connection string.");
 }
 
 // ── Ingest Command ──────────────────────────────────────────────────
@@ -57,7 +55,7 @@ program
   .description("Scan and ingest transcript files from AI coding platforms")
   .option("--source <source>", "Source platform: claude-code, codex-cli, or all", "all")
   .option("--dry-run", "Show what would be ingested without writing", false)
-  .option("--db <path>", "Path to SQLite database")
+  .option("--db <url>", "PostgreSQL connection string")
   .option("--taxonomy <path>", "Path to vendor taxonomy YAML")
   .action(async (opts) => {
     const taxonomyPath = opts.taxonomy ?? findTaxonomyPath();
@@ -93,9 +91,9 @@ program
       return;
     }
 
-    const dbPath = getDbPath(opts);
-    const db = new ObservatoryDB(dbPath);
-    console.log(chalk.green(`✓ Database: ${dbPath}`));
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    console.log(chalk.green(`✓ Database connected`));
 
     let totalSessions = 0;
     let totalObservations = 0;
@@ -103,7 +101,7 @@ program
     let processedFiles = 0;
 
     for (const file of files) {
-      if (!db.needsReingestion(file.path, file.size, file.mtime)) {
+      if (!(await db.needsReingestion(file.path, file.size, file.mtime))) {
         skippedFiles++;
         continue;
       }
@@ -138,11 +136,11 @@ program
         promptText: string;
       }> = [];
 
-      db.runInTransaction(() => {
-        db.deleteSessionsByFilePath(file.path);
+      await db.runInTransaction(async () => {
+        await db.deleteSessionsByFilePath(file.path);
 
         for (const session of sessions) {
-          db.upsertSession({
+          await db.upsertSession({
             id: session.id,
             sourcePlatform: session.platform,
             modelId: session.modelId,
@@ -167,7 +165,7 @@ program
             const mentions = extractVendorMentions(turn, taxonomy, lastUserText);
 
             for (const mention of mentions) {
-              db.insertObservation(session.id, mention);
+              await db.insertObservation(session.id, mention);
               sessionObservations++;
             }
 
@@ -178,7 +176,7 @@ program
                 (m) => m.mentionType === "installed" || m.mentionType === "configured",
               )?.vendorCanonicalId ?? null;
 
-              db.insertToolAction(
+              await db.insertToolAction(
                 session.id,
                 toolUse.toolName,
                 command?.slice(0, 500) ?? null,
@@ -222,7 +220,7 @@ program
                       vendorsNamedInPrompt: string[];
                     };
                   };
-                  db.upsertPromptMetadata({
+                  await db.upsertPromptMetadata({
                     promptId: sidecar.promptId,
                     category: sidecar.category,
                     contentTags: sidecar.metadata.contentTags,
@@ -238,11 +236,11 @@ program
               }
 
               // Run regex-based reasoning extractor (synchronous, always runs)
-              const promptMeta = db.getPromptMetadata(promptId);
+              const promptMeta = await db.getPromptMetadata(promptId);
               const constraints = promptMeta ? JSON.parse(promptMeta.constraints) as string[] : [];
               const responseCtx = extractResponseContext(session.turns, taxonomy, constraints);
 
-              db.upsertResponseContext({
+              await db.upsertResponseContext({
                 sessionId: session.id,
                 promptId,
                 primaryVendor: responseCtx.primaryVendor,
@@ -265,7 +263,7 @@ program
                 .join("\n");
               if (userPromptText) {
                 const intent = classifyIntent(userPromptText);
-                db.upsertPromptIntent({
+                await db.upsertPromptIntent({
                   sessionId: session.id,
                   promptId,
                   intent,
@@ -297,12 +295,12 @@ program
         }
 
         totalSessions += sessions.length;
-        db.upsertIngestedFile(file.path, file.size, file.mtime, file.platform, sessions.length);
+        await db.upsertIngestedFile(file.path, file.size, file.mtime, file.platform, sessions.length);
       });
 
       // ── Populate search index from enrichment data ──
       try {
-        const allCtxs = db.getAllResponseContexts();
+        const allCtxs = await db.getAllResponseContexts();
         const searchEntries: Array<{
           sourceType: string; sourceId: string; vendor: string;
           category: string; platform: string; promptId: string; textContent: string;
@@ -328,7 +326,7 @@ program
         }
 
         if (searchEntries.length > 0) {
-          db.populateSearchIndex(searchEntries);
+          await db.populateSearchIndex(searchEntries);
           console.log(chalk.cyan(`    Search index: ${searchEntries.length} entries indexed`));
         }
       } catch (searchErr) {
@@ -347,7 +345,7 @@ program
               pending.constraints,
             );
             if (llmCtx) {
-              db.upsertResponseContext({
+              await db.upsertResponseContext({
                 sessionId: pending.sessionId,
                 promptId: pending.promptId,
                 primaryVendor: llmCtx.primaryVendor,
@@ -374,7 +372,7 @@ program
       processedFiles++;
     }
 
-    db.close();
+    await db.close();
 
     console.log(chalk.green("\n✓ Ingestion complete"));
     console.log(`  Files processed: ${processedFiles}`);
@@ -389,22 +387,17 @@ program
   .command("stats")
   .description("Show statistics from the observation database")
   .option("--by <dimension>", "Group by: vendor, platform, category, action", "vendor")
-  .option("--db <path>", "Path to SQLite database")
-  .action((opts) => {
-    const dbPath = getDbPath(opts);
-    if (!existsSync(dbPath)) {
-      console.error(chalk.red("No database found. Run 'obs ingest' first."));
-      process.exit(1);
-    }
-
-    const db = new ObservatoryDB(dbPath);
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
     const by = opts.by as string;
 
     console.log(chalk.blue(`\nVendor Observatory — Stats by ${by}\n`));
 
     switch (by) {
       case "vendor": {
-        const stats = db.getVendorStats();
+        const stats = await db.getVendorStats();
         if (stats.length === 0) {
           console.log(chalk.yellow("No vendor observations found."));
           break;
@@ -436,7 +429,7 @@ program
       }
 
       case "platform": {
-        const dashboard = db.getDashboardStats();
+        const dashboard = await db.getDashboardStats();
         console.log(chalk.bold("Platform".padEnd(20) + "Sessions".padStart(10)));
         console.log("─".repeat(30));
         for (const [platform, count] of Object.entries(dashboard.platformBreakdown)) {
@@ -449,7 +442,7 @@ program
       }
 
       case "category": {
-        const stats = db.getVendorStats();
+        const stats = await db.getVendorStats();
         const categories = new Map<string, { count: number; vendors: string[] }>();
         for (const s of stats) {
           const cat = s.category || "other";
@@ -472,7 +465,7 @@ program
       }
 
       case "action": {
-        const funnels = db.getActionFunnels();
+        const funnels = await db.getActionFunnels();
         if (funnels.length === 0) {
           console.log(chalk.yellow("No action data found."));
           break;
@@ -504,7 +497,7 @@ program
         process.exit(1);
     }
 
-    db.close();
+    await db.close();
   });
 
 // ── Analyze Command ─────────────────────────────────────────────────
@@ -513,14 +506,10 @@ program
   .command("analyze")
   .description("Run cross-session divergence analysis")
   .option("--type <type>", "Analysis type: divergences, constraints, drift, all", "all")
-  .option("--db <path>", "Path to SQLite database")
+  .option("--db <url>", "PostgreSQL connection string")
   .action(async (opts) => {
-    const dbPath = getDbPath(opts);
-    if (!existsSync(dbPath)) {
-      console.error(chalk.red("No database found. Run 'obs ingest' first."));
-      process.exit(1);
-    }
-    const db = new ObservatoryDB(dbPath);
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
     const { analyzePlatformDivergence, analyzeConstraintInfluence, analyzeTemporalDrift } = await import("./analyzer.js");
     const type = opts.type as string;
 
@@ -528,21 +517,21 @@ program
 
     if (type === "all" || type === "divergences") {
       console.log(chalk.cyan("Analyzing platform divergence..."));
-      const results = analyzePlatformDivergence(db);
+      const results = await analyzePlatformDivergence(db);
       console.log(chalk.green(`  ${results.length} prompts analyzed, ${results.filter(r => r.isDivergent).length} divergent`));
     }
     if (type === "all" || type === "constraints") {
       console.log(chalk.cyan("Analyzing constraint influence..."));
-      const results = analyzeConstraintInfluence(db);
+      const results = await analyzeConstraintInfluence(db);
       console.log(chalk.green(`  ${results.length} constraints analyzed`));
     }
     if (type === "all" || type === "drift") {
       console.log(chalk.cyan("Analyzing temporal drift..."));
-      const results = analyzeTemporalDrift(db);
+      const results = await analyzeTemporalDrift(db);
       console.log(chalk.green(`  ${results.length} vendor drift signals detected`));
     }
 
-    db.close();
+    await db.close();
     console.log(chalk.green("\n✓ Analysis complete"));
   });
 
@@ -552,25 +541,21 @@ program
   .command("digest")
   .description("Generate post-benchmark daily digest")
   .option("--date <date>", "Digest date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10))
-  .option("--db <path>", "Path to SQLite database")
+  .option("--db <url>", "PostgreSQL connection string")
   .action(async (opts) => {
-    const dbPath = getDbPath(opts);
-    if (!existsSync(dbPath)) {
-      console.error(chalk.red("No database found. Run 'obs ingest' first."));
-      process.exit(1);
-    }
-    const db = new ObservatoryDB(dbPath);
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
     const { createSnapshot, detectDeltas, scoreSignificance, generateNarrative, emitAlerts } = await import("./digest.js");
     const date = opts.date as string;
 
     console.log(chalk.blue(`\nVendor Observatory — Daily Digest (${date})\n`));
 
     console.log(chalk.cyan("Creating snapshot..."));
-    const snapshotCount = createSnapshot(db, date);
+    const snapshotCount = await createSnapshot(db, date);
     console.log(chalk.green(`  ${snapshotCount} snapshot entries created`));
 
     console.log(chalk.cyan("Detecting deltas..."));
-    const deltas = detectDeltas(db, date);
+    const deltas = await detectDeltas(db, date);
     console.log(chalk.green(`  ${deltas.length} vendor position changes detected`));
 
     const significant = scoreSignificance(deltas);
@@ -583,10 +568,10 @@ program
     const alerts = emitAlerts(deltas);
     console.log(chalk.green(`  ${alerts.length} alerts emitted`));
 
-    db.upsertDailyDigest(date, summary, significant, alerts);
+    await db.upsertDailyDigest(date, summary, significant, alerts);
     console.log(chalk.green("\n✓ Digest stored in database"));
 
-    db.close();
+    await db.close();
   });
 
 // ── Serve Command ───────────────────────────────────────────────────

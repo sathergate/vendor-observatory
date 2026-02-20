@@ -46,8 +46,8 @@ function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
 
 // ── Analysis Functions ─────────────────────────────────────────────
 
-export function analyzePlatformDivergence(db: ObservatoryDB): DivergenceResult[] {
-  const allContexts = db.getAllResponseContexts();
+export async function analyzePlatformDivergence(db: ObservatoryDB): Promise<DivergenceResult[]> {
+  const allContexts = await db.getAllResponseContexts();
 
   // Group by prompt_id
   const promptMap = new Map<string, Array<{ platform: string; vendor: string | null }>>();
@@ -89,17 +89,17 @@ export function analyzePlatformDivergence(db: ObservatoryDB): DivergenceResult[]
     results.push(result);
 
     // Persist
-    db.upsertInsight("divergence", promptId, result);
+    await db.upsertInsight("divergence", promptId, result);
   }
 
   return results;
 }
 
-export function analyzeConstraintInfluence(db: ObservatoryDB): ConstraintInfluenceResult[] {
-  const allContexts = db.getAllResponseContexts();
+export async function analyzeConstraintInfluence(db: ObservatoryDB): Promise<ConstraintInfluenceResult[]> {
+  const allContexts = await db.getAllResponseContexts();
 
   // Collect all constraints from prompt_metadata
-  const allMetas = db.getAllPromptMetadata();
+  const allMetas = await db.getAllPromptMetadata();
   const constraintSet = new Set<string>();
   const promptConstraints = new Map<string, string[]>();
 
@@ -149,14 +149,14 @@ export function analyzeConstraintInfluence(db: ObservatoryDB): ConstraintInfluen
       vendorShifts: vendorShifts.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)),
     };
     results.push(result);
-    db.upsertInsight("constraint_influence", null, result);
+    await db.upsertInsight("constraint_influence", null, result);
   }
 
   return results.sort((a, b) => b.influenceScore - a.influenceScore);
 }
 
-export function analyzeTemporalDrift(db: ObservatoryDB): DriftResult[] {
-  const allContexts = db.getAllResponseContexts();
+export async function analyzeTemporalDrift(db: ObservatoryDB): Promise<DriftResult[]> {
+  const allContexts = await db.getAllResponseContexts();
 
   if (allContexts.length < 4) return [];
 
@@ -188,7 +188,7 @@ export function analyzeTemporalDrift(db: ObservatoryDB): DriftResult[] {
     if (isSignificant) {
       const result: DriftResult = { vendor, earlyWinRate, lateWinRate, delta, isSignificant };
       results.push(result);
-      db.upsertInsight("temporal_drift", null, result);
+      await db.upsertInsight("temporal_drift", null, result);
     }
   }
 
