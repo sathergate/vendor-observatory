@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   try {
     switch (type) {
       case "autocomplete": {
-        const data = getQueryAutocompleteData();
+        const data = await getQueryAutocompleteData();
         return NextResponse.json(data);
       }
 
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         if (!vendor) {
           return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
         }
-        const result = queryVendorWinRate(vendor, {
+        const result = await queryVendorWinRate(vendor, {
           category: searchParams.get("category") || undefined,
           platform: searchParams.get("platform") || undefined,
           constraint: searchParams.get("constraint") || undefined,
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
         if (!constraint) {
           return NextResponse.json({ error: "Missing required parameter: constraint" }, { status: 400 });
         }
-        const result = queryConstraintCorrelation(constraint);
+        const result = await queryConstraintCorrelation(constraint);
         return NextResponse.json({ result });
       }
 
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: "Missing required parameter: key (prompt_id or category)" }, { status: 400 });
         }
         const keyType = (searchParams.get("keyType") || "prompt") as "prompt" | "category";
-        const result = queryPlatformComparison(key, keyType);
+        const result = await queryPlatformComparison(key, keyType);
         return NextResponse.json({ result });
       }
 
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
         if (!vendorA || !vendorB) {
           return NextResponse.json({ error: "Missing required parameters: vendorA, vendorB" }, { status: 400 });
         }
-        const result = getVendorHeadToHead(vendorA, vendorB);
+        const result = await getVendorHeadToHead(vendorA, vendorB);
         return NextResponse.json({ result });
       }
 
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         if (!promptId) {
           return NextResponse.json({ error: "Missing required parameter: promptId" }, { status: 400 });
         }
-        const result = queryPromptDifficulty(promptId);
+        const result = await queryPromptDifficulty(promptId);
         return NextResponse.json({ result });
       }
 
@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
         if (!vendor) {
           return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
         }
-        const result = queryWhatIf(
+        const result = await queryWhatIf(
           vendor,
           searchParams.get("addConstraint") || undefined,
           searchParams.get("removeConstraint") || undefined,

@@ -11,9 +11,9 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-export default function PromptIntelligencePage() {
-  const prompts = getPromptLeaderboard();
-  const constraintDemand = getConstraintDemand();
+export default async function PromptIntelligencePage() {
+  const prompts = await getPromptLeaderboard();
+  const constraintDemand = await getConstraintDemand();
 
   const contested = prompts.filter((p) => p.is_contested);
   const dominated = prompts.filter((p) => p.is_dominated);

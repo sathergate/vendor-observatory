@@ -10,10 +10,10 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-export default function InsightsPage() {
-  const divergences = getDivergenceMatrix();
-  const constraintInfluence = getConstraintInfluence();
-  const drift = getTemporalDrift();
+export default async function InsightsPage() {
+  const divergences = await getDivergenceMatrix();
+  const constraintInfluence = await getConstraintInfluence();
+  const drift = await getTemporalDrift();
 
   const divergentCount = divergences.filter((d) => d.isDivergent).length;
   const totalDivergences = divergences.length;

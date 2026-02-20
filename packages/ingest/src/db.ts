@@ -1,6 +1,4 @@
-import Database from "better-sqlite3";
-import { resolve, dirname } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { Pool, PoolClient } from "pg";
 import type {
   IngestedFileRow,
   SessionRow,
@@ -20,354 +18,293 @@ import type {
   DisqualificationReason,
 } from "@obs/shared";
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS ingested_files (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  file_path TEXT NOT NULL UNIQUE,
-  file_size INTEGER NOT NULL,
-  file_mtime TEXT NOT NULL,
-  source_platform TEXT NOT NULL,
-  ingested_at TEXT NOT NULL,
-  session_count INTEGER NOT NULL DEFAULT 0
-);
+// ── Schema (split into individual statements for pg) ──────────────────
 
-CREATE TABLE IF NOT EXISTS sessions (
-  id TEXT PRIMARY KEY,
-  source_platform TEXT NOT NULL,
-  model_id TEXT,
-  started_at TEXT NOT NULL,
-  ended_at TEXT,
-  cwd TEXT,
-  git_branch TEXT,
-  turn_count INTEGER DEFAULT 0,
-  file_path TEXT NOT NULL,
-  is_benchmark INTEGER NOT NULL DEFAULT 0
-);
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS ingested_files (
+    id SERIAL PRIMARY KEY,
+    file_path TEXT NOT NULL UNIQUE,
+    file_size INTEGER NOT NULL,
+    file_mtime TEXT NOT NULL,
+    source_platform TEXT NOT NULL,
+    ingested_at TEXT NOT NULL,
+    session_count INTEGER NOT NULL DEFAULT 0
+  )`,
 
-CREATE TABLE IF NOT EXISTS observations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  vendor_canonical_id TEXT NOT NULL,
-  vendor_raw TEXT NOT NULL,
-  mention_type TEXT NOT NULL,
-  work_category TEXT,
-  confidence REAL NOT NULL DEFAULT 1.0,
-  context_snippet TEXT,
-  user_prompt_snippet TEXT,
-  timestamp TEXT NOT NULL,
-  FOREIGN KEY (session_id) REFERENCES sessions(id),
-  UNIQUE(session_id, vendor_canonical_id, mention_type)
-);
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    source_platform TEXT NOT NULL,
+    model_id TEXT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    cwd TEXT,
+    git_branch TEXT,
+    turn_count INTEGER DEFAULT 0,
+    file_path TEXT NOT NULL,
+    is_benchmark INTEGER NOT NULL DEFAULT 0
+  )`,
 
-CREATE TABLE IF NOT EXISTS tool_actions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  tool_name TEXT NOT NULL,
-  command_or_path TEXT,
-  vendor_canonical_id TEXT,
-  action_type TEXT,
-  success INTEGER,
-  timestamp TEXT NOT NULL,
-  FOREIGN KEY (session_id) REFERENCES sessions(id)
-);
+  `CREATE TABLE IF NOT EXISTS observations (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    vendor_canonical_id TEXT NOT NULL,
+    vendor_raw TEXT NOT NULL,
+    mention_type TEXT NOT NULL,
+    work_category TEXT,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    context_snippet TEXT,
+    user_prompt_snippet TEXT,
+    timestamp TEXT NOT NULL,
+    UNIQUE(session_id, vendor_canonical_id, mention_type)
+  )`,
 
-CREATE TABLE IF NOT EXISTS prompt_metadata (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  prompt_id TEXT NOT NULL UNIQUE,
-  category TEXT NOT NULL,
-  content_tags TEXT NOT NULL DEFAULT '[]',
-  pattern_tags TEXT NOT NULL DEFAULT '[]',
-  constraints TEXT NOT NULL DEFAULT '[]',
-  existing_stack TEXT NOT NULL DEFAULT '[]',
-  failure_mode TEXT,
-  vendors_named_in_prompt TEXT NOT NULL DEFAULT '[]'
-);
+  `CREATE TABLE IF NOT EXISTS tool_actions (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    tool_name TEXT NOT NULL,
+    command_or_path TEXT,
+    vendor_canonical_id TEXT,
+    action_type TEXT,
+    success INTEGER,
+    timestamp TEXT NOT NULL
+  )`,
 
-CREATE TABLE IF NOT EXISTS response_context (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  prompt_id TEXT NOT NULL,
-  primary_vendor TEXT,
-  is_implemented INTEGER NOT NULL DEFAULT 0,
-  rationale_snippet TEXT,
-  vendors_mentioned TEXT NOT NULL DEFAULT '[]',
-  trade_offs_snippet TEXT,
-  gotchas_snippet TEXT,
-  constraints_addressed TEXT NOT NULL DEFAULT '[]',
-  reasoning_chain TEXT,
-  disqualification_reasons TEXT,
-  confidence_score REAL,
-  extracted_at TEXT NOT NULL,
-  FOREIGN KEY (session_id) REFERENCES sessions(id),
-  UNIQUE(session_id, prompt_id)
-);
+  `CREATE TABLE IF NOT EXISTS prompt_metadata (
+    id SERIAL PRIMARY KEY,
+    prompt_id TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
+    content_tags TEXT NOT NULL DEFAULT '[]',
+    pattern_tags TEXT NOT NULL DEFAULT '[]',
+    constraints TEXT NOT NULL DEFAULT '[]',
+    existing_stack TEXT NOT NULL DEFAULT '[]',
+    failure_mode TEXT,
+    vendors_named_in_prompt TEXT NOT NULL DEFAULT '[]'
+  )`,
 
-CREATE TABLE IF NOT EXISTS prompt_intents (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT NOT NULL,
-  prompt_id TEXT NOT NULL,
-  intent TEXT NOT NULL,
-  confidence REAL NOT NULL DEFAULT 0,
-  sub_intent TEXT,
-  classifier TEXT NOT NULL DEFAULT 'rule',
-  classified_at TEXT NOT NULL,
-  FOREIGN KEY (session_id) REFERENCES sessions(id),
-  UNIQUE(session_id, prompt_id)
-);
+  `CREATE TABLE IF NOT EXISTS response_context (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    prompt_id TEXT NOT NULL,
+    primary_vendor TEXT,
+    is_implemented INTEGER NOT NULL DEFAULT 0,
+    rationale_snippet TEXT,
+    vendors_mentioned TEXT NOT NULL DEFAULT '[]',
+    trade_offs_snippet TEXT,
+    gotchas_snippet TEXT,
+    constraints_addressed TEXT NOT NULL DEFAULT '[]',
+    reasoning_chain TEXT,
+    disqualification_reasons TEXT,
+    confidence_score REAL,
+    extracted_at TEXT NOT NULL,
+    UNIQUE(session_id, prompt_id)
+  )`,
 
-CREATE INDEX IF NOT EXISTS idx_observations_vendor ON observations(vendor_canonical_id);
-CREATE INDEX IF NOT EXISTS idx_observations_session ON observations(session_id);
-CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(mention_type);
-CREATE INDEX IF NOT EXISTS idx_sessions_platform ON sessions(source_platform);
-CREATE INDEX IF NOT EXISTS idx_tool_actions_session ON tool_actions(session_id);
-CREATE INDEX IF NOT EXISTS idx_tool_actions_vendor ON tool_actions(vendor_canonical_id);
-CREATE INDEX IF NOT EXISTS idx_prompt_metadata_category ON prompt_metadata(category);
-CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id);
-CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id);
-CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor);
-CREATE INDEX IF NOT EXISTS idx_prompt_intents_session ON prompt_intents(session_id);
-CREATE INDEX IF NOT EXISTS idx_prompt_intents_prompt ON prompt_intents(prompt_id);
-CREATE INDEX IF NOT EXISTS idx_prompt_intents_intent ON prompt_intents(intent);
-`;
+  `CREATE TABLE IF NOT EXISTS prompt_intents (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    prompt_id TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0,
+    sub_intent TEXT,
+    classifier TEXT NOT NULL DEFAULT 'rule',
+    classified_at TEXT NOT NULL,
+    UNIQUE(session_id, prompt_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS search_index (
+    id SERIAL PRIMARY KEY,
+    source_type TEXT,
+    source_id TEXT,
+    vendor TEXT,
+    category TEXT,
+    platform TEXT,
+    prompt_id TEXT,
+    text_content TEXT,
+    tsv TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', COALESCE(text_content, ''))) STORED
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS cross_session_insights (
+    id SERIAL PRIMARY KEY,
+    insight_type TEXT NOT NULL,
+    prompt_id TEXT,
+    insight_data TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS analysis_snapshots (
+    id SERIAL PRIMARY KEY,
+    snapshot_date TEXT NOT NULL,
+    prompt_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    primary_vendor TEXT,
+    constraints_addressed TEXT,
+    UNIQUE(snapshot_date, prompt_id, platform)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS daily_digests (
+    id SERIAL PRIMARY KEY,
+    run_date TEXT NOT NULL UNIQUE,
+    summary TEXT,
+    significant_changes TEXT,
+    alerts TEXT,
+    generated_at TEXT NOT NULL
+  )`,
+
+  // Indexes
+  `CREATE INDEX IF NOT EXISTS idx_observations_vendor ON observations(vendor_canonical_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_observations_session ON observations(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(mention_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_sessions_platform ON sessions(source_platform)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_actions_session ON tool_actions(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_tool_actions_vendor ON tool_actions(vendor_canonical_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompt_metadata_category ON prompt_metadata(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompt_intents_session ON prompt_intents(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompt_intents_prompt ON prompt_intents(prompt_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompt_intents_intent ON prompt_intents(intent)`,
+  `CREATE INDEX IF NOT EXISTS idx_search_tsv ON search_index USING GIN(tsv)`,
+  `CREATE INDEX IF NOT EXISTS idx_search_source_id ON search_index(source_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_insights_type ON cross_session_insights(insight_type)`,
+];
 
 export class ObservatoryDB {
-  private db: Database.Database;
+  private pool: Pool;
 
-  constructor(dbPath?: string) {
-    const resolvedPath = dbPath || resolve(process.cwd(), "db", "observatory.sqlite");
-    const dir = dirname(resolvedPath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    this.db = new Database(resolvedPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.init();
+  private constructor(pool: Pool) {
+    this.pool = pool;
   }
 
-  private init(): void {
-    this.db.exec(SCHEMA);
-    this.migrate();
+  static async create(connectionString: string): Promise<ObservatoryDB> {
+    const pool = new Pool({ connectionString });
+    const instance = new ObservatoryDB(pool);
+    await instance.init();
+    return instance;
   }
 
-  private migrate(): void {
-    // Add is_benchmark column if missing (for existing databases)
-    const cols = this.db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
-    if (!cols.some((c) => c.name === "is_benchmark")) {
-      this.db.exec("ALTER TABLE sessions ADD COLUMN is_benchmark INTEGER NOT NULL DEFAULT 0");
+  private async init(): Promise<void> {
+    for (const stmt of SCHEMA_STATEMENTS) {
+      await this.pool.query(stmt);
     }
+    await this.migrate();
+  }
 
-    // Ensure prompt_metadata and response_context tables exist (for DBs created before enrichment)
-    const tables = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
-    const tableNames = new Set(tables.map((t) => t.name));
-    if (!tableNames.has("prompt_metadata")) {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS prompt_metadata (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          prompt_id TEXT NOT NULL UNIQUE,
-          category TEXT NOT NULL,
-          content_tags TEXT NOT NULL DEFAULT '[]',
-          pattern_tags TEXT NOT NULL DEFAULT '[]',
-          constraints TEXT NOT NULL DEFAULT '[]',
-          existing_stack TEXT NOT NULL DEFAULT '[]',
-          failure_mode TEXT,
-          vendors_named_in_prompt TEXT NOT NULL DEFAULT '[]'
-        );
-        CREATE INDEX IF NOT EXISTS idx_prompt_metadata_category ON prompt_metadata(category);
-      `);
-    }
-    if (!tableNames.has("response_context")) {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS response_context (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          session_id TEXT NOT NULL,
-          prompt_id TEXT NOT NULL,
-          primary_vendor TEXT,
-          is_implemented INTEGER NOT NULL DEFAULT 0,
-          rationale_snippet TEXT,
-          vendors_mentioned TEXT NOT NULL DEFAULT '[]',
-          trade_offs_snippet TEXT,
-          gotchas_snippet TEXT,
-          constraints_addressed TEXT NOT NULL DEFAULT '[]',
-          reasoning_chain TEXT,
-          disqualification_reasons TEXT,
-          confidence_score REAL,
-          extracted_at TEXT NOT NULL,
-          FOREIGN KEY (session_id) REFERENCES sessions(id),
-          UNIQUE(session_id, prompt_id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_response_context_session ON response_context(session_id);
-        CREATE INDEX IF NOT EXISTS idx_response_context_prompt ON response_context(prompt_id);
-        CREATE INDEX IF NOT EXISTS idx_response_context_vendor ON response_context(primary_vendor);
-      `);
+  private async migrate(): Promise<void> {
+    // Add is_benchmark column if missing
+    const { rows: sessionCols } = await this.pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'sessions' AND table_schema = 'public'`
+    );
+    const sessionColNames = new Set(sessionCols.map((c: { column_name: string }) => c.column_name));
+    if (!sessionColNames.has("is_benchmark")) {
+      await this.pool.query("ALTER TABLE sessions ADD COLUMN is_benchmark INTEGER NOT NULL DEFAULT 0");
     }
 
     // Add LLM enrichment columns to response_context if missing
-    if (tableNames.has("response_context")) {
-      const rcCols = this.db.prepare("PRAGMA table_info(response_context)").all() as Array<{ name: string }>;
-      if (!rcCols.some((c) => c.name === "reasoning_chain")) {
-        this.db.exec("ALTER TABLE response_context ADD COLUMN reasoning_chain TEXT");
-      }
-      if (!rcCols.some((c) => c.name === "disqualification_reasons")) {
-        this.db.exec("ALTER TABLE response_context ADD COLUMN disqualification_reasons TEXT");
-      }
-      if (!rcCols.some((c) => c.name === "confidence_score")) {
-        this.db.exec("ALTER TABLE response_context ADD COLUMN confidence_score REAL");
-      }
+    const { rows: rcCols } = await this.pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'response_context' AND table_schema = 'public'`
+    );
+    const rcColNames = new Set(rcCols.map((c: { column_name: string }) => c.column_name));
+    if (!rcColNames.has("reasoning_chain")) {
+      await this.pool.query("ALTER TABLE response_context ADD COLUMN reasoning_chain TEXT");
     }
-
-    // Create search_index FTS5 virtual table if missing
-    if (!tableNames.has("search_index")) {
-      this.db.exec(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
-          source_type,
-          source_id UNINDEXED,
-          vendor,
-          category,
-          platform,
-          prompt_id,
-          text_content,
-          tokenize='porter unicode61'
-        );
-      `);
+    if (!rcColNames.has("disqualification_reasons")) {
+      await this.pool.query("ALTER TABLE response_context ADD COLUMN disqualification_reasons TEXT");
     }
-
-    // Create cross_session_insights table if missing
-    if (!tableNames.has("cross_session_insights")) {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS cross_session_insights (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          insight_type TEXT NOT NULL,
-          prompt_id TEXT,
-          insight_data TEXT NOT NULL,
-          generated_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_insights_type ON cross_session_insights(insight_type);
-      `);
-    }
-
-    // Create analysis_snapshots table if missing
-    if (!tableNames.has("analysis_snapshots")) {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS analysis_snapshots (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          snapshot_date TEXT NOT NULL,
-          prompt_id TEXT NOT NULL,
-          platform TEXT NOT NULL,
-          primary_vendor TEXT,
-          constraints_addressed TEXT,
-          UNIQUE(snapshot_date, prompt_id, platform)
-        );
-      `);
-    }
-
-    // Create daily_digests table if missing
-    if (!tableNames.has("daily_digests")) {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS daily_digests (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          run_date TEXT NOT NULL UNIQUE,
-          summary TEXT,
-          significant_changes TEXT,
-          alerts TEXT,
-          generated_at TEXT NOT NULL
-        );
-      `);
-    }
-
-    // Create prompt_intents table if missing
-    if (!tableNames.has("prompt_intents")) {
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS prompt_intents (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          session_id TEXT NOT NULL,
-          prompt_id TEXT NOT NULL,
-          intent TEXT NOT NULL,
-          confidence REAL NOT NULL DEFAULT 0,
-          sub_intent TEXT,
-          classifier TEXT NOT NULL DEFAULT 'rule',
-          classified_at TEXT NOT NULL,
-          FOREIGN KEY (session_id) REFERENCES sessions(id),
-          UNIQUE(session_id, prompt_id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_prompt_intents_session ON prompt_intents(session_id);
-        CREATE INDEX IF NOT EXISTS idx_prompt_intents_prompt ON prompt_intents(prompt_id);
-        CREATE INDEX IF NOT EXISTS idx_prompt_intents_intent ON prompt_intents(intent);
-      `);
+    if (!rcColNames.has("confidence_score")) {
+      await this.pool.query("ALTER TABLE response_context ADD COLUMN confidence_score REAL");
     }
   }
 
-  getIngestedFile(filePath: string): IngestedFileRow | null {
-    return (this.db.prepare("SELECT * FROM ingested_files WHERE file_path = ?").get(filePath) as IngestedFileRow) || null;
+  async getIngestedFile(filePath: string): Promise<IngestedFileRow | null> {
+    const { rows } = await this.pool.query("SELECT * FROM ingested_files WHERE file_path = $1", [filePath]);
+    return (rows[0] as IngestedFileRow) ?? null;
   }
 
-  upsertIngestedFile(filePath: string, fileSize: number, fileMtime: string, sourcePlatform: string, sessionCount: number): void {
-    this.db.prepare(`
+  async upsertIngestedFile(filePath: string, fileSize: number, fileMtime: string, sourcePlatform: string, sessionCount: number): Promise<void> {
+    await this.pool.query(`
       INSERT INTO ingested_files (file_path, file_size, file_mtime, source_platform, ingested_at, session_count)
-      VALUES (?, ?, ?, ?, datetime('now'), ?)
-      ON CONFLICT(file_path) DO UPDATE SET file_size = excluded.file_size, file_mtime = excluded.file_mtime,
-        ingested_at = datetime('now'), session_count = excluded.session_count
-    `).run(filePath, fileSize, fileMtime, sourcePlatform, sessionCount);
+      VALUES ($1, $2, $3, $4, NOW()::text, $5)
+      ON CONFLICT(file_path) DO UPDATE SET file_size = EXCLUDED.file_size, file_mtime = EXCLUDED.file_mtime,
+        ingested_at = NOW()::text, session_count = EXCLUDED.session_count
+    `, [filePath, fileSize, fileMtime, sourcePlatform, sessionCount]);
   }
 
-  needsReingestion(filePath: string, fileSize: number, fileMtime: string): boolean {
-    const existing = this.getIngestedFile(filePath);
+  async needsReingestion(filePath: string, fileSize: number, fileMtime: string): Promise<boolean> {
+    const existing = await this.getIngestedFile(filePath);
     if (!existing) return true;
     return existing.file_size !== fileSize || existing.file_mtime !== fileMtime;
   }
 
-  upsertSession(session: { id: string; sourcePlatform: string; modelId: string | null; startedAt: string; endedAt: string | null; cwd: string | null; gitBranch: string | null; turnCount: number; filePath: string; }): void {
+  async upsertSession(session: { id: string; sourcePlatform: string; modelId: string | null; startedAt: string; endedAt: string | null; cwd: string | null; gitBranch: string | null; turnCount: number; filePath: string; }): Promise<void> {
     const isBenchmark = (session.cwd && session.cwd.includes("obs-bench")) || session.gitBranch === "__obs_bench__" ? 1 : 0;
-    this.db.prepare(`
+    await this.pool.query(`
       INSERT INTO sessions (id, source_platform, model_id, started_at, ended_at, cwd, git_branch, turn_count, file_path, is_benchmark)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET model_id = excluded.model_id, started_at = excluded.started_at, ended_at = excluded.ended_at,
-        cwd = excluded.cwd, git_branch = excluded.git_branch, turn_count = excluded.turn_count, file_path = excluded.file_path, is_benchmark = excluded.is_benchmark
-    `).run(session.id, session.sourcePlatform, session.modelId, session.startedAt, session.endedAt, session.cwd, session.gitBranch, session.turnCount, session.filePath, isBenchmark);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT(id) DO UPDATE SET model_id = EXCLUDED.model_id, started_at = EXCLUDED.started_at, ended_at = EXCLUDED.ended_at,
+        cwd = EXCLUDED.cwd, git_branch = EXCLUDED.git_branch, turn_count = EXCLUDED.turn_count, file_path = EXCLUDED.file_path, is_benchmark = EXCLUDED.is_benchmark
+    `, [session.id, session.sourcePlatform, session.modelId, session.startedAt, session.endedAt, session.cwd, session.gitBranch, session.turnCount, session.filePath, isBenchmark]);
   }
 
-  deleteSessionsByFilePath(filePath: string): void {
-    const sessions = this.db.prepare("SELECT id FROM sessions WHERE file_path = ?").all(filePath) as { id: string }[];
-    for (const s of sessions) {
-      this.db.prepare("DELETE FROM tool_actions WHERE session_id = ?").run(s.id);
-      this.db.prepare("DELETE FROM observations WHERE session_id = ?").run(s.id);
+  async deleteSessionsByFilePath(filePath: string): Promise<void> {
+    const { rows: sessions } = await this.pool.query("SELECT id FROM sessions WHERE file_path = $1", [filePath]);
+    for (const s of sessions as { id: string }[]) {
+      await this.pool.query("DELETE FROM tool_actions WHERE session_id = $1", [s.id]);
+      await this.pool.query("DELETE FROM observations WHERE session_id = $1", [s.id]);
     }
-    this.db.prepare("DELETE FROM sessions WHERE file_path = ?").run(filePath);
+    await this.pool.query("DELETE FROM sessions WHERE file_path = $1", [filePath]);
   }
 
-  insertObservation(sessionId: string, mention: VendorMention): void {
-    this.db.prepare(`
-      INSERT OR IGNORE INTO observations
+  async insertObservation(sessionId: string, mention: VendorMention): Promise<void> {
+    await this.pool.query(`
+      INSERT INTO observations
         (session_id, vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, user_prompt_snippet, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(sessionId, mention.vendorCanonicalId, mention.vendorRaw, mention.mentionType, mention.workCategory, mention.confidence, mention.contextSnippet, mention.userPromptSnippet, mention.timestamp);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT DO NOTHING
+    `, [sessionId, mention.vendorCanonicalId, mention.vendorRaw, mention.mentionType, mention.workCategory, mention.confidence, mention.contextSnippet, mention.userPromptSnippet, mention.timestamp]);
   }
 
-  insertToolAction(sessionId: string, toolName: string, commandOrPath: string | null, vendorCanonicalId: string | null, actionType: string | null, success: number | null, timestamp: string): void {
-    this.db.prepare(`
+  async insertToolAction(sessionId: string, toolName: string, commandOrPath: string | null, vendorCanonicalId: string | null, actionType: string | null, success: number | null, timestamp: string): Promise<void> {
+    await this.pool.query(`
       INSERT INTO tool_actions (session_id, tool_name, command_or_path, vendor_canonical_id, action_type, success, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(sessionId, toolName, commandOrPath, vendorCanonicalId, actionType, success, timestamp);
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [sessionId, toolName, commandOrPath, vendorCanonicalId, actionType, success, timestamp]);
   }
 
-  runInTransaction<T>(fn: () => T): T { return this.db.transaction(fn)(); }
+  async runInTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await fn(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
 
-  getDashboardStats(): DashboardStats {
-    const sessions = this.db.prepare("SELECT COUNT(*) AS c FROM sessions").get() as { c: number };
-    const observations = this.db.prepare("SELECT COUNT(*) AS c FROM observations").get() as { c: number };
-    const vendors = this.db.prepare("SELECT COUNT(DISTINCT vendor_canonical_id) AS c FROM observations").get() as { c: number };
-    const platforms = this.db.prepare("SELECT source_platform, COUNT(*) AS c FROM sessions GROUP BY source_platform").all() as Array<{ source_platform: string; c: number }>;
-    const lastIngested = this.db.prepare("SELECT MAX(ingested_at) AS t FROM ingested_files").get() as { t: string | null };
+  async getDashboardStats(): Promise<DashboardStats> {
+    const sessions = (await this.pool.query("SELECT COUNT(*) AS c FROM sessions")).rows[0] as { c: string };
+    const observations = (await this.pool.query("SELECT COUNT(*) AS c FROM observations")).rows[0] as { c: string };
+    const vendors = (await this.pool.query("SELECT COUNT(DISTINCT vendor_canonical_id) AS c FROM observations")).rows[0] as { c: string };
+    const { rows: platforms } = await this.pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions GROUP BY source_platform");
+    const lastIngested = (await this.pool.query("SELECT MAX(ingested_at) AS t FROM ingested_files")).rows[0] as { t: string | null };
     const platformBreakdown: Record<string, number> = {};
-    for (const p of platforms) { platformBreakdown[p.source_platform] = p.c; }
-    return { totalSessions: sessions.c, totalObservations: observations.c, uniqueVendors: vendors.c, platformBreakdown, lastIngestedAt: lastIngested.t };
+    for (const p of platforms as Array<{ source_platform: string; c: string }>) { platformBreakdown[p.source_platform] = Number(p.c); }
+    return { totalSessions: Number(sessions.c), totalObservations: Number(observations.c), uniqueVendors: Number(vendors.c), platformBreakdown, lastIngestedAt: lastIngested.t };
   }
 
-  getVendorStats(filters?: { platform?: string; mentionType?: string; workCategory?: string; }): VendorStats[] {
+  async getVendorStats(filters?: { platform?: string; mentionType?: string; workCategory?: string; }): Promise<VendorStats[]> {
     let whereClause = "1=1";
     const params: string[] = [];
-    if (filters?.platform) { whereClause += " AND s.source_platform = ?"; params.push(filters.platform); }
-    if (filters?.mentionType) { whereClause += " AND o.mention_type = ?"; params.push(filters.mentionType); }
-    if (filters?.workCategory) { whereClause += " AND o.work_category = ?"; params.push(filters.workCategory); }
-    const rows = this.db.prepare(`
+    let paramIdx = 1;
+    if (filters?.platform) { whereClause += ` AND s.source_platform = $${paramIdx++}`; params.push(filters.platform); }
+    if (filters?.mentionType) { whereClause += ` AND o.mention_type = $${paramIdx++}`; params.push(filters.mentionType); }
+    if (filters?.workCategory) { whereClause += ` AND o.work_category = $${paramIdx++}`; params.push(filters.workCategory); }
+    const { rows } = await this.pool.query(`
       SELECT o.vendor_canonical_id, o.work_category AS category, COUNT(*) AS total,
         SUM(CASE WHEN o.mention_type = 'installed' THEN 1 ELSE 0 END) AS installed,
         SUM(CASE WHEN o.mention_type = 'configured' THEN 1 ELSE 0 END) AS configured,
@@ -376,97 +313,102 @@ export class ObservatoryDB {
         SUM(CASE WHEN o.mention_type = 'compared' THEN 1 ELSE 0 END) AS compared,
         SUM(CASE WHEN o.mention_type = 'mentioned' THEN 1 ELSE 0 END) AS mentioned,
         SUM(CASE WHEN o.mention_type = 'rejected' THEN 1 ELSE 0 END) AS rejected,
-        GROUP_CONCAT(DISTINCT s.source_platform) AS platforms
+        string_agg(DISTINCT s.source_platform, ',') AS platforms
       FROM observations o JOIN sessions s ON o.session_id = s.id WHERE ${whereClause}
-      GROUP BY o.vendor_canonical_id ORDER BY total DESC
-    `).all(...params) as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
+      GROUP BY o.vendor_canonical_id, o.work_category ORDER BY total DESC
+    `, params);
+    return rows.map((r: Record<string, unknown>) => ({
       vendor_canonical_id: r.vendor_canonical_id as string, display_name: r.vendor_canonical_id as string,
-      category: (r.category as string) || "other", total: r.total as number, installed: r.installed as number,
-      configured: r.configured as number, implemented: r.implemented as number, recommended: r.recommended as number,
-      compared: r.compared as number, mentioned: r.mentioned as number, rejected: r.rejected as number,
+      category: (r.category as string) || "other", total: Number(r.total), installed: Number(r.installed),
+      configured: Number(r.configured), implemented: Number(r.implemented), recommended: Number(r.recommended),
+      compared: Number(r.compared), mentioned: Number(r.mentioned), rejected: Number(r.rejected),
       platforms: (r.platforms as string) || "",
     }));
   }
 
-  getPlatformComparison(): PlatformStats[] {
-    const rows = this.db.prepare(`
+  async getPlatformComparison(): Promise<PlatformStats[]> {
+    const { rows } = await this.pool.query(`
       SELECT o.vendor_canonical_id,
         SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) AS claude_code_count,
         SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) AS codex_cli_count
       FROM observations o JOIN sessions s ON o.session_id = s.id GROUP BY o.vendor_canonical_id
       ORDER BY (SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) + SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END)) DESC
-    `).all() as Array<Record<string, unknown>>;
-    return rows.map((r) => {
-      const cc = r.claude_code_count as number; const cx = r.codex_cli_count as number;
+    `);
+    return rows.map((r: Record<string, unknown>) => {
+      const cc = Number(r.claude_code_count); const cx = Number(r.codex_cli_count);
       return { vendor_canonical_id: r.vendor_canonical_id as string, display_name: r.vendor_canonical_id as string,
         claude_code_count: cc, codex_cli_count: cx, delta: Math.abs(cc - cx) };
     });
   }
 
-  getCoOccurrences(minCount = 2): CoOccurrence[] {
-    const rows = this.db.prepare(`
+  async getCoOccurrences(minCount = 2): Promise<CoOccurrence[]> {
+    const { rows } = await this.pool.query(`
       SELECT a.vendor_canonical_id AS vendor_a, b.vendor_canonical_id AS vendor_b,
-        COUNT(DISTINCT a.session_id) AS co_occurrence_count, GROUP_CONCAT(DISTINCT a.session_id) AS sessions
+        COUNT(DISTINCT a.session_id) AS co_occurrence_count, string_agg(DISTINCT a.session_id, ',') AS sessions
       FROM observations a JOIN observations b ON a.session_id = b.session_id
       WHERE a.vendor_canonical_id < b.vendor_canonical_id
-      GROUP BY a.vendor_canonical_id, b.vendor_canonical_id HAVING co_occurrence_count >= ?
+      GROUP BY a.vendor_canonical_id, b.vendor_canonical_id HAVING COUNT(DISTINCT a.session_id) >= $1
       ORDER BY co_occurrence_count DESC LIMIT 100
-    `).all(minCount) as Array<Record<string, unknown>>;
-    return rows.map((r) => ({ vendor_a: r.vendor_a as string, vendor_b: r.vendor_b as string,
-      co_occurrence_count: r.co_occurrence_count as number, sessions: (r.sessions as string) || "" }));
+    `, [minCount]);
+    return rows.map((r: Record<string, unknown>) => ({ vendor_a: r.vendor_a as string, vendor_b: r.vendor_b as string,
+      co_occurrence_count: Number(r.co_occurrence_count), sessions: (r.sessions as string) || "" }));
   }
 
-  getTimeline(): TimelinePoint[] {
-    const rows = this.db.prepare(`
-      SELECT strftime('%Y-W%W', o.timestamp) AS week, o.vendor_canonical_id, COUNT(*) AS count
+  async getTimeline(): Promise<TimelinePoint[]> {
+    const { rows } = await this.pool.query(`
+      SELECT to_char(o.timestamp::timestamptz, 'IYYY-"W"IW') AS week, o.vendor_canonical_id, COUNT(*) AS count
       FROM observations o GROUP BY week, o.vendor_canonical_id ORDER BY week, count DESC
-    `).all() as Array<Record<string, unknown>>;
-    return rows.map((r) => ({ week: r.week as string, vendor_canonical_id: r.vendor_canonical_id as string, count: r.count as number }));
+    `);
+    return rows.map((r: Record<string, unknown>) => ({ week: r.week as string, vendor_canonical_id: r.vendor_canonical_id as string, count: Number(r.count) }));
   }
 
-  getActionFunnels(): FunnelStats[] {
-    const rows = this.db.prepare(`
+  async getActionFunnels(): Promise<FunnelStats[]> {
+    const { rows } = await this.pool.query(`
       SELECT vendor_canonical_id,
         SUM(CASE WHEN mention_type = 'mentioned' THEN 1 ELSE 0 END) AS mentioned_total,
         SUM(CASE WHEN mention_type = 'recommended' THEN 1 ELSE 0 END) AS recommended_total,
         SUM(CASE WHEN mention_type = 'installed' THEN 1 ELSE 0 END) AS installed_total
       FROM observations GROUP BY vendor_canonical_id
-      HAVING (recommended_total + installed_total) > 0
-      ORDER BY installed_total DESC, recommended_total DESC
-    `).all() as Array<Record<string, unknown>>;
-    return rows.map((r) => {
-      const rec = r.recommended_total as number; const inst = r.installed_total as number;
+      HAVING (SUM(CASE WHEN mention_type = 'recommended' THEN 1 ELSE 0 END) + SUM(CASE WHEN mention_type = 'installed' THEN 1 ELSE 0 END)) > 0
+      ORDER BY SUM(CASE WHEN mention_type = 'installed' THEN 1 ELSE 0 END) DESC, SUM(CASE WHEN mention_type = 'recommended' THEN 1 ELSE 0 END) DESC
+    `);
+    return rows.map((r: Record<string, unknown>) => {
+      const rec = Number(r.recommended_total); const inst = Number(r.installed_total);
       return { vendor_canonical_id: r.vendor_canonical_id as string, display_name: r.vendor_canonical_id as string,
-        mentioned_total: r.mentioned_total as number, recommended_total: rec, installed_total: inst,
+        mentioned_total: Number(r.mentioned_total), recommended_total: rec, installed_total: inst,
         conversion_rate: rec > 0 ? inst / rec : 0 };
     });
   }
 
-  getSessions(limit = 50, offset = 0, platform?: string): SessionRow[] {
+  async getSessions(limit = 50, offset = 0, platform?: string): Promise<SessionRow[]> {
     let sql = "SELECT * FROM sessions";
     const params: (string | number)[] = [];
-    if (platform) { sql += " WHERE source_platform = ?"; params.push(platform); }
-    sql += " ORDER BY started_at DESC LIMIT ? OFFSET ?";
+    let paramIdx = 1;
+    if (platform) { sql += ` WHERE source_platform = $${paramIdx++}`; params.push(platform); }
+    sql += ` ORDER BY started_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
     params.push(limit, offset);
-    return this.db.prepare(sql).all(...params) as SessionRow[];
+    const { rows } = await this.pool.query(sql, params);
+    return rows as SessionRow[];
   }
 
-  getSessionById(id: string): SessionRow | null {
-    return (this.db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as SessionRow) || null;
+  async getSessionById(id: string): Promise<SessionRow | null> {
+    const { rows } = await this.pool.query("SELECT * FROM sessions WHERE id = $1", [id]);
+    return (rows[0] as SessionRow) ?? null;
   }
 
-  getObservationsBySessionId(sessionId: string): ObservationRow[] {
-    return this.db.prepare("SELECT * FROM observations WHERE session_id = ? ORDER BY timestamp").all(sessionId) as ObservationRow[];
+  async getObservationsBySessionId(sessionId: string): Promise<ObservationRow[]> {
+    const { rows } = await this.pool.query("SELECT * FROM observations WHERE session_id = $1 ORDER BY timestamp", [sessionId]);
+    return rows as ObservationRow[];
   }
 
-  getToolActionsBySessionId(sessionId: string): ToolActionRow[] {
-    return this.db.prepare("SELECT * FROM tool_actions WHERE session_id = ? ORDER BY timestamp").all(sessionId) as ToolActionRow[];
+  async getToolActionsBySessionId(sessionId: string): Promise<ToolActionRow[]> {
+    const { rows } = await this.pool.query("SELECT * FROM tool_actions WHERE session_id = $1 ORDER BY timestamp", [sessionId]);
+    return rows as ToolActionRow[];
   }
 
   // ── Prompt Metadata ──────────────────────────────────────────────
 
-  upsertPromptMetadata(meta: {
+  async upsertPromptMetadata(meta: {
     promptId: string;
     category: string;
     contentTags: string[];
@@ -475,19 +417,19 @@ export class ObservatoryDB {
     existingStack: string[];
     failureMode: string | null;
     vendorsNamedInPrompt: string[];
-  }): void {
-    this.db.prepare(`
+  }): Promise<void> {
+    await this.pool.query(`
       INSERT INTO prompt_metadata (prompt_id, category, content_tags, pattern_tags, constraints, existing_stack, failure_mode, vendors_named_in_prompt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT(prompt_id) DO UPDATE SET
-        category = excluded.category,
-        content_tags = excluded.content_tags,
-        pattern_tags = excluded.pattern_tags,
-        constraints = excluded.constraints,
-        existing_stack = excluded.existing_stack,
-        failure_mode = excluded.failure_mode,
-        vendors_named_in_prompt = excluded.vendors_named_in_prompt
-    `).run(
+        category = EXCLUDED.category,
+        content_tags = EXCLUDED.content_tags,
+        pattern_tags = EXCLUDED.pattern_tags,
+        constraints = EXCLUDED.constraints,
+        existing_stack = EXCLUDED.existing_stack,
+        failure_mode = EXCLUDED.failure_mode,
+        vendors_named_in_prompt = EXCLUDED.vendors_named_in_prompt
+    `, [
       meta.promptId,
       meta.category,
       JSON.stringify(meta.contentTags),
@@ -496,20 +438,22 @@ export class ObservatoryDB {
       JSON.stringify(meta.existingStack),
       meta.failureMode,
       JSON.stringify(meta.vendorsNamedInPrompt),
-    );
+    ]);
   }
 
-  getPromptMetadata(promptId: string): PromptMetadataRow | null {
-    return (this.db.prepare("SELECT * FROM prompt_metadata WHERE prompt_id = ?").get(promptId) as PromptMetadataRow) || null;
+  async getPromptMetadata(promptId: string): Promise<PromptMetadataRow | null> {
+    const { rows } = await this.pool.query("SELECT * FROM prompt_metadata WHERE prompt_id = $1", [promptId]);
+    return (rows[0] as PromptMetadataRow) ?? null;
   }
 
-  getAllPromptMetadata(): PromptMetadataRow[] {
-    return this.db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataRow[];
+  async getAllPromptMetadata(): Promise<PromptMetadataRow[]> {
+    const { rows } = await this.pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
+    return rows as PromptMetadataRow[];
   }
 
   // ── Response Context ──────────────────────────────────────────────
 
-  upsertResponseContext(ctx: {
+  async upsertResponseContext(ctx: {
     sessionId: string;
     promptId: string;
     primaryVendor: string | null;
@@ -522,25 +466,25 @@ export class ObservatoryDB {
     reasoningChain?: string | null;
     disqualificationReasons?: DisqualificationReason[];
     confidenceScore?: number | null;
-  }): void {
-    this.db.prepare(`
+  }): Promise<void> {
+    await this.pool.query(`
       INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, rationale_snippet,
         vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed,
         reasoning_chain, disqualification_reasons, confidence_score, extracted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()::text)
       ON CONFLICT(session_id, prompt_id) DO UPDATE SET
-        primary_vendor = excluded.primary_vendor,
-        is_implemented = excluded.is_implemented,
-        rationale_snippet = excluded.rationale_snippet,
-        vendors_mentioned = excluded.vendors_mentioned,
-        trade_offs_snippet = excluded.trade_offs_snippet,
-        gotchas_snippet = excluded.gotchas_snippet,
-        constraints_addressed = excluded.constraints_addressed,
-        reasoning_chain = excluded.reasoning_chain,
-        disqualification_reasons = excluded.disqualification_reasons,
-        confidence_score = excluded.confidence_score,
-        extracted_at = datetime('now')
-    `).run(
+        primary_vendor = EXCLUDED.primary_vendor,
+        is_implemented = EXCLUDED.is_implemented,
+        rationale_snippet = EXCLUDED.rationale_snippet,
+        vendors_mentioned = EXCLUDED.vendors_mentioned,
+        trade_offs_snippet = EXCLUDED.trade_offs_snippet,
+        gotchas_snippet = EXCLUDED.gotchas_snippet,
+        constraints_addressed = EXCLUDED.constraints_addressed,
+        reasoning_chain = EXCLUDED.reasoning_chain,
+        disqualification_reasons = EXCLUDED.disqualification_reasons,
+        confidence_score = EXCLUDED.confidence_score,
+        extracted_at = NOW()::text
+    `, [
       ctx.sessionId,
       ctx.promptId,
       ctx.primaryVendor,
@@ -553,72 +497,77 @@ export class ObservatoryDB {
       ctx.reasoningChain ?? null,
       ctx.disqualificationReasons ? JSON.stringify(ctx.disqualificationReasons) : null,
       ctx.confidenceScore ?? null,
-    );
+    ]);
   }
 
   // ── Prompt Intents ──────────────────────────────────────────────
 
-  upsertPromptIntent(ctx: {
+  async upsertPromptIntent(ctx: {
     sessionId: string;
     promptId: string;
     intent: IntentClassification;
-  }): void {
-    this.db.prepare(`
+  }): Promise<void> {
+    await this.pool.query(`
       INSERT INTO prompt_intents (session_id, prompt_id, intent, confidence, sub_intent, classifier, classified_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      VALUES ($1, $2, $3, $4, $5, $6, NOW()::text)
       ON CONFLICT(session_id, prompt_id) DO UPDATE SET
-        intent = excluded.intent,
-        confidence = excluded.confidence,
-        sub_intent = excluded.sub_intent,
-        classifier = excluded.classifier,
-        classified_at = datetime('now')
-    `).run(
+        intent = EXCLUDED.intent,
+        confidence = EXCLUDED.confidence,
+        sub_intent = EXCLUDED.sub_intent,
+        classifier = EXCLUDED.classifier,
+        classified_at = NOW()::text
+    `, [
       ctx.sessionId,
       ctx.promptId,
       ctx.intent.intent,
       ctx.intent.confidence,
       ctx.intent.subIntent,
       ctx.intent.classifier,
-    );
+    ]);
   }
 
-  getResponseContextBySession(sessionId: string): ResponseContextRow[] {
-    return this.db.prepare("SELECT * FROM response_context WHERE session_id = ?").all(sessionId) as ResponseContextRow[];
+  async getResponseContextBySession(sessionId: string): Promise<ResponseContextRow[]> {
+    const { rows } = await this.pool.query("SELECT * FROM response_context WHERE session_id = $1", [sessionId]);
+    return rows as ResponseContextRow[];
   }
 
-  getResponseContextByPrompt(promptId: string): ResponseContextRow[] {
-    return this.db.prepare("SELECT * FROM response_context WHERE prompt_id = ? ORDER BY extracted_at DESC").all(promptId) as ResponseContextRow[];
+  async getResponseContextByPrompt(promptId: string): Promise<ResponseContextRow[]> {
+    const { rows } = await this.pool.query("SELECT * FROM response_context WHERE prompt_id = $1 ORDER BY extracted_at DESC", [promptId]);
+    return rows as ResponseContextRow[];
   }
 
   // ── Enrichment Queries ────────────────────────────────────────────
 
-  getPrimaryVendorCounts(filters?: { promptId?: string; category?: string; platform?: string }): Array<{ primary_vendor: string; count: number }> {
+  async getPrimaryVendorCounts(filters?: { promptId?: string; category?: string; platform?: string }): Promise<Array<{ primary_vendor: string; count: number }>> {
     let where = "rc.primary_vendor IS NOT NULL";
     const params: string[] = [];
-    if (filters?.promptId) { where += " AND rc.prompt_id = ?"; params.push(filters.promptId); }
-    if (filters?.category) { where += " AND pm.category = ?"; params.push(filters.category); }
-    if (filters?.platform) { where += " AND s.source_platform = ?"; params.push(filters.platform); }
-    return this.db.prepare(`
+    let paramIdx = 1;
+    if (filters?.promptId) { where += ` AND rc.prompt_id = $${paramIdx++}`; params.push(filters.promptId); }
+    if (filters?.category) { where += ` AND pm.category = $${paramIdx++}`; params.push(filters.category); }
+    if (filters?.platform) { where += ` AND s.source_platform = $${paramIdx++}`; params.push(filters.platform); }
+    const { rows } = await this.pool.query(`
       SELECT rc.primary_vendor, COUNT(*) AS count
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
       WHERE ${where}
       GROUP BY rc.primary_vendor ORDER BY count DESC
-    `).all(...params) as Array<{ primary_vendor: string; count: number }>;
+    `, params);
+    return rows.map((r: Record<string, unknown>) => ({ primary_vendor: r.primary_vendor as string, count: Number(r.count) }));
   }
 
-  getConstraintCoverage(promptId: string): Array<{ session_id: string; source_platform: string; constraints_addressed: string }> {
-    return this.db.prepare(`
+  async getConstraintCoverage(promptId: string): Promise<Array<{ session_id: string; source_platform: string; constraints_addressed: string }>> {
+    const { rows } = await this.pool.query(`
       SELECT rc.session_id, s.source_platform, rc.constraints_addressed
       FROM response_context rc JOIN sessions s ON rc.session_id = s.id
-      WHERE rc.prompt_id = ?
-    `).all(promptId) as Array<{ session_id: string; source_platform: string; constraints_addressed: string }>;
+      WHERE rc.prompt_id = $1
+    `, [promptId]);
+    return rows as Array<{ session_id: string; source_platform: string; constraints_addressed: string }>;
   }
 
-  // ── FTS5 Search Index ────────────────────────────────────────────
+  // ── FTS Search Index ────────────────────────────────────────────
 
-  populateSearchIndex(entries: Array<{
+  async populateSearchIndex(entries: Array<{
     sourceType: string;
     sourceId: string;
     vendor: string;
@@ -626,17 +575,14 @@ export class ObservatoryDB {
     platform: string;
     promptId: string;
     textContent: string;
-  }>): void {
-    const insert = this.db.prepare(`
-      INSERT INTO search_index (source_type, source_id, vendor, category, platform, prompt_id, text_content)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    // Clear existing entries for these source IDs to avoid duplicates
-    const deleteBySource = this.db.prepare("DELETE FROM search_index WHERE source_id = ?");
+  }>): Promise<void> {
     for (const entry of entries) {
       if (!entry.textContent || entry.textContent.trim().length < 10) continue;
-      deleteBySource.run(entry.sourceId);
-      insert.run(
+      await this.pool.query("DELETE FROM search_index WHERE source_id = $1", [entry.sourceId]);
+      await this.pool.query(`
+        INSERT INTO search_index (source_type, source_id, vendor, category, platform, prompt_id, text_content)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [
         entry.sourceType,
         entry.sourceId,
         entry.vendor,
@@ -644,84 +590,91 @@ export class ObservatoryDB {
         entry.platform,
         entry.promptId,
         entry.textContent,
-      );
+      ]);
     }
   }
 
   // ── Cross-Session Insights ─────────────────────────────────────────
 
-  upsertInsight(type: string, promptId: string | null, data: unknown): void {
+  async upsertInsight(type: string, promptId: string | null, data: unknown): Promise<void> {
     if (promptId) {
-      // Delete existing insight of this type for this prompt
-      this.db.prepare(
-        "DELETE FROM cross_session_insights WHERE insight_type = ? AND prompt_id = ?"
-      ).run(type, promptId);
+      await this.pool.query(
+        "DELETE FROM cross_session_insights WHERE insight_type = $1 AND prompt_id = $2",
+        [type, promptId],
+      );
     } else {
-      // Delete all insights of this type (global insights)
-      this.db.prepare(
-        "DELETE FROM cross_session_insights WHERE insight_type = ? AND prompt_id IS NULL"
-      ).run(type);
+      await this.pool.query(
+        "DELETE FROM cross_session_insights WHERE insight_type = $1 AND prompt_id IS NULL",
+        [type],
+      );
     }
-    this.db.prepare(`
+    await this.pool.query(`
       INSERT INTO cross_session_insights (insight_type, prompt_id, insight_data, generated_at)
-      VALUES (?, ?, ?, datetime('now'))
-    `).run(type, promptId, JSON.stringify(data));
+      VALUES ($1, $2, $3, NOW()::text)
+    `, [type, promptId, JSON.stringify(data)]);
   }
 
-  getInsightsByType(type: string): Array<{ id: number; insight_type: string; prompt_id: string | null; insight_data: string; generated_at: string }> {
-    return this.db.prepare(
-      "SELECT * FROM cross_session_insights WHERE insight_type = ? ORDER BY generated_at DESC"
-    ).all(type) as Array<{ id: number; insight_type: string; prompt_id: string | null; insight_data: string; generated_at: string }>;
+  async getInsightsByType(type: string): Promise<Array<{ id: number; insight_type: string; prompt_id: string | null; insight_data: string; generated_at: string }>> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM cross_session_insights WHERE insight_type = $1 ORDER BY generated_at DESC",
+      [type],
+    );
+    return rows as Array<{ id: number; insight_type: string; prompt_id: string | null; insight_data: string; generated_at: string }>;
   }
 
   // ── Analysis Snapshots ────────────────────────────────────────────
 
-  upsertSnapshot(snapshotDate: string, promptId: string, platform: string, primaryVendor: string | null, constraintsAddressed: string[]): void {
-    this.db.prepare(`
+  async upsertSnapshot(snapshotDate: string, promptId: string, platform: string, primaryVendor: string | null, constraintsAddressed: string[]): Promise<void> {
+    await this.pool.query(`
       INSERT INTO analysis_snapshots (snapshot_date, prompt_id, platform, primary_vendor, constraints_addressed)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT(snapshot_date, prompt_id, platform) DO UPDATE SET
-        primary_vendor = excluded.primary_vendor,
-        constraints_addressed = excluded.constraints_addressed
-    `).run(snapshotDate, promptId, platform, primaryVendor, JSON.stringify(constraintsAddressed));
+        primary_vendor = EXCLUDED.primary_vendor,
+        constraints_addressed = EXCLUDED.constraints_addressed
+    `, [snapshotDate, promptId, platform, primaryVendor, JSON.stringify(constraintsAddressed)]);
   }
 
-  getSnapshot(date: string): Array<{ prompt_id: string; platform: string; primary_vendor: string | null; constraints_addressed: string }> {
-    return this.db.prepare(
-      "SELECT prompt_id, platform, primary_vendor, constraints_addressed FROM analysis_snapshots WHERE snapshot_date = ?"
-    ).all(date) as Array<{ prompt_id: string; platform: string; primary_vendor: string | null; constraints_addressed: string }>;
+  async getSnapshot(date: string): Promise<Array<{ prompt_id: string; platform: string; primary_vendor: string | null; constraints_addressed: string }>> {
+    const { rows } = await this.pool.query(
+      "SELECT prompt_id, platform, primary_vendor, constraints_addressed FROM analysis_snapshots WHERE snapshot_date = $1",
+      [date],
+    );
+    return rows as Array<{ prompt_id: string; platform: string; primary_vendor: string | null; constraints_addressed: string }>;
   }
 
-  getPreviousSnapshotDate(beforeDate: string): string | null {
-    const row = this.db.prepare(
-      "SELECT DISTINCT snapshot_date FROM analysis_snapshots WHERE snapshot_date < ? ORDER BY snapshot_date DESC LIMIT 1"
-    ).get(beforeDate) as { snapshot_date: string } | undefined;
-    return row?.snapshot_date ?? null;
+  async getPreviousSnapshotDate(beforeDate: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      "SELECT DISTINCT snapshot_date FROM analysis_snapshots WHERE snapshot_date < $1 ORDER BY snapshot_date DESC LIMIT 1",
+      [beforeDate],
+    );
+    return rows[0]?.snapshot_date ?? null;
   }
 
   // ── Daily Digests ─────────────────────────────────────────────────
 
-  upsertDailyDigest(runDate: string, summary: string | null, significantChanges: unknown, alerts: unknown): void {
-    this.db.prepare(`
+  async upsertDailyDigest(runDate: string, summary: string | null, significantChanges: unknown, alerts: unknown): Promise<void> {
+    await this.pool.query(`
       INSERT INTO daily_digests (run_date, summary, significant_changes, alerts, generated_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
+      VALUES ($1, $2, $3, $4, NOW()::text)
       ON CONFLICT(run_date) DO UPDATE SET
-        summary = excluded.summary,
-        significant_changes = excluded.significant_changes,
-        alerts = excluded.alerts,
-        generated_at = datetime('now')
-    `).run(runDate, summary, JSON.stringify(significantChanges), JSON.stringify(alerts));
+        summary = EXCLUDED.summary,
+        significant_changes = EXCLUDED.significant_changes,
+        alerts = EXCLUDED.alerts,
+        generated_at = NOW()::text
+    `, [runDate, summary, JSON.stringify(significantChanges), JSON.stringify(alerts)]);
   }
 
-  getLatestDigests(limit = 10): Array<{ run_date: string; summary: string | null; significant_changes: string; alerts: string; generated_at: string }> {
-    return this.db.prepare(
-      "SELECT * FROM daily_digests ORDER BY run_date DESC LIMIT ?"
-    ).all(limit) as Array<{ run_date: string; summary: string | null; significant_changes: string; alerts: string; generated_at: string }>;
+  async getLatestDigests(limit = 10): Promise<Array<{ run_date: string; summary: string | null; significant_changes: string; alerts: string; generated_at: string }>> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM daily_digests ORDER BY run_date DESC LIMIT $1",
+      [limit],
+    );
+    return rows as Array<{ run_date: string; summary: string | null; significant_changes: string; alerts: string; generated_at: string }>;
   }
 
   // ── All Response Contexts (for analyzer) ──────────────────────────
 
-  getAllResponseContexts(): Array<{
+  async getAllResponseContexts(): Promise<Array<{
     session_id: string;
     prompt_id: string;
     primary_vendor: string | null;
@@ -734,13 +687,14 @@ export class ObservatoryDB {
     extracted_at: string;
     source_platform: string;
     category: string | null;
-  }> {
-    return this.db.prepare(`
+  }>> {
+    const { rows } = await this.pool.query(`
       SELECT rc.*, s.source_platform, pm.category
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
-    `).all() as Array<{
+    `);
+    return rows as Array<{
       session_id: string; prompt_id: string; primary_vendor: string | null;
       vendors_mentioned: string; constraints_addressed: string; is_implemented: number;
       rationale_snippet: string | null; trade_offs_snippet: string | null;
@@ -749,5 +703,5 @@ export class ObservatoryDB {
     }>;
   }
 
-  close(): void { this.db.close(); }
+  async close(): Promise<void> { await this.pool.end(); }
 }

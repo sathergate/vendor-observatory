@@ -4,9 +4,9 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 
 export const dynamic = "force-dynamic";
 
-export default function VendorsPage() {
-  const vendors = getVendorStats();
-  const categories = getCategories();
+export default async function VendorsPage() {
+  const vendors = await getVendorStats();
+  const categories = await getCategories();
 
   return (
     <div>

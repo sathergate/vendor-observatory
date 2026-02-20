@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const detail = getSessionDetail(id);
+    const detail = await getSessionDetail(id);
     if (!detail) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(detail);
   } catch (err) {

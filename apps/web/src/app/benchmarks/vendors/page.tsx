@@ -12,9 +12,9 @@ function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
 
-export default function VendorIndexPage() {
-  const vendors = getAllVendorNames();
-  const trends = getAllVendorTrends();
+export default async function VendorIndexPage() {
+  const vendors = await getAllVendorNames();
+  const trends = await getAllVendorTrends();
 
   // Group vendors: those with recommendations first, then those only mentioned
   const recommended = vendors.filter((v) => v.totalRecommendations > 0);
@@ -23,7 +23,7 @@ export default function VendorIndexPage() {
   // Compute AI-Readiness scores for vendors with enough data
   const aiReadinessScores: Array<{ vendor: string; score: number; grade: string; gradeColor: string }> = [];
   for (const v of recommended) {
-    const scorecard = getVendorScorecard(v.vendor);
+    const scorecard = await getVendorScorecard(v.vendor);
     if (scorecard && scorecard.totalMentions >= 3) {
       const readiness = computeAIReadinessScore(scorecard);
       aiReadinessScores.push({

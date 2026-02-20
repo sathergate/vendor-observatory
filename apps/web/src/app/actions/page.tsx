@@ -4,8 +4,8 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 
 export const dynamic = "force-dynamic";
 
-export default function ActionsPage() {
-  const funnel = getActionFunnel();
+export default async function ActionsPage() {
+  const funnel = await getActionFunnel();
 
   return (
     <div>

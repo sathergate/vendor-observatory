@@ -1,73 +1,58 @@
-import Database from "better-sqlite3";
-import path from "path";
-import { existsSync, copyFileSync } from "fs";
+import { Pool } from "pg";
 
-// ── Lazy DB initialization ──────────────────────────────────────────
+// ── Lazy Pool initialization ──────────────────────────────────────────
 
-let _db: Database.Database | null = null;
-let _dbFailed = false;
+let _pool: Pool | null = null;
+let _poolFailed = false;
 
-function findSourceDbPath(): string | null {
-  if (process.env.OBS_DB_PATH) return process.env.OBS_DB_PATH;
-
-  const candidates = [
-    path.resolve(process.cwd(), "../../db/observatory.sqlite"),
-    path.resolve(process.cwd(), "db/observatory.sqlite"),
-    path.resolve(__dirname, "../../db/observatory.sqlite"),
-    path.resolve(__dirname, "../../../db/observatory.sqlite"),
-    path.resolve(__dirname, "../../../../db/observatory.sqlite"),
-  ];
-
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
-
-function getDb(): Database.Database | null {
-  if (_dbFailed) return null;
-  if (_db) return _db;
+function getPool(): Pool | null {
+  if (_poolFailed) return null;
+  if (_pool) return _pool;
   try {
-    const sourcePath = findSourceDbPath();
-    if (!sourcePath) {
-      console.error("[vendor-observatory] No DB file found");
-      _dbFailed = true;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      console.error("[vendor-observatory] DATABASE_URL not set");
+      _poolFailed = true;
       return null;
     }
-
-    // On Vercel, the filesystem is readonly — copy DB to /tmp so SQLite can create journal
-    let dbPath = sourcePath;
-    const tmpPath = "/tmp/observatory.sqlite";
-    if (process.env.VERCEL || !existsSync(path.dirname(sourcePath) + "/.writable_check")) {
-      if (!existsSync(tmpPath)) {
-        copyFileSync(sourcePath, tmpPath);
-      }
-      dbPath = tmpPath;
-    }
-
-    _db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    return _db;
+    _pool = new Pool({ connectionString });
+    return _pool;
   } catch (err) {
-    console.error("[vendor-observatory] DB init failed:", err);
-    _dbFailed = true;
+    console.error("[vendor-observatory] Pool init failed:", err);
+    _poolFailed = true;
     return null;
   }
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+async function hasTable(pool: Pool, name: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    "SELECT table_name FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'",
+    [name],
+  );
+  return rows.length > 0;
+}
+
+export function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
+  if (!json) return fallback;
+  try { return JSON.parse(json) as T; } catch { return fallback; }
+}
+
 // ── Dashboard Stats ─────────────────────────────────────────────────
 
-export function getDashboardStats() {
-  const db = getDb();
-  if (!db) return { totalSessions: 0, totalObservations: 0, uniqueVendors: 0, platformBreakdown: {} as Record<string, number>, lastIngestedAt: null as string | null };
+export async function getDashboardStats() {
+  const pool = getPool();
+  if (!pool) return { totalSessions: 0, totalObservations: 0, uniqueVendors: 0, platformBreakdown: {} as Record<string, number>, lastIngestedAt: null as string | null };
   try {
-    const sessions = (db.prepare("SELECT COUNT(*) AS c FROM sessions").get() as { c: number }).c;
-    const observations = (db.prepare("SELECT COUNT(*) AS c FROM observations").get() as { c: number }).c;
-    const vendors = (db.prepare("SELECT COUNT(DISTINCT vendor_canonical_id) AS c FROM observations").get() as { c: number }).c;
-    const platforms = db.prepare("SELECT source_platform, COUNT(*) AS c FROM sessions GROUP BY source_platform").all() as Array<{ source_platform: string; c: number }>;
+    const sessions = (await pool.query("SELECT COUNT(*) AS c FROM sessions")).rows[0] as { c: string };
+    const observations = (await pool.query("SELECT COUNT(*) AS c FROM observations")).rows[0] as { c: string };
+    const vendors = (await pool.query("SELECT COUNT(DISTINCT vendor_canonical_id) AS c FROM observations")).rows[0] as { c: string };
+    const { rows: platforms } = await pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions GROUP BY source_platform");
     const platformBreakdown: Record<string, number> = {};
-    for (const p of platforms) platformBreakdown[p.source_platform] = p.c;
-    const lastIngested = db.prepare("SELECT MAX(ingested_at) AS t FROM ingested_files").get() as { t: string | null };
-    return { totalSessions: sessions, totalObservations: observations, uniqueVendors: vendors, platformBreakdown, lastIngestedAt: lastIngested?.t ?? null };
+    for (const p of platforms as Array<{ source_platform: string; c: string }>) platformBreakdown[p.source_platform] = Number(p.c);
+    const lastIngested = (await pool.query("SELECT MAX(ingested_at) AS t FROM ingested_files")).rows[0] as { t: string | null };
+    return { totalSessions: Number(sessions.c), totalObservations: Number(observations.c), uniqueVendors: Number(vendors.c), platformBreakdown, lastIngestedAt: lastIngested?.t ?? null };
   } catch { return { totalSessions: 0, totalObservations: 0, uniqueVendors: 0, platformBreakdown: {}, lastIngestedAt: null }; }
 }
 
@@ -87,18 +72,19 @@ export interface VendorStatsRow {
   work_category: string;
 }
 
-export function getVendorStats(platformFilter?: string, categoryFilter?: string): VendorStatsRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getVendorStats(platformFilter?: string, categoryFilter?: string): Promise<VendorStatsRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
     let where = "WHERE 1=1";
     const params: string[] = [];
+    let paramIdx = 1;
     if (platformFilter) {
-      where += " AND o.session_id IN (SELECT id FROM sessions WHERE source_platform = ?)";
+      where += ` AND o.session_id IN (SELECT id FROM sessions WHERE source_platform = $${paramIdx++})`;
       params.push(platformFilter);
     }
     if (categoryFilter) {
-      where += " AND o.work_category = ?";
+      where += ` AND o.work_category = $${paramIdx++}`;
       params.push(categoryFilter);
     }
     const sql = `
@@ -112,15 +98,28 @@ export function getVendorStats(platformFilter?: string, categoryFilter?: string)
         SUM(CASE WHEN o.mention_type = 'compared' THEN 1 ELSE 0 END) AS compared,
         SUM(CASE WHEN o.mention_type = 'mentioned' THEN 1 ELSE 0 END) AS mentioned,
         SUM(CASE WHEN o.mention_type = 'rejected' THEN 1 ELSE 0 END) AS rejected,
-        GROUP_CONCAT(DISTINCT s.source_platform) AS platforms,
+        string_agg(DISTINCT s.source_platform, ',') AS platforms,
         o.work_category
       FROM observations o
       JOIN sessions s ON o.session_id = s.id
       ${where}
-      GROUP BY o.vendor_canonical_id
+      GROUP BY o.vendor_canonical_id, o.work_category
       ORDER BY total DESC
     `;
-    return db.prepare(sql).all(...params) as VendorStatsRow[];
+    const { rows } = await pool.query(sql, params);
+    return rows.map((r: Record<string, unknown>) => ({
+      vendor_canonical_id: r.vendor_canonical_id as string,
+      total: Number(r.total),
+      installed: Number(r.installed),
+      configured: Number(r.configured),
+      implemented: Number(r.implemented),
+      recommended: Number(r.recommended),
+      compared: Number(r.compared),
+      mentioned: Number(r.mentioned),
+      rejected: Number(r.rejected),
+      platforms: (r.platforms as string) || "",
+      work_category: (r.work_category as string) || "",
+    }));
   } catch { return []; }
 }
 
@@ -132,11 +131,11 @@ export interface PlatformCompRow {
   codex_cli_count: number;
 }
 
-export function getPlatformComparison(): PlatformCompRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getPlatformComparison(): Promise<PlatformCompRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT
         o.vendor_canonical_id,
         SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) AS claude_code_count,
@@ -144,9 +143,15 @@ export function getPlatformComparison(): PlatformCompRow[] {
       FROM observations o
       JOIN sessions s ON o.session_id = s.id
       GROUP BY o.vendor_canonical_id
-      HAVING claude_code_count > 0 OR codex_cli_count > 0
-      ORDER BY (claude_code_count + codex_cli_count) DESC
-    `).all() as PlatformCompRow[];
+      HAVING SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) > 0
+         OR SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) > 0
+      ORDER BY (SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) + SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END)) DESC
+    `);
+    return rows.map((r: Record<string, unknown>) => ({
+      vendor_canonical_id: r.vendor_canonical_id as string,
+      claude_code_count: Number(r.claude_code_count),
+      codex_cli_count: Number(r.codex_cli_count),
+    }));
   } catch { return []; }
 }
 
@@ -159,11 +164,11 @@ export interface FunnelRow {
   installed_total: number;
 }
 
-export function getActionFunnel(): FunnelRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getActionFunnel(): Promise<FunnelRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT
         vendor_canonical_id,
         SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) AS mentioned_total,
@@ -171,9 +176,15 @@ export function getActionFunnel(): FunnelRow[] {
         SUM(CASE WHEN mention_type IN ('installed', 'configured', 'implemented') THEN 1 ELSE 0 END) AS installed_total
       FROM observations
       GROUP BY vendor_canonical_id
-      HAVING mentioned_total > 0
-      ORDER BY mentioned_total DESC
-    `).all() as FunnelRow[];
+      HAVING SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) > 0
+      ORDER BY SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) DESC
+    `);
+    return rows.map((r: Record<string, unknown>) => ({
+      vendor_canonical_id: r.vendor_canonical_id as string,
+      mentioned_total: Number(r.mentioned_total),
+      recommended_total: Number(r.recommended_total),
+      installed_total: Number(r.installed_total),
+    }));
   } catch { return []; }
 }
 
@@ -190,21 +201,31 @@ export interface SessionListRow {
   vendors: string;
 }
 
-export function getSessionList(limit = 50, offset = 0): SessionListRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getSessionList(limit = 50, offset = 0): Promise<SessionListRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT
         s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
         COUNT(o.id) AS observation_count,
-        GROUP_CONCAT(DISTINCT o.vendor_canonical_id) AS vendors
+        string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
       FROM sessions s
       LEFT JOIN observations o ON s.id = o.session_id
       GROUP BY s.id
       ORDER BY s.started_at DESC
-      LIMIT ? OFFSET ?
-    `).all(limit, offset) as SessionListRow[];
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+    return rows.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      source_platform: r.source_platform as string,
+      model_id: r.model_id as string | null,
+      started_at: r.started_at as string,
+      cwd: r.cwd as string | null,
+      turn_count: Number(r.turn_count),
+      observation_count: Number(r.observation_count),
+      vendors: (r.vendors as string) || "",
+    }));
   } catch { return []; }
 }
 
@@ -214,42 +235,47 @@ export interface SessionDetail {
   toolActions: Array<{ tool_name: string; command_or_path: string | null; vendor_canonical_id: string | null; action_type: string | null; success: number | null; timestamp: string }>;
 }
 
-export function getSessionDetail(id: string): SessionDetail | null {
-  const db = getDb();
-  if (!db) return null;
+export async function getSessionDetail(id: string): Promise<SessionDetail | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(id) as SessionDetail["session"] | undefined;
+    const sessionResult = await pool.query("SELECT * FROM sessions WHERE id = $1", [id]);
+    const session = sessionResult.rows[0] as SessionDetail["session"] | undefined;
     if (!session) return null;
-    const observations = db.prepare("SELECT vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, timestamp FROM observations WHERE session_id = ? ORDER BY timestamp").all(id) as SessionDetail["observations"];
-    const toolActions = db.prepare("SELECT tool_name, command_or_path, vendor_canonical_id, action_type, success, timestamp FROM tool_actions WHERE session_id = ? ORDER BY timestamp").all(id) as SessionDetail["toolActions"];
-    return { session, observations, toolActions };
+    const obsResult = await pool.query("SELECT vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, timestamp FROM observations WHERE session_id = $1 ORDER BY timestamp", [id]);
+    const toolResult = await pool.query("SELECT tool_name, command_or_path, vendor_canonical_id, action_type, success, timestamp FROM tool_actions WHERE session_id = $1 ORDER BY timestamp", [id]);
+    return { session, observations: obsResult.rows as SessionDetail["observations"], toolActions: toolResult.rows as SessionDetail["toolActions"] };
   } catch { return null; }
 }
 
 // ── Top Vendors (for dashboard) ─────────────────────────────────────
 
-export function getTopVendors(limit = 10): Array<{ vendor_canonical_id: string; count: number }> {
-  const db = getDb();
-  if (!db) return [];
+export async function getTopVendors(limit = 10): Promise<Array<{ vendor_canonical_id: string; count: number }>> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT vendor_canonical_id, COUNT(*) AS count
       FROM observations
       GROUP BY vendor_canonical_id
       ORDER BY count DESC
-      LIMIT ?
-    `).all(limit) as Array<{ vendor_canonical_id: string; count: number }>;
+      LIMIT $1
+    `, [limit]);
+    return rows.map((r: Record<string, unknown>) => ({
+      vendor_canonical_id: r.vendor_canonical_id as string,
+      count: Number(r.count),
+    }));
   } catch { return []; }
 }
 
 // ── Categories ──────────────────────────────────────────────────────
 
-export function getCategories(): string[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getCategories(): Promise<string[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    const rows = db.prepare("SELECT DISTINCT work_category FROM observations WHERE work_category IS NOT NULL ORDER BY work_category").all() as Array<{ work_category: string }>;
-    return rows.map(r => r.work_category);
+    const { rows } = await pool.query("SELECT DISTINCT work_category FROM observations WHERE work_category IS NOT NULL ORDER BY work_category");
+    return rows.map((r: { work_category: string }) => r.work_category);
   } catch { return []; }
 }
 
@@ -266,20 +292,28 @@ export interface BenchmarkRunRow {
   vendors: string;
 }
 
-export function getBenchmarkSessions(limit = 100): BenchmarkRunRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getBenchmarkSessions(limit = 100): Promise<BenchmarkRunRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    const cols = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
-    if (!cols.some(c => c.name === "is_benchmark")) return [];
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
         COUNT(o.id) AS observation_count,
-        GROUP_CONCAT(DISTINCT o.vendor_canonical_id) AS vendors
+        string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
       FROM sessions s LEFT JOIN observations o ON s.id = o.session_id
       WHERE s.is_benchmark = 1
-      GROUP BY s.id ORDER BY s.started_at DESC LIMIT ?
-    `).all(limit) as BenchmarkRunRow[];
+      GROUP BY s.id ORDER BY s.started_at DESC LIMIT $1
+    `, [limit]);
+    return rows.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      source_platform: r.source_platform as string,
+      model_id: r.model_id as string | null,
+      started_at: r.started_at as string,
+      cwd: r.cwd as string | null,
+      turn_count: Number(r.turn_count),
+      observation_count: Number(r.observation_count),
+      vendors: (r.vendors as string) || "",
+    }));
   } catch { return []; }
 }
 
@@ -291,13 +325,11 @@ export interface BenchmarkVendorCompRow {
   total: number;
 }
 
-export function getBenchmarkVendorComparison(): BenchmarkVendorCompRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getBenchmarkVendorComparison(): Promise<BenchmarkVendorCompRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    const cols = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
-    if (!cols.some(c => c.name === "is_benchmark")) return [];
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT o.vendor_canonical_id,
         SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) AS claude_code_count,
         SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) AS codex_cli_count,
@@ -306,31 +338,31 @@ export function getBenchmarkVendorComparison(): BenchmarkVendorCompRow[] {
       FROM observations o JOIN sessions s ON o.session_id = s.id
       WHERE s.is_benchmark = 1
       GROUP BY o.vendor_canonical_id ORDER BY total DESC
-    `).all() as BenchmarkVendorCompRow[];
+    `);
+    return rows.map((r: Record<string, unknown>) => ({
+      vendor_canonical_id: r.vendor_canonical_id as string,
+      claude_code_count: Number(r.claude_code_count),
+      codex_cli_count: Number(r.codex_cli_count),
+      cursor_count: Number(r.cursor_count),
+      total: Number(r.total),
+    }));
   } catch { return []; }
 }
 
-export function getBenchmarkStats() {
-  const db = getDb();
-  if (!db) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
+export async function getBenchmarkStats() {
+  const pool = getPool();
+  if (!pool) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
   try {
-    const cols = db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
-    if (!cols.some(c => c.name === "is_benchmark")) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} };
-    const sessions = (db.prepare("SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = 1").get() as { c: number }).c;
-    const observations = (db.prepare("SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = 1)").get() as { c: number }).c;
-    const platforms = db.prepare("SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = 1 GROUP BY source_platform").all() as Array<{ source_platform: string; c: number }>;
+    const sessions = (await pool.query("SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = 1")).rows[0] as { c: string };
+    const observations = (await pool.query("SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = 1)")).rows[0] as { c: string };
+    const { rows: platforms } = await pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = 1 GROUP BY source_platform");
     const platformBreakdown: Record<string, number> = {};
-    for (const p of platforms) platformBreakdown[p.source_platform] = p.c;
-    return { totalBenchmarkSessions: sessions, totalBenchmarkObservations: observations, platformBreakdown };
+    for (const p of platforms as Array<{ source_platform: string; c: string }>) platformBreakdown[p.source_platform] = Number(p.c);
+    return { totalBenchmarkSessions: Number(sessions.c), totalBenchmarkObservations: Number(observations.c), platformBreakdown };
   } catch { return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} }; }
 }
 
 // ── Enrichment: Prompt Metadata ────────────────────────────────────
-
-function hasTable(db: import("better-sqlite3").Database, name: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) as { name: string } | undefined;
-  return !!row;
-}
 
 export interface PromptMetadataWebRow {
   prompt_id: string;
@@ -343,21 +375,23 @@ export interface PromptMetadataWebRow {
   vendors_named_in_prompt: string;
 }
 
-export function getPromptMetadata(): PromptMetadataWebRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getPromptMetadata(): Promise<PromptMetadataWebRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "prompt_metadata")) return [];
-    return db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataWebRow[];
+    if (!(await hasTable(pool, "prompt_metadata"))) return [];
+    const { rows } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
+    return rows as PromptMetadataWebRow[];
   } catch { return []; }
 }
 
-export function getPromptMetadataById(promptId: string): PromptMetadataWebRow | null {
-  const db = getDb();
-  if (!db) return null;
+export async function getPromptMetadataById(promptId: string): Promise<PromptMetadataWebRow | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "prompt_metadata")) return null;
-    return (db.prepare("SELECT * FROM prompt_metadata WHERE prompt_id = ?").get(promptId) as PromptMetadataWebRow) || null;
+    if (!(await hasTable(pool, "prompt_metadata"))) return null;
+    const { rows } = await pool.query("SELECT * FROM prompt_metadata WHERE prompt_id = $1", [promptId]);
+    return (rows[0] as PromptMetadataWebRow) ?? null;
   } catch { return null; }
 }
 
@@ -377,27 +411,29 @@ export interface ResponseContextWebRow {
   extracted_at: string;
 }
 
-export function getResponseContextByPrompt(promptId: string): ResponseContextWebRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getResponseContextByPrompt(promptId: string): Promise<(ResponseContextWebRow & { source_platform: string })[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context")) return [];
-    return db.prepare(`
+    if (!(await hasTable(pool, "response_context"))) return [];
+    const { rows } = await pool.query(`
       SELECT rc.*, s.source_platform
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
-      WHERE rc.prompt_id = ?
+      WHERE rc.prompt_id = $1
       ORDER BY rc.extracted_at DESC
-    `).all(promptId) as (ResponseContextWebRow & { source_platform: string })[];
+    `, [promptId]);
+    return rows as (ResponseContextWebRow & { source_platform: string })[];
   } catch { return []; }
 }
 
-export function getResponseContextBySession(sessionId: string): ResponseContextWebRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getResponseContextBySession(sessionId: string): Promise<ResponseContextWebRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context")) return [];
-    return db.prepare("SELECT * FROM response_context WHERE session_id = ?").all(sessionId) as ResponseContextWebRow[];
+    if (!(await hasTable(pool, "response_context"))) return [];
+    const { rows } = await pool.query("SELECT * FROM response_context WHERE session_id = $1", [sessionId]);
+    return rows as ResponseContextWebRow[];
   } catch { return []; }
 }
 
@@ -408,35 +444,36 @@ export interface PrimaryVendorCountRow {
   count: number;
 }
 
-export function getPrimaryVendorCounts(filters?: {
+export async function getPrimaryVendorCounts(filters?: {
   category?: string;
   platform?: string;
   contentTag?: string;
   patternTag?: string;
-}): PrimaryVendorCountRow[] {
-  const db = getDb();
-  if (!db) return [];
+}): Promise<PrimaryVendorCountRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
     let where = "rc.primary_vendor IS NOT NULL";
     const params: string[] = [];
+    let paramIdx = 1;
     if (filters?.category) {
-      where += " AND pm.category = ?";
+      where += ` AND pm.category = $${paramIdx++}`;
       params.push(filters.category);
     }
     if (filters?.platform) {
-      where += " AND s.source_platform = ?";
+      where += ` AND s.source_platform = $${paramIdx++}`;
       params.push(filters.platform);
     }
     if (filters?.contentTag) {
-      where += " AND pm.content_tags LIKE ?";
+      where += ` AND pm.content_tags LIKE $${paramIdx++}`;
       params.push(`%"${filters.contentTag}"%`);
     }
     if (filters?.patternTag) {
-      where += " AND pm.pattern_tags LIKE ?";
+      where += ` AND pm.pattern_tags LIKE $${paramIdx++}`;
       params.push(`%"${filters.patternTag}"%`);
     }
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT rc.primary_vendor, COUNT(*) AS count
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
@@ -444,7 +481,11 @@ export function getPrimaryVendorCounts(filters?: {
       WHERE ${where}
       GROUP BY rc.primary_vendor
       ORDER BY count DESC
-    `).all(...params) as PrimaryVendorCountRow[];
+    `, params);
+    return rows.map((r: Record<string, unknown>) => ({
+      primary_vendor: r.primary_vendor as string,
+      count: Number(r.count),
+    }));
   } catch { return []; }
 }
 
@@ -457,45 +498,42 @@ export interface ConstraintCoverageRow {
   coverage_pct: number;
 }
 
-export function getConstraintCoverage(promptId?: string): ConstraintCoverageRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getConstraintCoverage(promptId?: string): Promise<ConstraintCoverageRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
 
-    // Get all prompt constraints and their coverage from response_context
     let metaQuery = "SELECT prompt_id, constraints FROM prompt_metadata";
     const metaParams: string[] = [];
     if (promptId) {
-      metaQuery += " WHERE prompt_id = ?";
+      metaQuery += " WHERE prompt_id = $1";
       metaParams.push(promptId);
     }
-    const metas = db.prepare(metaQuery).all(...metaParams) as Array<{ prompt_id: string; constraints: string }>;
+    const { rows: metas } = await pool.query(metaQuery, metaParams);
 
     let rcQuery = "SELECT prompt_id, constraints_addressed FROM response_context";
     const rcParams: string[] = [];
     if (promptId) {
-      rcQuery += " WHERE prompt_id = ?";
+      rcQuery += " WHERE prompt_id = $1";
       rcParams.push(promptId);
     }
-    const contexts = db.prepare(rcQuery).all(...rcParams) as Array<{ prompt_id: string; constraints_addressed: string }>;
+    const { rows: contexts } = await pool.query(rcQuery, rcParams);
 
-    // Build constraint → coverage map
     const constraintTotals = new Map<string, number>();
     const constraintAddressed = new Map<string, number>();
 
-    for (const meta of metas) {
+    for (const meta of metas as Array<{ prompt_id: string; constraints: string }>) {
       try {
         const constraints = JSON.parse(meta.constraints) as string[];
-        // Count how many response_context rows exist for this prompt
-        const responseCount = contexts.filter(c => c.prompt_id === meta.prompt_id).length;
+        const responseCount = (contexts as Array<{ prompt_id: string }>).filter(c => c.prompt_id === meta.prompt_id).length;
         for (const c of constraints) {
           constraintTotals.set(c, (constraintTotals.get(c) || 0) + responseCount);
         }
       } catch { /* skip bad JSON */ }
     }
 
-    for (const ctx of contexts) {
+    for (const ctx of contexts as Array<{ prompt_id: string; constraints_addressed: string }>) {
       try {
         const addressed = JSON.parse(ctx.constraints_addressed) as string[];
         for (const c of addressed) {
@@ -533,19 +571,19 @@ export interface PromptEnrichmentSummary {
   implementation_rate: number;
 }
 
-export function getPromptEnrichmentSummaries(): PromptEnrichmentSummary[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getPromptEnrichmentSummaries(): Promise<PromptEnrichmentSummary[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
 
-    const metas = db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataWebRow[];
-    const allContexts = db.prepare("SELECT * FROM response_context").all() as ResponseContextWebRow[];
+    const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
+    const { rows: allContexts } = await pool.query("SELECT * FROM response_context");
 
     const results: PromptEnrichmentSummary[] = [];
 
-    for (const meta of metas) {
-      const contexts = allContexts.filter(c => c.prompt_id === meta.prompt_id);
+    for (const meta of metas as PromptMetadataWebRow[]) {
+      const contexts = (allContexts as ResponseContextWebRow[]).filter(c => c.prompt_id === meta.prompt_id);
       const constraints = safeJsonParse<string[]>(meta.constraints, []);
       const vendorCounts: Record<string, number> = {};
       let totalConstraintsCovered = 0;
@@ -575,11 +613,6 @@ export function getPromptEnrichmentSummaries(): PromptEnrichmentSummary[] {
 
     return results;
   } catch { return []; }
-}
-
-export function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
-  if (!json) return fallback;
-  try { return JSON.parse(json) as T; } catch { return fallback; }
 }
 
 // ── Vendor Intelligence ─────────────────────────────────────────────
@@ -623,28 +656,28 @@ export interface VendorScorecard {
   allPromptConstraints: Record<string, string[]>;
 }
 
-export function getVendorScorecard(vendor: string): VendorScorecard | null {
-  const db = getDb();
-  if (!db) return null;
+export async function getVendorScorecard(vendor: string): Promise<VendorScorecard | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return null;
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
 
-    // All responses where this vendor is mentioned in vendors_mentioned JSON or is primary_vendor
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.*, s.source_platform, pm.category, pm.constraints
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
-    `).all() as Array<ResponseContextWebRow & { source_platform: string; category: string; constraints: string }>;
+    `);
 
-    // Find all responses mentioning this vendor
-    const mentionedIn: typeof allResponses = [];
-    const recommendedIn: typeof allResponses = [];
-    const rejectedIn: typeof allResponses = [];
-    const comparedIn: typeof allResponses = [];
+    type ResponseRow = ResponseContextWebRow & { source_platform: string; category: string; constraints: string };
+
+    const mentionedIn: ResponseRow[] = [];
+    const recommendedIn: ResponseRow[] = [];
+    const rejectedIn: ResponseRow[] = [];
+    const comparedIn: ResponseRow[] = [];
     let implementedCount = 0;
 
-    for (const r of allResponses) {
+    for (const r of allResponses as ResponseRow[]) {
       const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
       const vendorEntry = vendors.find(v => v.vendor === vendor);
       const isPrimary = r.primary_vendor === vendor;
@@ -706,7 +739,7 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       .map(([constraint, count]) => ({ constraint, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Constraints missed (constraints in prompts where this vendor was mentioned but didn't win)
+    // Constraints missed
     const missedMap = new Map<string, number>();
     for (const r of mentionedIn) {
       if (r.primary_vendor !== vendor) {
@@ -720,7 +753,7 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       .map(([constraint, count]) => ({ constraint, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Competitor wins: who won when this vendor was mentioned but lost
+    // Competitor wins
     const competitorMap = new Map<string, { count: number; scenarios: Set<string> }>();
     for (const r of mentionedIn) {
       if (r.primary_vendor && r.primary_vendor !== vendor) {
@@ -736,15 +769,15 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       .sort((a, b) => b.count - a.count);
 
     // Snippets
-    const tradeOffSnippets = allResponses
+    const tradeOffSnippets = (allResponses as ResponseRow[])
       .filter(r => r.primary_vendor === vendor && r.trade_offs_snippet)
       .map(r => r.trade_offs_snippet!)
       .filter(s => s.length > 5);
-    const gotchaSnippets = allResponses
+    const gotchaSnippets = (allResponses as ResponseRow[])
       .filter(r => r.primary_vendor === vendor && r.gotchas_snippet)
       .map(r => r.gotchas_snippet!)
       .filter(s => s.length > 5);
-    const rationaleSnippets = allResponses
+    const rationaleSnippets = (allResponses as ResponseRow[])
       .filter(r => r.primary_vendor === vendor && r.rationale_snippet)
       .map(r => r.rationale_snippet!)
       .filter(s => s.length > 5);
@@ -758,12 +791,11 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       }
     }
 
-    // Loss context: for each loss, capture the winner's constraints and the prompt's constraints
+    // Loss context
     const lossContext: VendorScorecard["lossContext"] = [];
     for (const r of mentionedIn) {
       if (r.primary_vendor && r.primary_vendor !== vendor) {
-        // Find the winner's response to get their constraints_addressed
-        const winnerResponse = allResponses.find(
+        const winnerResponse = (allResponses as ResponseRow[]).find(
           wr => wr.prompt_id === r.prompt_id && wr.primary_vendor === r.primary_vendor
         );
         const winnerConstraints = winnerResponse
@@ -780,7 +812,7 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       }
     }
 
-    // Implementation context: for each recommendation, track implementation status
+    // Implementation context
     const implementationContext: VendorScorecard["implementationContext"] = [];
     for (const r of recommendedIn) {
       implementationContext.push({
@@ -791,7 +823,7 @@ export function getVendorScorecard(vendor: string): VendorScorecard | null {
       });
     }
 
-    // All prompt constraints: map prompt_id → constraints for all mentioned prompts
+    // All prompt constraints
     const allPromptConstraints: Record<string, string[]> = {};
     for (const r of mentionedIn) {
       if (!allPromptConstraints[r.prompt_id]) {
@@ -832,25 +864,19 @@ export interface VendorListItem {
   platforms: string[];
 }
 
-export function getAllVendorNames(): VendorListItem[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getAllVendorNames(): Promise<VendorListItem[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
 
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.is_implemented,
              s.source_platform, pm.category
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
-    `).all() as Array<{
-      primary_vendor: string | null;
-      vendors_mentioned: string;
-      is_implemented: number;
-      source_platform: string;
-      category: string;
-    }>;
+    `);
 
     const vendorMap = new Map<string, {
       recommendations: number;
@@ -867,8 +893,13 @@ export function getAllVendorNames(): VendorListItem[] {
       return vendorMap.get(v)!;
     }
 
-    for (const r of allResponses) {
-      // Track primary vendor
+    for (const r of allResponses as Array<{
+      primary_vendor: string | null;
+      vendors_mentioned: string;
+      is_implemented: number;
+      source_platform: string;
+      category: string;
+    }>) {
       if (r.primary_vendor) {
         const entry = ensureVendor(r.primary_vendor);
         entry.recommendations++;
@@ -880,10 +911,9 @@ export function getAllVendorNames(): VendorListItem[] {
         if (r.is_implemented) entry.implementations++;
       }
 
-      // Track all mentioned vendors
       const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
       for (const v of vendors) {
-        if (v.vendor === r.primary_vendor) continue; // already counted
+        if (v.vendor === r.primary_vendor) continue;
         const entry = ensureVendor(v.vendor);
         entry.mentions++;
         entry.platforms.add(r.source_platform);
@@ -922,30 +952,30 @@ export interface HeadToHeadResult {
   ties: number;
 }
 
-export function getVendorHeadToHead(vendorA: string, vendorB: string): HeadToHeadResult {
-  const db = getDb();
+export async function getVendorHeadToHead(vendorA: string, vendorB: string): Promise<HeadToHeadResult> {
+  const pool = getPool();
   const empty: HeadToHeadResult = { vendorA, vendorB, scenarios: [], aWins: 0, bWins: 0, ties: 0 };
-  if (!db) return empty;
+  if (!pool) return empty;
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return empty;
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return empty;
 
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.prompt_id, rc.primary_vendor, rc.vendors_mentioned, rc.rationale_snippet,
              pm.category
       FROM response_context rc
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
-    `).all() as Array<{
+    `);
+
+    const scenarios: HeadToHeadResult["scenarios"] = [];
+    let aWins = 0, bWins = 0, ties = 0;
+
+    for (const r of allResponses as Array<{
       prompt_id: string;
       primary_vendor: string | null;
       vendors_mentioned: string;
       rationale_snippet: string | null;
       category: string;
-    }>;
-
-    const scenarios: HeadToHeadResult["scenarios"] = [];
-    let aWins = 0, bWins = 0, ties = 0;
-
-    for (const r of allResponses) {
+    }>) {
       const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
       const allVendors = new Set([r.primary_vendor, ...vendors.map(v => v.vendor)].filter(Boolean));
 
@@ -980,8 +1010,8 @@ export interface CategorySummary {
   total_constraints: number;
 }
 
-export function getCategorySummaries(): CategorySummary[] {
-  const summaries = getPromptEnrichmentSummaries();
+export async function getCategorySummaries(): Promise<CategorySummary[]> {
+  const summaries = await getPromptEnrichmentSummaries();
   if (summaries.length === 0) return [];
 
   const catMap = new Map<string, {
@@ -1034,39 +1064,41 @@ export interface CategoryDetail {
   constraintCoverage: ConstraintCoverageRow[];
 }
 
-export function getEnrichmentByCategory(category: string): CategoryDetail {
-  const allSummaries = getPromptEnrichmentSummaries();
+export async function getEnrichmentByCategory(category: string): Promise<CategoryDetail> {
+  const allSummaries = await getPromptEnrichmentSummaries();
   const prompts = allSummaries.filter(s => s.category === category);
 
-  const db = getDb();
-  if (!db || prompts.length === 0) {
+  const pool = getPool();
+  if (!pool || prompts.length === 0) {
     return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
   }
 
   try {
-    if (!hasTable(db, "prompt_metadata") || !hasTable(db, "response_context")) {
+    if (!(await hasTable(pool, "prompt_metadata")) || !(await hasTable(pool, "response_context"))) {
       return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
     }
 
     const promptIds = prompts.map(p => p.prompt_id);
-    const placeholders = promptIds.map(() => "?").join(",");
+    const placeholders = promptIds.map((_, i) => `$${i + 1}`).join(",");
 
-    const promptMetadata = db.prepare(
-      `SELECT * FROM prompt_metadata WHERE category = ? ORDER BY prompt_id`
-    ).all(category) as PromptMetadataWebRow[];
+    const { rows: promptMetadata } = await pool.query(
+      `SELECT * FROM prompt_metadata WHERE category = $1 ORDER BY prompt_id`,
+      [category],
+    );
 
-    const responses = db.prepare(
+    const { rows: responses } = await pool.query(
       `SELECT rc.*, s.source_platform
        FROM response_context rc
        JOIN sessions s ON rc.session_id = s.id
        WHERE rc.prompt_id IN (${placeholders})
-       ORDER BY rc.prompt_id, s.source_platform`
-    ).all(...promptIds) as (ResponseContextWebRow & { source_platform: string })[];
+       ORDER BY rc.prompt_id, s.source_platform`,
+      promptIds,
+    );
 
-    const vendorCounts = getPrimaryVendorCounts({ category });
-    const constraintCoverage = getConstraintCoverageForCategory(category, promptMetadata, responses);
+    const vendorCounts = await getPrimaryVendorCounts({ category });
+    const constraintCoverage = getConstraintCoverageForCategory(category, promptMetadata as PromptMetadataWebRow[], responses as ResponseContextWebRow[]);
 
-    return { prompts, promptMetadata, responses, vendorCounts, constraintCoverage };
+    return { prompts, promptMetadata: promptMetadata as PromptMetadataWebRow[], responses: responses as (ResponseContextWebRow & { source_platform: string })[], vendorCounts, constraintCoverage };
   } catch {
     return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
   }
@@ -1075,7 +1107,7 @@ export function getEnrichmentByCategory(category: string): CategoryDetail {
 // ── Temporal Trends ─────────────────────────────────────────────────
 
 export interface TrendDataPoint {
-  weekStart: string;  // ISO date string (Monday of each week)
+  weekStart: string;
   recommendations: number;
   mentions: number;
   winRate: number;
@@ -1086,43 +1118,42 @@ export interface VendorTrend {
   dataPoints: TrendDataPoint[];
   currentWinRate: number;
   previousWinRate: number;
-  winRateDelta: number;   // positive = gaining, negative = losing
+  winRateDelta: number;
   currentMentions: number;
   previousMentions: number;
   mentionDelta: number;
   trend: "rising" | "falling" | "stable";
 }
 
-export function getVendorTrend(vendor: string, windowDays = 60): VendorTrend | null {
-  const db = getDb();
-  if (!db) return null;
+export async function getVendorTrend(vendor: string, windowDays = 60): Promise<VendorTrend | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return null;
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
 
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.extracted_at,
              s.started_at, s.source_platform
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
-      WHERE rc.extracted_at >= date('now', '-${windowDays} days')
-         OR s.started_at >= date('now', '-${windowDays} days')
-    `).all() as Array<{
+      WHERE rc.extracted_at >= (NOW() - $1::interval)::text
+         OR s.started_at >= (NOW() - $1::interval)::text
+    `, [`${windowDays} days`]);
+
+    // Group by week
+    const weekMap = new Map<string, { recommendations: number; mentions: number }>();
+
+    for (const r of allResponses as Array<{
       primary_vendor: string | null;
       vendors_mentioned: string;
       extracted_at: string;
       started_at: string;
       source_platform: string;
-    }>;
-
-    // Group by week
-    const weekMap = new Map<string, { recommendations: number; mentions: number }>();
-
-    for (const r of allResponses) {
+    }>) {
       const dateStr = r.extracted_at || r.started_at;
       if (!dateStr) continue;
 
       const date = new Date(dateStr);
-      // Get Monday of the week
       const day = date.getDay();
       const monday = new Date(date);
       monday.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
@@ -1151,7 +1182,6 @@ export function getVendorTrend(vendor: string, windowDays = 60): VendorTrend | n
 
     if (dataPoints.length === 0) return null;
 
-    // Compute trend: compare first half vs second half
     const mid = Math.ceil(dataPoints.length / 2);
     const firstHalf = dataPoints.slice(0, mid);
     const secondHalf = dataPoints.slice(mid);
@@ -1187,37 +1217,34 @@ export function getVendorTrend(vendor: string, windowDays = 60): VendorTrend | n
   } catch { return null; }
 }
 
-export function getAllVendorTrends(): VendorTrend[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getAllVendorTrends(): Promise<VendorTrend[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context")) return [];
+    if (!(await hasTable(pool, "response_context"))) return [];
 
-    // Get all vendors mentioned in response_context
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.extracted_at,
              s.started_at
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
-    `).all() as Array<{
+    `);
+
+    const vendorSet = new Set<string>();
+    for (const r of allResponses as Array<{
       primary_vendor: string | null;
       vendors_mentioned: string;
       extracted_at: string;
       started_at: string;
-    }>;
-
-    // Collect all unique vendors
-    const vendorSet = new Set<string>();
-    for (const r of allResponses) {
+    }>) {
       if (r.primary_vendor) vendorSet.add(r.primary_vendor);
       const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
       for (const v of vendors) vendorSet.add(v.vendor);
     }
 
-    // Compute trends for each vendor
     const trends: VendorTrend[] = [];
     for (const vendor of vendorSet) {
-      const trend = getVendorTrend(vendor);
+      const trend = await getVendorTrend(vendor);
       if (trend && trend.dataPoints.length > 0) {
         trends.push(trend);
       }
@@ -1239,26 +1266,26 @@ export interface PromptLeaderboardRow {
   implementation_rate: number;
   avg_constraints_covered: number;
   total_constraints: number;
-  is_contested: boolean;     // no single vendor > 50%
-  is_dominated: boolean;     // one vendor wins 100%
+  is_contested: boolean;
+  is_dominated: boolean;
   content_tags: string[];
   pattern_tags: string[];
   constraints: string[];
 }
 
-export function getPromptLeaderboard(): PromptLeaderboardRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getPromptLeaderboard(): Promise<PromptLeaderboardRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
 
-    const metas = db.prepare("SELECT * FROM prompt_metadata ORDER BY prompt_id").all() as PromptMetadataWebRow[];
-    const allContexts = db.prepare("SELECT * FROM response_context").all() as ResponseContextWebRow[];
+    const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
+    const { rows: allContexts } = await pool.query("SELECT * FROM response_context");
 
     const results: PromptLeaderboardRow[] = [];
 
-    for (const meta of metas) {
-      const contexts = allContexts.filter(c => c.prompt_id === meta.prompt_id);
+    for (const meta of metas as PromptMetadataWebRow[]) {
+      const contexts = (allContexts as ResponseContextWebRow[]).filter(c => c.prompt_id === meta.prompt_id);
       if (contexts.length === 0) continue;
 
       const constraints = safeJsonParse<string[]>(meta.constraints, []);
@@ -1271,7 +1298,6 @@ export function getPromptLeaderboard(): PromptLeaderboardRow[] {
         if (ctx.primary_vendor) {
           vendorCounts[ctx.primary_vendor] = (vendorCounts[ctx.primary_vendor] || 0) + 1;
         }
-        // Track all mentioned vendors
         const vendors = safeJsonParse<Array<{ vendor: string }>>(ctx.vendors_mentioned, []);
         for (const v of vendors) vendorSet.add(v.vendor);
         if (ctx.primary_vendor) vendorSet.add(ctx.primary_vendor);
@@ -1310,21 +1336,21 @@ export function getPromptLeaderboard(): PromptLeaderboardRow[] {
 
 export interface ConstraintDemandRow {
   constraint: string;
-  prompt_count: number;        // how many prompts require it
-  response_count: number;      // how many responses faced it
-  coverage_rate: number;       // how often it's addressed
-  top_vendor: string | null;   // vendor that addresses it most
+  prompt_count: number;
+  response_count: number;
+  coverage_rate: number;
+  top_vendor: string | null;
   top_vendor_count: number;
 }
 
-export function getConstraintDemand(): ConstraintDemandRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getConstraintDemand(): Promise<ConstraintDemandRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return [];
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
 
-    const metas = db.prepare("SELECT * FROM prompt_metadata").all() as PromptMetadataWebRow[];
-    const allContexts = db.prepare("SELECT * FROM response_context").all() as ResponseContextWebRow[];
+    const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata");
+    const { rows: allContexts } = await pool.query("SELECT * FROM response_context");
 
     const constraintMap = new Map<string, {
       promptIds: Set<string>;
@@ -1333,10 +1359,9 @@ export function getConstraintDemand(): ConstraintDemandRow[] {
       vendorAddressed: Map<string, number>;
     }>();
 
-    // Count how many prompts each constraint appears in
-    for (const meta of metas) {
+    for (const meta of metas as PromptMetadataWebRow[]) {
       const constraints = safeJsonParse<string[]>(meta.constraints, []);
-      const contexts = allContexts.filter(c => c.prompt_id === meta.prompt_id);
+      const contexts = (allContexts as ResponseContextWebRow[]).filter(c => c.prompt_id === meta.prompt_id);
 
       for (const c of constraints) {
         if (!constraintMap.has(c)) {
@@ -1348,8 +1373,7 @@ export function getConstraintDemand(): ConstraintDemandRow[] {
       }
     }
 
-    // Count how often each constraint is addressed
-    for (const ctx of allContexts) {
+    for (const ctx of allContexts as ResponseContextWebRow[]) {
       const addressed = safeJsonParse<string[]>(ctx.constraints_addressed, []);
       for (const c of addressed) {
         const entry = constraintMap.get(c);
@@ -1397,13 +1421,13 @@ export interface IntentVendorRow {
   win_rate: number;
 }
 
-export function getIntentDistribution(): IntentDistributionRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getIntentDistribution(): Promise<IntentDistributionRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "prompt_intents")) return [];
+    if (!(await hasTable(pool, "prompt_intents"))) return [];
 
-    const rows = db.prepare(`
+    const { rows } = await pool.query(`
       SELECT
         pi.intent,
         COUNT(*) AS count,
@@ -1412,35 +1436,34 @@ export function getIntentDistribution(): IntentDistributionRow[] {
       WHERE pi.intent != 'unknown'
       GROUP BY pi.intent
       ORDER BY count DESC
-    `).all() as Array<{ intent: string; count: number; avg_confidence: number }>;
+    `);
 
-    const total = rows.reduce((s, r) => s + r.count, 0);
+    const total = (rows as Array<{ count: string }>).reduce((s, r) => s + Number(r.count), 0);
 
-    // For each intent, find the top vendor
     const results: IntentDistributionRow[] = [];
-    for (const row of rows) {
+    for (const row of rows as Array<{ intent: string; count: string; avg_confidence: number }>) {
       let topVendor: string | null = null;
       let topVendorCount = 0;
       try {
-        const vendorRow = db.prepare(`
+        const vendorResult = await pool.query(`
           SELECT rc.primary_vendor, COUNT(*) AS cnt
           FROM prompt_intents pi
           JOIN response_context rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
-          WHERE pi.intent = ? AND rc.primary_vendor IS NOT NULL
+          WHERE pi.intent = $1 AND rc.primary_vendor IS NOT NULL
           GROUP BY rc.primary_vendor
           ORDER BY cnt DESC
           LIMIT 1
-        `).get(row.intent) as { primary_vendor: string; cnt: number } | undefined;
-        if (vendorRow) {
-          topVendor = vendorRow.primary_vendor;
-          topVendorCount = vendorRow.cnt;
+        `, [row.intent]);
+        if (vendorResult.rows[0]) {
+          topVendor = (vendorResult.rows[0] as { primary_vendor: string }).primary_vendor;
+          topVendorCount = Number((vendorResult.rows[0] as { cnt: string }).cnt);
         }
       } catch { /* join may fail if tables misaligned */ }
 
       results.push({
         intent: row.intent,
-        count: row.count,
-        pct: total > 0 ? row.count / total : 0,
+        count: Number(row.count),
+        pct: total > 0 ? Number(row.count) / total : 0,
         avg_confidence: row.avg_confidence,
         top_vendor: topVendor,
         top_vendor_count: topVendorCount,
@@ -1451,13 +1474,13 @@ export function getIntentDistribution(): IntentDistributionRow[] {
   } catch { return []; }
 }
 
-export function getIntentVendorMatrix(): IntentVendorRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getIntentVendorMatrix(): Promise<IntentVendorRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "prompt_intents") || !hasTable(db, "response_context")) return [];
+    if (!(await hasTable(pool, "prompt_intents")) || !(await hasTable(pool, "response_context"))) return [];
 
-    const rows = db.prepare(`
+    const { rows } = await pool.query(`
       SELECT
         pi.intent,
         rc.primary_vendor AS vendor,
@@ -1470,16 +1493,19 @@ export function getIntentVendorMatrix(): IntentVendorRow[] {
       WHERE pi.intent != 'unknown' AND rc.primary_vendor IS NOT NULL
       GROUP BY pi.intent, rc.primary_vendor
       ORDER BY pi.intent, wins DESC
-    `).all() as Array<{ intent: string; vendor: string; wins: number; total: number }>;
+    `);
 
-    return rows.map((r) => ({
-      ...r,
-      win_rate: r.total > 0 ? r.wins / r.total : 0,
+    return (rows as Array<{ intent: string; vendor: string; wins: string; total: string }>).map((r) => ({
+      intent: r.intent,
+      vendor: r.vendor,
+      wins: Number(r.wins),
+      total: Number(r.total),
+      win_rate: Number(r.total) > 0 ? Number(r.wins) / Number(r.total) : 0,
     }));
   } catch { return []; }
 }
 
-// ── FTS5 Search ──────────────────────────────────────────────────────
+// ── FTS Search ──────────────────────────────────────────────────────
 
 export interface SearchResult {
   source_type: string;
@@ -1492,48 +1518,50 @@ export interface SearchResult {
   rank: number;
 }
 
-export function searchCorpus(
+export async function searchCorpus(
   query: string,
   filters?: { vendor?: string; category?: string; platform?: string; sourceType?: string },
   limit = 20,
-): SearchResult[] {
-  const db = getDb();
-  if (!db) return [];
+): Promise<SearchResult[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "search_index")) return [];
+    if (!(await hasTable(pool, "search_index"))) return [];
 
-    let whereClause = "";
-    const params: (string | number)[] = [];
+    let whereClause = "tsv @@ plainto_tsquery('english', $1)";
+    const params: (string | number)[] = [query];
+    let paramIdx = 2;
 
     if (filters?.vendor) {
-      whereClause += " AND vendor = ?";
+      whereClause += ` AND vendor = $${paramIdx++}`;
       params.push(filters.vendor);
     }
     if (filters?.category) {
-      whereClause += " AND category = ?";
+      whereClause += ` AND category = $${paramIdx++}`;
       params.push(filters.category);
     }
     if (filters?.platform) {
-      whereClause += " AND platform = ?";
+      whereClause += ` AND platform = $${paramIdx++}`;
       params.push(filters.platform);
     }
     if (filters?.sourceType) {
-      whereClause += " AND source_type = ?";
+      whereClause += ` AND source_type = $${paramIdx++}`;
       params.push(filters.sourceType);
     }
 
     params.push(limit);
 
-    return db.prepare(`
+    const { rows } = await pool.query(`
       SELECT source_type, source_id, vendor, category, platform, prompt_id,
-             snippet(search_index, 6, '<mark>', '</mark>', '...', 40) AS snippet,
-             bm25(search_index) AS rank
+             ts_headline('english', text_content, plainto_tsquery('english', $1),
+               'StartSel=<mark>, StopSel=</mark>, MaxFragments=1') AS snippet,
+             ts_rank(tsv, plainto_tsquery('english', $1)) AS rank
       FROM search_index
-      WHERE search_index MATCH ?
-      ${whereClause}
-      ORDER BY rank
-      LIMIT ?
-    `).all(query, ...params) as SearchResult[];
+      WHERE ${whereClause}
+      ORDER BY rank DESC
+      LIMIT $${paramIdx}
+    `, params);
+    return rows as SearchResult[];
   } catch { return []; }
 }
 
@@ -1565,39 +1593,39 @@ export interface DriftInsight {
   isSignificant: boolean;
 }
 
-export function getDivergenceMatrix(): DivergenceInsight[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getDivergenceMatrix(): Promise<DivergenceInsight[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "cross_session_insights")) return [];
-    const rows = db.prepare(
+    if (!(await hasTable(pool, "cross_session_insights"))) return [];
+    const { rows } = await pool.query(
       "SELECT insight_data FROM cross_session_insights WHERE insight_type = 'divergence' ORDER BY generated_at DESC"
-    ).all() as Array<{ insight_data: string }>;
-    return rows.map((r) => safeJsonParse<DivergenceInsight>(r.insight_data, { promptId: "", platforms: {}, isDivergent: false, divergenceScore: 0 }));
+    );
+    return (rows as Array<{ insight_data: string }>).map((r) => safeJsonParse<DivergenceInsight>(r.insight_data, { promptId: "", platforms: {}, isDivergent: false, divergenceScore: 0 }));
   } catch { return []; }
 }
 
-export function getConstraintInfluence(): ConstraintInfluenceInsight[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getConstraintInfluence(): Promise<ConstraintInfluenceInsight[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "cross_session_insights")) return [];
-    const rows = db.prepare(
+    if (!(await hasTable(pool, "cross_session_insights"))) return [];
+    const { rows } = await pool.query(
       "SELECT insight_data FROM cross_session_insights WHERE insight_type = 'constraint_influence' ORDER BY generated_at DESC"
-    ).all() as Array<{ insight_data: string }>;
-    return rows.map((r) => safeJsonParse<ConstraintInfluenceInsight>(r.insight_data, { constraint: "", influenceScore: 0, vendorShifts: [] }));
+    );
+    return (rows as Array<{ insight_data: string }>).map((r) => safeJsonParse<ConstraintInfluenceInsight>(r.insight_data, { constraint: "", influenceScore: 0, vendorShifts: [] }));
   } catch { return []; }
 }
 
-export function getTemporalDrift(): DriftInsight[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getTemporalDrift(): Promise<DriftInsight[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "cross_session_insights")) return [];
-    const rows = db.prepare(
+    if (!(await hasTable(pool, "cross_session_insights"))) return [];
+    const { rows } = await pool.query(
       "SELECT insight_data FROM cross_session_insights WHERE insight_type = 'temporal_drift' ORDER BY generated_at DESC"
-    ).all() as Array<{ insight_data: string }>;
-    return rows.map((r) => safeJsonParse<DriftInsight>(r.insight_data, { vendor: "", earlyWinRate: 0, lateWinRate: 0, delta: 0, isSignificant: false }));
+    );
+    return (rows as Array<{ insight_data: string }>).map((r) => safeJsonParse<DriftInsight>(r.insight_data, { vendor: "", earlyWinRate: 0, lateWinRate: 0, delta: 0, isSignificant: false }));
   } catch { return []; }
 }
 
@@ -1615,20 +1643,21 @@ export interface DigestRow {
   }>;
 }
 
-export function getLatestDigests(limit = 5): DigestRow[] {
-  const db = getDb();
-  if (!db) return [];
+export async function getLatestDigests(limit = 5): Promise<DigestRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
   try {
-    if (!hasTable(db, "daily_digests")) return [];
-    const rows = db.prepare(
-      "SELECT * FROM daily_digests ORDER BY run_date DESC LIMIT ?"
-    ).all(limit) as Array<{
+    if (!(await hasTable(pool, "daily_digests"))) return [];
+    const { rows } = await pool.query(
+      "SELECT * FROM daily_digests ORDER BY run_date DESC LIMIT $1",
+      [limit],
+    );
+    return (rows as Array<{
       run_date: string;
       summary: string | null;
       significant_changes: string;
       alerts: string;
-    }>;
-    return rows.map((r) => ({
+    }>).map((r) => ({
       run_date: r.run_date,
       summary: r.summary,
       significant_changes: safeJsonParse<unknown[]>(r.significant_changes, []),

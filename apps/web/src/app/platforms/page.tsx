@@ -4,8 +4,8 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 
 export const dynamic = "force-dynamic";
 
-export default function PlatformsPage() {
-  const data = getPlatformComparison();
+export default async function PlatformsPage() {
+  const data = await getPlatformComparison();
 
   return (
     <div>

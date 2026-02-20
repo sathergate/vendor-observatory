@@ -119,7 +119,7 @@ function RecommendationCard({ rec, index }: { rec: Recommendation; index: number
 export default async function VendorScorecardPage({ params }: { params: Promise<{ vendor: string }> }) {
   const { vendor } = await params;
   const vendorId = decodeURIComponent(vendor);
-  const scorecard = getVendorScorecard(vendorId);
+  const scorecard = await getVendorScorecard(vendorId);
 
   if (!scorecard) {
     return (
@@ -140,11 +140,11 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
   const meta = VENDOR_META[vendorId];
   const recommendations = generateRecommendations(scorecard);
   const aiReadiness = computeAIReadinessScore(scorecard);
-  const trend = getVendorTrend(vendorId);
+  const trend = await getVendorTrend(vendorId);
 
   // Find top competitor for head-to-head
   const topCompetitor = scorecard.competitorWins[0];
-  const h2h = topCompetitor ? getVendorHeadToHead(vendorId, topCompetitor.competitor) : null;
+  const h2h = topCompetitor ? await getVendorHeadToHead(vendorId, topCompetitor.competitor) : null;
 
   return (
     <div className="space-y-8">

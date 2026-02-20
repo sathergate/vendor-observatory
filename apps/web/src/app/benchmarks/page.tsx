@@ -14,13 +14,13 @@ import { PROMPT_COUNTS } from "./prompt-summaries";
 
 export const dynamic = "force-dynamic";
 
-export default function BenchmarksPage() {
-  const stats = getBenchmarkStats();
-  const sessions = getBenchmarkSessions(50);
-  const vendorComp = getBenchmarkVendorComparison();
-  const dbCategories = getCategorySummaries();
-  const intentDist = getIntentDistribution();
-  const digests = getLatestDigests(3);
+export default async function BenchmarksPage() {
+  const stats = await getBenchmarkStats();
+  const sessions = await getBenchmarkSessions(50);
+  const vendorComp = await getBenchmarkVendorComparison();
+  const dbCategories = await getCategorySummaries();
+  const intentDist = await getIntentDistribution();
+  const digests = await getLatestDigests(3);
 
   // Merge all categories from CATEGORY_META with any DB data
   const allCategories = Object.entries(CATEGORY_META).map(([key, meta]) => {

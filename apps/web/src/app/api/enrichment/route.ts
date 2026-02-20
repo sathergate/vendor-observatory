@@ -18,18 +18,18 @@ export async function GET(request: NextRequest) {
   try {
     switch (view) {
       case "summary": {
-        const summaries = getPromptEnrichmentSummaries();
+        const summaries = await getPromptEnrichmentSummaries();
         return NextResponse.json({ summaries });
       }
 
       case "prompt-metadata": {
         const promptId = searchParams.get("promptId");
         if (promptId) {
-          const meta = getPromptMetadataById(promptId);
-          const responses = getResponseContextByPrompt(promptId);
+          const meta = await getPromptMetadataById(promptId);
+          const responses = await getResponseContextByPrompt(promptId);
           return NextResponse.json({ metadata: meta, responses });
         }
-        const allMeta = getPromptMetadata();
+        const allMeta = await getPromptMetadata();
         return NextResponse.json({ metadata: allMeta });
       }
 
@@ -38,13 +38,13 @@ export async function GET(request: NextRequest) {
         const platform = searchParams.get("platform") || undefined;
         const contentTag = searchParams.get("contentTag") || undefined;
         const patternTag = searchParams.get("patternTag") || undefined;
-        const counts = getPrimaryVendorCounts({ category, platform, contentTag, patternTag });
+        const counts = await getPrimaryVendorCounts({ category, platform, contentTag, patternTag });
         return NextResponse.json({ vendorCounts: counts });
       }
 
       case "constraint-coverage": {
         const promptId = searchParams.get("promptId") || undefined;
-        const coverage = getConstraintCoverage(promptId);
+        const coverage = await getConstraintCoverage(promptId);
         return NextResponse.json({ coverage });
       }
 

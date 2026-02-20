@@ -5,11 +5,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const stats = getBenchmarkStats();
-    const sessions = getBenchmarkSessions(100);
-    const vendorComparison = getBenchmarkVendorComparison();
-    const primaryVendorCounts = getPrimaryVendorCounts();
-    const enrichmentSummaries = getPromptEnrichmentSummaries();
+    const stats = await getBenchmarkStats();
+    const sessions = await getBenchmarkSessions(100);
+    const vendorComparison = await getBenchmarkVendorComparison();
+    const primaryVendorCounts = await getPrimaryVendorCounts();
+    const enrichmentSummaries = await getPromptEnrichmentSummaries();
     return NextResponse.json({ stats, sessions, vendorComparison, primaryVendorCounts, enrichmentSummaries });
   } catch (err) {
     console.error("/api/benchmarks error:", err);

@@ -13,16 +13,16 @@
     "obs": "node dist/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@obs/shared": "workspace:*",
-    "better-sqlite3": "^11.7.0",
-    "commander": "^13.0.0",
     "chalk": "^5.4.0",
-    "yaml": "^2.6.1",
-    "@anthropic-ai/sdk": "^0.39.0"
+    "commander": "^13.0.0",
+    "pg": "^8.18.0",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
     "@types/node": "^22.10.0",
-    "@types/better-sqlite3": "^7.6.12"
+    "@types/pg": "^8.16.0",
+    "typescript": "^5.7.0"
   }
 }

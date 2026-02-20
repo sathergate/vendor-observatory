@@ -5,8 +5,8 @@ import { PlatformBadge } from "@/components/PlatformBadge";
 
 export const dynamic = "force-dynamic";
 
-export default function SessionsPage() {
-  const sessions = getSessionList(100);
+export default async function SessionsPage() {
+  const sessions = await getSessionList(100);
 
   return (
     <div>

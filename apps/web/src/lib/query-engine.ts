@@ -10,51 +10,31 @@
  * 6. whatIf — simulated win rate delta from historical data
  */
 
-import Database from "better-sqlite3";
-import path from "path";
-import { existsSync, copyFileSync } from "fs";
+import { Pool } from "pg";
 import { safeJsonParse } from "./db";
 
-// ── Lazy DB (same pattern as db.ts) ──────────────────────────────────
+// ── Lazy Pool (same pattern as db.ts) ──────────────────────────────────
 
-let _db: Database.Database | null = null;
-let _dbFailed = false;
+let _pool: Pool | null = null;
+let _poolFailed = false;
 
-function findSourceDbPath(): string | null {
-  if (process.env.OBS_DB_PATH) return process.env.OBS_DB_PATH;
-  const candidates = [
-    path.resolve(process.cwd(), "../../db/observatory.sqlite"),
-    path.resolve(process.cwd(), "db/observatory.sqlite"),
-    path.resolve(__dirname, "../../db/observatory.sqlite"),
-    path.resolve(__dirname, "../../../db/observatory.sqlite"),
-    path.resolve(__dirname, "../../../../db/observatory.sqlite"),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
-
-function getDb(): Database.Database | null {
-  if (_dbFailed) return null;
-  if (_db) return _db;
+function getPool(): Pool | null {
+  if (_poolFailed) return null;
+  if (_pool) return _pool;
   try {
-    const sourcePath = findSourceDbPath();
-    if (!sourcePath) { _dbFailed = true; return null; }
-    let dbPath = sourcePath;
-    const tmpPath = "/tmp/observatory.sqlite";
-    if (process.env.VERCEL || !existsSync(path.dirname(sourcePath) + "/.writable_check")) {
-      if (!existsSync(tmpPath)) copyFileSync(sourcePath, tmpPath);
-      dbPath = tmpPath;
-    }
-    _db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    return _db;
-  } catch { _dbFailed = true; return null; }
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) { _poolFailed = true; return null; }
+    _pool = new Pool({ connectionString });
+    return _pool;
+  } catch { _poolFailed = true; return null; }
 }
 
-function hasTable(db: Database.Database, name: string): boolean {
-  const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name) as { name: string } | undefined;
-  return !!row;
+async function hasTable(pool: Pool, name: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    "SELECT table_name FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'",
+    [name],
+  );
+  return rows.length > 0;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -130,33 +110,34 @@ export interface AutocompleteData {
 
 // ── Query Functions ──────────────────────────────────────────────────
 
-export function queryVendorWinRate(
+export async function queryVendorWinRate(
   vendor: string,
   filters?: { category?: string; platform?: string; constraint?: string },
-): VendorWinRateResult | null {
-  const db = getDb();
-  if (!db) return null;
+): Promise<VendorWinRateResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context")) return null;
+    if (!(await hasTable(pool, "response_context"))) return null;
 
-    // Build base query for all responses mentioning this vendor
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.constraints_addressed,
              s.source_platform, pm.category, pm.constraints
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
-    `).all() as Array<{
+    `);
+
+    type ResponseRow = {
       primary_vendor: string | null;
       vendors_mentioned: string;
       constraints_addressed: string;
       source_platform: string;
       category: string | null;
       constraints: string | null;
-    }>;
+    };
 
     // Filter to responses mentioning this vendor
-    let relevant = allResponses.filter((r) => {
+    let relevant = (allResponses as ResponseRow[]).filter((r) => {
       const isPrimary = r.primary_vendor === vendor;
       const vendors = safeJsonParse<Array<{ vendor: string }>>(r.vendors_mentioned, []);
       return isPrimary || vendors.some((v) => v.vendor === vendor);
@@ -211,30 +192,32 @@ export function queryVendorWinRate(
   } catch { return null; }
 }
 
-export function queryConstraintCorrelation(
+export async function queryConstraintCorrelation(
   constraint: string,
-): ConstraintCorrelationResult | null {
-  const db = getDb();
-  if (!db) return null;
+): Promise<ConstraintCorrelationResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return null;
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
 
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, pm.constraints
       FROM response_context rc
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
       WHERE rc.primary_vendor IS NOT NULL
-    `).all() as Array<{
+    `);
+
+    type ResponseRow = {
       primary_vendor: string;
       vendors_mentioned: string;
       constraints: string | null;
-    }>;
+    };
 
     // Split into with/without constraint
-    const withConstraint: typeof allResponses = [];
-    const withoutConstraint: typeof allResponses = [];
+    const withConstraint: ResponseRow[] = [];
+    const withoutConstraint: ResponseRow[] = [];
 
-    for (const r of allResponses) {
+    for (const r of allResponses as ResponseRow[]) {
       const constraints = safeJsonParse<string[]>(r.constraints, []);
       if (constraints.includes(constraint)) {
         withConstraint.push(r);
@@ -273,36 +256,28 @@ export function queryConstraintCorrelation(
   } catch { return null; }
 }
 
-export function queryPlatformComparison(
+export async function queryPlatformComparison(
   key: string,
   keyType: "prompt" | "category" = "prompt",
-): PlatformComparisonResult | null {
-  const db = getDb();
-  if (!db) return null;
+): Promise<PlatformComparisonResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context")) return null;
+    if (!(await hasTable(pool, "response_context"))) return null;
 
-    let whereClause: string;
-    if (keyType === "prompt") {
-      whereClause = "rc.prompt_id = ?";
-    } else {
-      whereClause = "pm.category = ?";
-    }
+    const whereClause = keyType === "prompt" ? "rc.prompt_id = $1" : "pm.category = $1";
 
-    const responses = db.prepare(`
+    const { rows: responses } = await pool.query(`
       SELECT rc.primary_vendor, s.source_platform
       FROM response_context rc
       JOIN sessions s ON rc.session_id = s.id
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
       WHERE ${whereClause}
-    `).all(key) as Array<{
-      primary_vendor: string | null;
-      source_platform: string;
-    }>;
+    `, [key]);
 
     const platforms: PlatformComparisonResult["platforms"] = {};
 
-    for (const r of responses) {
+    for (const r of responses as Array<{ primary_vendor: string | null; source_platform: string }>) {
       if (!platforms[r.source_platform]) {
         platforms[r.source_platform] = { primaryVendor: null, vendorCounts: {}, responseCount: 0 };
       }
@@ -323,20 +298,21 @@ export function queryPlatformComparison(
   } catch { return null; }
 }
 
-export function queryPromptDifficulty(promptId: string): PromptDifficultyResult | null {
-  const db = getDb();
-  if (!db) return null;
+export async function queryPromptDifficulty(promptId: string): Promise<PromptDifficultyResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context")) return null;
+    if (!(await hasTable(pool, "response_context"))) return null;
 
-    const responses = db.prepare(`
-      SELECT primary_vendor FROM response_context WHERE prompt_id = ? AND primary_vendor IS NOT NULL
-    `).all(promptId) as Array<{ primary_vendor: string }>;
+    const { rows: responses } = await pool.query(
+      "SELECT primary_vendor FROM response_context WHERE prompt_id = $1 AND primary_vendor IS NOT NULL",
+      [promptId],
+    );
 
     if (responses.length === 0) return null;
 
     const vendorCounts: Record<string, number> = {};
-    for (const r of responses) {
+    for (const r of responses as Array<{ primary_vendor: string }>) {
       vendorCounts[r.primary_vendor] = (vendorCounts[r.primary_vendor] || 0) + 1;
     }
 
@@ -365,28 +341,30 @@ export function queryPromptDifficulty(promptId: string): PromptDifficultyResult 
   } catch { return null; }
 }
 
-export function queryWhatIf(
+export async function queryWhatIf(
   vendor: string,
   addConstraint?: string,
   removeConstraint?: string,
-): WhatIfResult | null {
-  const db = getDb();
-  if (!db) return null;
+): Promise<WhatIfResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
   try {
-    if (!hasTable(db, "response_context") || !hasTable(db, "prompt_metadata")) return null;
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
 
-    const allResponses = db.prepare(`
+    const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, pm.constraints
       FROM response_context rc
       LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
-    `).all() as Array<{
+    `);
+
+    type ResponseRow = {
       primary_vendor: string | null;
       vendors_mentioned: string;
       constraints: string | null;
-    }>;
+    };
 
     // Current: responses where this vendor is mentioned
-    const currentRelevant = allResponses.filter((r) => {
+    const currentRelevant = (allResponses as ResponseRow[]).filter((r) => {
       const isPrimary = r.primary_vendor === vendor;
       const vendors = safeJsonParse<Array<{ vendor: string }>>(r.vendors_mentioned, []);
       return isPrimary || vendors.some((v) => v.vendor === vendor);
@@ -400,7 +378,6 @@ export function queryWhatIf(
     let simulated = [...currentRelevant];
 
     if (addConstraint) {
-      // Only keep responses from prompts that have the added constraint
       simulated = simulated.filter((r) => {
         const constraints = safeJsonParse<string[]>(r.constraints, []);
         return constraints.includes(addConstraint);
@@ -408,7 +385,6 @@ export function queryWhatIf(
     }
 
     if (removeConstraint) {
-      // Only keep responses from prompts that DON'T have the removed constraint
       simulated = simulated.filter((r) => {
         const constraints = safeJsonParse<string[]>(r.constraints, []);
         return !constraints.includes(removeConstraint);
@@ -436,9 +412,9 @@ export function queryWhatIf(
 
 // ── Autocomplete Data ────────────────────────────────────────────────
 
-export function getQueryAutocompleteData(): AutocompleteData {
-  const db = getDb();
-  if (!db) return { vendors: [], constraints: [], categories: [], platforms: [], promptIds: [] };
+export async function getQueryAutocompleteData(): Promise<AutocompleteData> {
+  const pool = getPool();
+  if (!pool) return { vendors: [], constraints: [], categories: [], platforms: [], promptIds: [] };
   try {
     const vendors: string[] = [];
     const constraints = new Set<string>();
@@ -447,29 +423,29 @@ export function getQueryAutocompleteData(): AutocompleteData {
     const promptIds: string[] = [];
 
     // Vendors from response_context
-    if (hasTable(db, "response_context")) {
-      const vendorRows = db.prepare(`
-        SELECT DISTINCT primary_vendor FROM response_context WHERE primary_vendor IS NOT NULL ORDER BY primary_vendor
-      `).all() as Array<{ primary_vendor: string }>;
-      vendors.push(...vendorRows.map((r) => r.primary_vendor));
+    if (await hasTable(pool, "response_context")) {
+      const { rows: vendorRows } = await pool.query(
+        "SELECT DISTINCT primary_vendor FROM response_context WHERE primary_vendor IS NOT NULL ORDER BY primary_vendor"
+      );
+      vendors.push(...(vendorRows as Array<{ primary_vendor: string }>).map((r) => r.primary_vendor));
 
-      const promptRows = db.prepare(`
-        SELECT DISTINCT prompt_id FROM response_context ORDER BY prompt_id
-      `).all() as Array<{ prompt_id: string }>;
-      promptIds.push(...promptRows.map((r) => r.prompt_id));
+      const { rows: promptRows } = await pool.query(
+        "SELECT DISTINCT prompt_id FROM response_context ORDER BY prompt_id"
+      );
+      promptIds.push(...(promptRows as Array<{ prompt_id: string }>).map((r) => r.prompt_id));
     }
 
     // Categories + constraints from prompt_metadata
-    if (hasTable(db, "prompt_metadata")) {
-      const catRows = db.prepare(`
-        SELECT DISTINCT category FROM prompt_metadata WHERE category IS NOT NULL ORDER BY category
-      `).all() as Array<{ category: string }>;
-      categories.push(...catRows.map((r) => r.category));
+    if (await hasTable(pool, "prompt_metadata")) {
+      const { rows: catRows } = await pool.query(
+        "SELECT DISTINCT category FROM prompt_metadata WHERE category IS NOT NULL ORDER BY category"
+      );
+      categories.push(...(catRows as Array<{ category: string }>).map((r) => r.category));
 
-      const constraintRows = db.prepare(`
-        SELECT constraints FROM prompt_metadata WHERE constraints IS NOT NULL
-      `).all() as Array<{ constraints: string }>;
-      for (const r of constraintRows) {
+      const { rows: constraintRows } = await pool.query(
+        "SELECT constraints FROM prompt_metadata WHERE constraints IS NOT NULL"
+      );
+      for (const r of constraintRows as Array<{ constraints: string }>) {
         const parsed = safeJsonParse<string[]>(r.constraints, []);
         for (const c of parsed) constraints.add(c);
       }
@@ -477,10 +453,10 @@ export function getQueryAutocompleteData(): AutocompleteData {
 
     // Platforms from sessions
     try {
-      const platRows = db.prepare(`
-        SELECT DISTINCT source_platform FROM sessions ORDER BY source_platform
-      `).all() as Array<{ source_platform: string }>;
-      platforms.push(...platRows.map((r) => r.source_platform));
+      const { rows: platRows } = await pool.query(
+        "SELECT DISTINCT source_platform FROM sessions ORDER BY source_platform"
+      );
+      platforms.push(...(platRows as Array<{ source_platform: string }>).map((r) => r.source_platform));
     } catch { /* sessions table may not exist */ }
 
     return {
