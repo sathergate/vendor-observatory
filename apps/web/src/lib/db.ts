@@ -301,7 +301,7 @@ export async function getBenchmarkSessions(limit = 100): Promise<BenchmarkRunRow
         COUNT(o.id) AS observation_count,
         string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
       FROM sessions s LEFT JOIN observations o ON s.id = o.session_id
-      WHERE s.is_benchmark = 1
+      WHERE s.is_benchmark = TRUE
       GROUP BY s.id ORDER BY s.started_at DESC LIMIT $1
     `, [limit]);
     return rows.map((r: Record<string, unknown>) => ({
@@ -336,7 +336,7 @@ export async function getBenchmarkVendorComparison(): Promise<BenchmarkVendorCom
         SUM(CASE WHEN s.source_platform = 'cursor' THEN 1 ELSE 0 END) AS cursor_count,
         COUNT(*) AS total
       FROM observations o JOIN sessions s ON o.session_id = s.id
-      WHERE s.is_benchmark = 1
+      WHERE s.is_benchmark = TRUE
       GROUP BY o.vendor_canonical_id ORDER BY total DESC
     `);
     return rows.map((r: Record<string, unknown>) => ({
@@ -353,9 +353,9 @@ export async function getBenchmarkStats() {
   const pool = getPool();
   if (!pool) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
   try {
-    const sessions = (await pool.query("SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = 1")).rows[0] as { c: string };
-    const observations = (await pool.query("SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = 1)")).rows[0] as { c: string };
-    const { rows: platforms } = await pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = 1 GROUP BY source_platform");
+    const sessions = (await pool.query("SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE")).rows[0] as { c: string };
+    const observations = (await pool.query("SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = TRUE)")).rows[0] as { c: string };
+    const { rows: platforms } = await pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE GROUP BY source_platform");
     const platformBreakdown: Record<string, number> = {};
     for (const p of platforms as Array<{ source_platform: string; c: string }>) platformBreakdown[p.source_platform] = Number(p.c);
     return { totalBenchmarkSessions: Number(sessions.c), totalBenchmarkObservations: Number(observations.c), platformBreakdown };
@@ -402,7 +402,7 @@ export interface ResponseContextWebRow {
   session_id: string;
   prompt_id: string;
   primary_vendor: string | null;
-  is_implemented: number;
+  is_implemented: boolean;
   rationale_snippet: string | null;
   vendors_mentioned: string;
   trade_offs_snippet: string | null;
@@ -896,7 +896,7 @@ export async function getAllVendorNames(): Promise<VendorListItem[]> {
     for (const r of allResponses as Array<{
       primary_vendor: string | null;
       vendors_mentioned: string;
-      is_implemented: number;
+      is_implemented: boolean;
       source_platform: string;
       category: string;
     }>) {

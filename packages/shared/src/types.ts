@@ -90,7 +90,7 @@ export interface SessionRow {
   git_branch: string | null;
   turn_count: number;
   file_path: string;
-  is_benchmark: number;
+  is_benchmark: boolean;
 }
 
 export interface ObservationRow {
@@ -173,7 +173,7 @@ export interface ResponseContextRow {
   session_id: string;
   prompt_id: string;
   primary_vendor: string | null;
-  is_implemented: number;  // 0 or 1
+  is_implemented: boolean;
   rationale_snippet: string | null;
   vendors_mentioned: string;    // JSON array of { vendor, disposition }
   trade_offs_snippet: string | null;
