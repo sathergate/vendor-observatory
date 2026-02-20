@@ -26,12 +26,18 @@ function getPool(): Pool | null {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+const _tableCache = new Map<string, boolean>();
+
 async function hasTable(pool: Pool, name: string): Promise<boolean> {
+  const cached = _tableCache.get(name);
+  if (cached !== undefined) return cached;
   const { rows } = await pool.query(
     "SELECT table_name FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'",
     [name],
   );
-  return rows.length > 0;
+  const exists = rows.length > 0;
+  _tableCache.set(name, exists);
+  return exists;
 }
 
 export function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
@@ -854,6 +860,212 @@ export async function getVendorScorecard(vendor: string): Promise<VendorScorecar
   } catch { return null; }
 }
 
+export async function getAllVendorScorecards(): Promise<VendorScorecard[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+
+    const { rows: allResponses } = await pool.query(`
+      SELECT rc.*, s.source_platform, pm.category, pm.constraints
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+    `);
+
+    type ResponseRow = ResponseContextWebRow & { source_platform: string; category: string; constraints: string };
+
+    // Index responses by vendor involvement
+    const vendorResponses = new Map<string, {
+      mentionedIn: ResponseRow[];
+      recommendedIn: ResponseRow[];
+      rejectedIn: ResponseRow[];
+      comparedIn: ResponseRow[];
+      implementedCount: number;
+    }>();
+
+    function ensureVendor(v: string) {
+      if (!vendorResponses.has(v)) {
+        vendorResponses.set(v, { mentionedIn: [], recommendedIn: [], rejectedIn: [], comparedIn: [], implementedCount: 0 });
+      }
+      return vendorResponses.get(v)!;
+    }
+
+    for (const r of allResponses as ResponseRow[]) {
+      const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
+
+      if (r.primary_vendor) {
+        const entry = ensureVendor(r.primary_vendor);
+        entry.mentionedIn.push(r);
+        entry.recommendedIn.push(r);
+        if (r.is_implemented) entry.implementedCount++;
+      }
+
+      for (const v of vendors) {
+        if (v.vendor === r.primary_vendor) continue;
+        const entry = ensureVendor(v.vendor);
+        entry.mentionedIn.push(r);
+        if (v.disposition === "rejected") entry.rejectedIn.push(r);
+        if (v.disposition === "compared") entry.comparedIn.push(r);
+      }
+    }
+
+    // Build scorecards for each vendor
+    const scorecards: VendorScorecard[] = [];
+
+    for (const [vendor, data] of vendorResponses) {
+      if (data.mentionedIn.length === 0) continue;
+
+      const { mentionedIn, recommendedIn, rejectedIn, comparedIn, implementedCount } = data;
+
+      // Category breakdown
+      const catMap = new Map<string, { recommendations: number; rejections: number; comparisons: number; total: number }>();
+      for (const r of mentionedIn) {
+        const cat = r.category || "unknown";
+        if (!catMap.has(cat)) catMap.set(cat, { recommendations: 0, rejections: 0, comparisons: 0, total: 0 });
+        const entry = catMap.get(cat)!;
+        entry.total++;
+        if (r.primary_vendor === vendor) entry.recommendations++;
+      }
+      for (const r of rejectedIn) {
+        const cat = r.category || "unknown";
+        catMap.get(cat)!.rejections++;
+      }
+      for (const r of comparedIn) {
+        const cat = r.category || "unknown";
+        if (catMap.has(cat)) catMap.get(cat)!.comparisons++;
+      }
+
+      const categoryBreakdown = Array.from(catMap.entries()).map(([category, d]) => ({
+        category,
+        recommendations: d.recommendations,
+        rejections: d.rejections,
+        comparisons: d.comparisons,
+        totalInCategory: d.total,
+      })).sort((a, b) => b.recommendations - a.recommendations);
+
+      // Platform split
+      const platformSplit: Record<string, number> = {};
+      for (const r of recommendedIn) {
+        platformSplit[r.source_platform] = (platformSplit[r.source_platform] || 0) + 1;
+      }
+
+      // Constraints addressed
+      const addressedMap = new Map<string, number>();
+      for (const r of recommendedIn) {
+        for (const c of safeJsonParse<string[]>(r.constraints_addressed, [])) {
+          addressedMap.set(c, (addressedMap.get(c) || 0) + 1);
+        }
+      }
+      const constraintsAddressed = Array.from(addressedMap.entries())
+        .map(([constraint, count]) => ({ constraint, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Constraints missed
+      const missedMap = new Map<string, number>();
+      for (const r of mentionedIn) {
+        if (r.primary_vendor !== vendor) {
+          for (const c of safeJsonParse<string[]>(r.constraints, [])) {
+            missedMap.set(c, (missedMap.get(c) || 0) + 1);
+          }
+        }
+      }
+      const constraintsMissed = Array.from(missedMap.entries())
+        .map(([constraint, count]) => ({ constraint, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Competitor wins
+      const competitorMap = new Map<string, { count: number; scenarios: Set<string> }>();
+      for (const r of mentionedIn) {
+        if (r.primary_vendor && r.primary_vendor !== vendor) {
+          if (!competitorMap.has(r.primary_vendor)) competitorMap.set(r.primary_vendor, { count: 0, scenarios: new Set() });
+          const entry = competitorMap.get(r.primary_vendor)!;
+          entry.count++;
+          entry.scenarios.add(r.prompt_id);
+        }
+      }
+      const competitorWins = Array.from(competitorMap.entries())
+        .map(([competitor, d]) => ({ competitor, count: d.count, scenarios: Array.from(d.scenarios) }))
+        .sort((a, b) => b.count - a.count);
+
+      // Snippets
+      const tradeOffSnippets = recommendedIn.filter(r => r.trade_offs_snippet).map(r => r.trade_offs_snippet!).filter(s => s.length > 5);
+      const gotchaSnippets = recommendedIn.filter(r => r.gotchas_snippet).map(r => r.gotchas_snippet!).filter(s => s.length > 5);
+      const rationaleSnippets = recommendedIn.filter(r => r.rationale_snippet).map(r => r.rationale_snippet!).filter(s => s.length > 5);
+
+      // Prompts won and lost
+      const promptsWon = recommendedIn.map(r => ({ prompt_id: r.prompt_id, category: r.category || "unknown" }));
+      const promptsLost: Array<{ prompt_id: string; category: string; winner: string }> = [];
+      for (const r of mentionedIn) {
+        if (r.primary_vendor && r.primary_vendor !== vendor) {
+          promptsLost.push({ prompt_id: r.prompt_id, category: r.category || "unknown", winner: r.primary_vendor });
+        }
+      }
+
+      // Loss context -- use a quick index for winner responses
+      const lossContext: VendorScorecard["lossContext"] = [];
+      for (const r of mentionedIn) {
+        if (r.primary_vendor && r.primary_vendor !== vendor) {
+          const winnerData = vendorResponses.get(r.primary_vendor);
+          const winnerResponse = winnerData?.recommendedIn.find(
+            wr => wr.prompt_id === r.prompt_id
+          );
+          const winnerConstraints = winnerResponse
+            ? safeJsonParse<string[]>(winnerResponse.constraints_addressed, [])
+            : [];
+          lossContext.push({
+            prompt_id: r.prompt_id,
+            category: r.category || "unknown",
+            winner: r.primary_vendor,
+            winnerConstraintsAddressed: winnerConstraints,
+            promptConstraints: safeJsonParse<string[]>(r.constraints, []),
+            platform: r.source_platform,
+          });
+        }
+      }
+
+      // Implementation context
+      const implementationContext: VendorScorecard["implementationContext"] = recommendedIn.map(r => ({
+        prompt_id: r.prompt_id,
+        category: r.category || "unknown",
+        platform: r.source_platform,
+        isImplemented: !!r.is_implemented,
+      }));
+
+      // All prompt constraints
+      const allPromptConstraints: Record<string, string[]> = {};
+      for (const r of mentionedIn) {
+        if (!allPromptConstraints[r.prompt_id]) {
+          allPromptConstraints[r.prompt_id] = safeJsonParse<string[]>(r.constraints, []);
+        }
+      }
+
+      scorecards.push({
+        vendor,
+        totalRecommendations: recommendedIn.length,
+        totalMentions: mentionedIn.length,
+        winRate: mentionedIn.length > 0 ? recommendedIn.length / mentionedIn.length : 0,
+        implementationRate: recommendedIn.length > 0 ? implementedCount / recommendedIn.length : 0,
+        categoryBreakdown,
+        platformSplit,
+        constraintsAddressed,
+        constraintsMissed,
+        competitorWins,
+        tradeOffSnippets,
+        gotchaSnippets,
+        rationaleSnippets,
+        promptsWon,
+        promptsLost,
+        lossContext,
+        implementationContext,
+        allPromptConstraints,
+      });
+    }
+
+    return scorecards;
+  } catch { return []; }
+}
+
 export interface VendorListItem {
   vendor: string;
   totalRecommendations: number;
@@ -1230,24 +1442,92 @@ export async function getAllVendorTrends(): Promise<VendorTrend[]> {
       JOIN sessions s ON rc.session_id = s.id
     `);
 
-    const vendorSet = new Set<string>();
+    // Build per-vendor week maps in a single pass over the data
+    const vendorWeekMaps = new Map<string, Map<string, { recommendations: number; mentions: number }>>();
+
+    function ensureVendorWeek(vendor: string, weekKey: string) {
+      if (!vendorWeekMaps.has(vendor)) vendorWeekMaps.set(vendor, new Map());
+      const weekMap = vendorWeekMaps.get(vendor)!;
+      if (!weekMap.has(weekKey)) weekMap.set(weekKey, { recommendations: 0, mentions: 0 });
+      return weekMap.get(weekKey)!;
+    }
+
     for (const r of allResponses as Array<{
       primary_vendor: string | null;
       vendors_mentioned: string;
       extracted_at: string;
       started_at: string;
     }>) {
-      if (r.primary_vendor) vendorSet.add(r.primary_vendor);
+      const dateStr = r.extracted_at || r.started_at;
+      if (!dateStr) continue;
+
+      const date = new Date(dateStr);
+      const day = date.getDay();
+      const monday = new Date(date);
+      monday.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
+      const weekKey = monday.toISOString().slice(0, 10);
+
+      // Track primary vendor
+      if (r.primary_vendor) {
+        const entry = ensureVendorWeek(r.primary_vendor, weekKey);
+        entry.recommendations++;
+        entry.mentions++;
+      }
+
+      // Track mentioned vendors
       const vendors = safeJsonParse<Array<{ vendor: string; disposition: string }>>(r.vendors_mentioned, []);
-      for (const v of vendors) vendorSet.add(v.vendor);
+      for (const v of vendors) {
+        if (v.vendor === r.primary_vendor) continue;
+        const entry = ensureVendorWeek(v.vendor, weekKey);
+        entry.mentions++;
+      }
     }
 
+    // Compute trends from the per-vendor week maps
     const trends: VendorTrend[] = [];
-    for (const vendor of vendorSet) {
-      const trend = await getVendorTrend(vendor);
-      if (trend && trend.dataPoints.length > 0) {
-        trends.push(trend);
-      }
+    for (const [vendor, weekMap] of vendorWeekMaps) {
+      const dataPoints: TrendDataPoint[] = Array.from(weekMap.entries())
+        .map(([weekStart, data]) => ({
+          weekStart,
+          recommendations: data.recommendations,
+          mentions: data.mentions,
+          winRate: data.mentions > 0 ? data.recommendations / data.mentions : 0,
+        }))
+        .sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+
+      if (dataPoints.length === 0) continue;
+
+      const mid = Math.ceil(dataPoints.length / 2);
+      const firstHalf = dataPoints.slice(0, mid);
+      const secondHalf = dataPoints.slice(mid);
+
+      const avgWinRate = (pts: TrendDataPoint[]) => {
+        const totalMentions = pts.reduce((s, p) => s + p.mentions, 0);
+        const totalRecs = pts.reduce((s, p) => s + p.recommendations, 0);
+        return totalMentions > 0 ? totalRecs / totalMentions : 0;
+      };
+      const totalMentions = (pts: TrendDataPoint[]) => pts.reduce((s, p) => s + p.mentions, 0);
+
+      const prevWR = avgWinRate(firstHalf);
+      const currWR = avgWinRate(secondHalf.length > 0 ? secondHalf : firstHalf);
+      const prevMen = totalMentions(firstHalf);
+      const currMen = totalMentions(secondHalf.length > 0 ? secondHalf : firstHalf);
+
+      const delta = currWR - prevWR;
+      const trend: "rising" | "falling" | "stable" =
+        delta > 0.05 ? "rising" : delta < -0.05 ? "falling" : "stable";
+
+      trends.push({
+        vendor,
+        dataPoints,
+        currentWinRate: currWR,
+        previousWinRate: prevWR,
+        winRateDelta: delta,
+        currentMentions: currMen,
+        previousMentions: prevMen,
+        mentionDelta: currMen - prevMen,
+        trend,
+      });
     }
 
     return trends;
@@ -1400,6 +1680,131 @@ export async function getConstraintDemand(): Promise<ConstraintDemandRow[]> {
       })
       .sort((a, b) => b.prompt_count - a.prompt_count);
   } catch { return []; }
+}
+
+export async function getPromptPageData(): Promise<{
+  leaderboard: PromptLeaderboardRow[];
+  constraintDemand: ConstraintDemandRow[];
+}> {
+  const pool = getPool();
+  if (!pool) return { leaderboard: [], constraintDemand: [] };
+  try {
+    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) {
+      return { leaderboard: [], constraintDemand: [] };
+    }
+
+    const [{ rows: metas }, { rows: allContexts }] = await Promise.all([
+      pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id"),
+      pool.query("SELECT * FROM response_context"),
+    ]);
+
+    // Index contexts by prompt_id for O(1) lookup instead of O(N) filter
+    const contextsByPrompt = new Map<string, ResponseContextWebRow[]>();
+    for (const ctx of allContexts as ResponseContextWebRow[]) {
+      if (!contextsByPrompt.has(ctx.prompt_id)) contextsByPrompt.set(ctx.prompt_id, []);
+      contextsByPrompt.get(ctx.prompt_id)!.push(ctx);
+    }
+
+    // === Compute leaderboard ===
+    const leaderboard: PromptLeaderboardRow[] = [];
+    for (const meta of metas as PromptMetadataWebRow[]) {
+      const contexts = contextsByPrompt.get(meta.prompt_id) ?? [];
+      if (contexts.length === 0) continue;
+
+      const constraints = safeJsonParse<string[]>(meta.constraints, []);
+      const vendorCounts: Record<string, number> = {};
+      let totalConstraintsCovered = 0;
+      let implementedCount = 0;
+      const vendorSet = new Set<string>();
+
+      for (const ctx of contexts) {
+        if (ctx.primary_vendor) {
+          vendorCounts[ctx.primary_vendor] = (vendorCounts[ctx.primary_vendor] || 0) + 1;
+        }
+        const vendors = safeJsonParse<Array<{ vendor: string }>>(ctx.vendors_mentioned, []);
+        for (const v of vendors) vendorSet.add(v.vendor);
+        if (ctx.primary_vendor) vendorSet.add(ctx.primary_vendor);
+
+        const addressed = safeJsonParse<string[]>(ctx.constraints_addressed, []);
+        totalConstraintsCovered += addressed.length;
+        if (ctx.is_implemented) implementedCount++;
+      }
+
+      const topEntry = Object.entries(vendorCounts).sort((a, b) => b[1] - a[1])[0];
+      const topVendorPct = topEntry ? topEntry[1] / contexts.length : 0;
+
+      leaderboard.push({
+        prompt_id: meta.prompt_id,
+        category: meta.category,
+        response_count: contexts.length,
+        top_vendor: topEntry?.[0] ?? null,
+        top_vendor_count: topEntry?.[1] ?? 0,
+        unique_vendors: vendorSet.size,
+        implementation_rate: contexts.length > 0 ? implementedCount / contexts.length : 0,
+        avg_constraints_covered: contexts.length > 0 && constraints.length > 0
+          ? totalConstraintsCovered / contexts.length / constraints.length
+          : 0,
+        total_constraints: constraints.length,
+        is_contested: topVendorPct <= 0.5 && contexts.length >= 2,
+        is_dominated: topVendorPct === 1 && contexts.length >= 2,
+        content_tags: safeJsonParse<string[]>(meta.content_tags, []),
+        pattern_tags: safeJsonParse<string[]>(meta.pattern_tags, []),
+        constraints,
+      });
+    }
+    leaderboard.sort((a, b) => b.response_count - a.response_count);
+
+    // === Compute constraint demand ===
+    const constraintMap = new Map<string, {
+      promptIds: Set<string>;
+      totalResponses: number;
+      addressedCount: number;
+      vendorAddressed: Map<string, number>;
+    }>();
+
+    for (const meta of metas as PromptMetadataWebRow[]) {
+      const constraints = safeJsonParse<string[]>(meta.constraints, []);
+      const contexts = contextsByPrompt.get(meta.prompt_id) ?? [];
+
+      for (const c of constraints) {
+        if (!constraintMap.has(c)) {
+          constraintMap.set(c, { promptIds: new Set(), totalResponses: 0, addressedCount: 0, vendorAddressed: new Map() });
+        }
+        const entry = constraintMap.get(c)!;
+        entry.promptIds.add(meta.prompt_id);
+        entry.totalResponses += contexts.length;
+      }
+    }
+
+    for (const ctx of allContexts as ResponseContextWebRow[]) {
+      const addressed = safeJsonParse<string[]>(ctx.constraints_addressed, []);
+      for (const c of addressed) {
+        const entry = constraintMap.get(c);
+        if (entry) {
+          entry.addressedCount++;
+          if (ctx.primary_vendor) {
+            entry.vendorAddressed.set(ctx.primary_vendor, (entry.vendorAddressed.get(ctx.primary_vendor) || 0) + 1);
+          }
+        }
+      }
+    }
+
+    const constraintDemand = Array.from(constraintMap.entries())
+      .map(([constraint, data]) => {
+        const topVendor = Array.from(data.vendorAddressed.entries()).sort((a, b) => b[1] - a[1])[0];
+        return {
+          constraint,
+          prompt_count: data.promptIds.size,
+          response_count: data.totalResponses,
+          coverage_rate: data.totalResponses > 0 ? data.addressedCount / data.totalResponses : 0,
+          top_vendor: topVendor?.[0] ?? null,
+          top_vendor_count: topVendor?.[1] ?? 0,
+        };
+      })
+      .sort((a, b) => b.prompt_count - a.prompt_count);
+
+    return { leaderboard, constraintDemand };
+  } catch { return { leaderboard: [], constraintDemand: [] }; }
 }
 
 // ── Developer Intent Analytics ──────────────────────────────────────

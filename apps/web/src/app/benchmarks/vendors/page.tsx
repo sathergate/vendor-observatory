@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAllVendorNames, getAllVendorTrends, getVendorScorecard } from "@/lib/db";
+import { getAllVendorNames, getAllVendorTrends, getAllVendorScorecards } from "@/lib/db";
 import { computeAIReadinessScore } from "@/lib/recommendations";
 import { vendorDisplayName, vendorCategory, VENDOR_META } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
@@ -13,17 +13,23 @@ function pct(n: number): string {
 }
 
 export default async function VendorIndexPage() {
-  const vendors = await getAllVendorNames();
-  const trends = await getAllVendorTrends();
+  const [vendors, trends, scorecards] = await Promise.all([
+    getAllVendorNames(),
+    getAllVendorTrends(),
+    getAllVendorScorecards(),
+  ]);
 
   // Group vendors: those with recommendations first, then those only mentioned
   const recommended = vendors.filter((v) => v.totalRecommendations > 0);
   const mentionedOnly = vendors.filter((v) => v.totalRecommendations === 0 && v.totalMentions > 0);
 
+  // Index scorecards by vendor for O(1) lookup
+  const scorecardMap = new Map(scorecards.map((s) => [s.vendor, s]));
+
   // Compute AI-Readiness scores for vendors with enough data
   const aiReadinessScores: Array<{ vendor: string; score: number; grade: string; gradeColor: string }> = [];
   for (const v of recommended) {
-    const scorecard = await getVendorScorecard(v.vendor);
+    const scorecard = scorecardMap.get(v.vendor);
     if (scorecard && scorecard.totalMentions >= 3) {
       const readiness = computeAIReadinessScore(scorecard);
       aiReadinessScores.push({

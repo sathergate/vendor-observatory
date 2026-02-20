@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPromptLeaderboard, getConstraintDemand } from "@/lib/db";
+import { getPromptPageData } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { CATEGORY_META } from "../categories";
@@ -12,8 +12,7 @@ function pct(n: number): string {
 }
 
 export default async function PromptIntelligencePage() {
-  const prompts = await getPromptLeaderboard();
-  const constraintDemand = await getConstraintDemand();
+  const { leaderboard: prompts, constraintDemand } = await getPromptPageData();
 
   const contested = prompts.filter((p) => p.is_contested);
   const dominated = prompts.filter((p) => p.is_dominated);
