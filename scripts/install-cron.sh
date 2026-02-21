@@ -10,7 +10,7 @@ PLIST_LABEL="com.vendor-observatory.sync"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
 ENV_LOCAL="$REPO_DIR/.env.local"
 
-# Source .env.local if it exists (for CURSOR_API_KEY etc.)
+# Source .env.local if it exists (for DATABASE_URL, CURSOR_API_KEY etc.)
 if [[ -f "$ENV_LOCAL" ]]; then
   # shellcheck disable=SC1090
   set -a; source "$ENV_LOCAL"; set +a
@@ -62,6 +62,8 @@ cat > "$PLIST_PATH" <<PLIST
   <dict>
     <key>PATH</key>
     <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:${HOME}/.local/bin</string>
+    <key>DATABASE_URL</key>
+    <string>${DATABASE_URL:-}</string>
     <key>CURSOR_API_KEY</key>
     <string>${CURSOR_API_KEY:-}</string>
   </dict>
