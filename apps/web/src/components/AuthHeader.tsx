@@ -17,11 +17,18 @@ export function AuthHeader() {
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : { user: null }))
-      .then((data) => setUser(data.user))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+    function fetchUser() {
+      fetch("/api/auth/me")
+        .then((r) => (r.ok ? r.json() : { user: null }))
+        .then((data) => setUser(data.user))
+        .catch(() => setUser(null))
+        .finally(() => setLoading(false));
+    }
+
+    fetchUser();
+
+    window.addEventListener("auth-change", fetchUser);
+    return () => window.removeEventListener("auth-change", fetchUser);
   }, []);
 
   // Close popover on outside click
