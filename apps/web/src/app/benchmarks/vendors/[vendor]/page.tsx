@@ -4,6 +4,7 @@ import { generateRecommendations, computeAIReadinessScore, type Recommendation }
 import { vendorDisplayName, VENDOR_META, vendorCategory } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { SectionNav } from "@/components/SectionNav";
+import { VendorGuard } from "@/components/VendorGuard";
 import { CATEGORY_META } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
 
@@ -129,10 +130,12 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           { label: "Vendor Intel", href: "/benchmarks/vendors" },
           { label: vendorDisplayName(vendorId) },
         ]} />
-        <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-          <p className="text-lg">No data found for &ldquo;{vendorDisplayName(vendorId)}&rdquo;</p>
-          <p className="text-sm mt-2">This vendor hasn&apos;t appeared in any benchmark responses yet.</p>
-        </div>
+        <VendorGuard vendorId={vendorId}>
+          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
+            <p className="text-lg">No data found for &ldquo;{vendorDisplayName(vendorId)}&rdquo;</p>
+            <p className="text-sm mt-2">This vendor hasn&apos;t appeared in any benchmark responses yet.</p>
+          </div>
+        </VendorGuard>
       </div>
     );
   }
@@ -154,6 +157,8 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
         { label: "Vendor Intel", href: "/benchmarks/vendors" },
         { label: vendorDisplayName(vendorId) },
       ]} />
+
+      <VendorGuard vendorId={vendorId}>
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -687,6 +692,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           )}
         </div>
       )}
+      </VendorGuard>
     </div>
   );
 }

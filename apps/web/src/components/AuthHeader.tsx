@@ -1,12 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useVendor } from "@/context/VendorContext";
+import { VENDOR_META, vendorDisplayName } from "@/lib/vendor-taxonomy";
 
 interface User {
   id: string;
   email: string;
+}
+
+/** Group vendors by category for the dropdown */
+function useVendorsByCategory() {
+  return useMemo(() => {
+    const groups: Record<string, { id: string; name: string }[]> = {};
+    for (const [id, meta] of Object.entries(VENDOR_META)) {
+      const cat = meta.category;
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push({ id, name: meta.name });
+    }
+    // Sort vendors within each category alphabetically
+    for (const cat of Object.keys(groups)) {
+      groups[cat].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return groups;
+  }, []);
+}
+
+/** Format category ID for display */
+function categoryLabel(cat: string): string {
+  return cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function AuthHeader() {
@@ -15,6 +39,8 @@ export function AuthHeader() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const { selectedVendor, setSelectedVendor } = useVendor();
+  const vendorsByCategory = useVendorsByCategory();
 
   useEffect(() => {
     function fetchUser() {
@@ -82,11 +108,46 @@ export function AuthHeader() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+        <div className="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
           <div className="px-4 py-3 border-b border-gray-700">
             <p className="text-sm text-gray-400">Signed in as</p>
             <p className="text-sm font-medium text-gray-100 truncate">{user.email}</p>
           </div>
+
+          {/* Vendor selection */}
+          <div className="px-4 py-3 border-b border-gray-700">
+            <label
+              htmlFor="vendor-select"
+              className="block text-xs font-medium text-gray-400 mb-1.5"
+            >
+              Your vendor
+            </label>
+            <select
+              id="vendor-select"
+              value={selectedVendor ?? ""}
+              onChange={(e) => setSelectedVendor(e.target.value || null)}
+              className="w-full bg-gray-900 border border-gray-600 rounded-md px-2.5 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Select a vendor...</option>
+              {Object.entries(vendorsByCategory)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([cat, vendors]) => (
+                  <optgroup key={cat} label={categoryLabel(cat)}>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+            </select>
+            {selectedVendor && (
+              <p className="text-xs text-gray-500 mt-1">
+                Viewing profile for {vendorDisplayName(selectedVendor)}
+              </p>
+            )}
+          </div>
+
           <div className="p-2">
             <button
               onClick={handleLogout}
