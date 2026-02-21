@@ -40,6 +40,13 @@ async function hasTable(pool: Pool, name: string): Promise<boolean> {
   return exists;
 }
 
+/** @internal Reset module state for testing only */
+export function _resetForTesting(): void {
+  _pool = null;
+  _poolFailed = false;
+  _tableCache.clear();
+}
+
 export function safeJsonParse<T>(json: string | null | undefined, fallback: T): T {
   if (!json) return fallback;
   try { return JSON.parse(json) as T; } catch { return fallback; }
