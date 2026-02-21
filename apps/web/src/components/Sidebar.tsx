@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NavLink } from "./NavLink";
+import { useVendor } from "@/context/VendorContext";
+import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 
 const NAV_GROUPS = [
   {
@@ -35,12 +37,17 @@ const NAV_GROUPS = [
 export function Sidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { selectedVendor } = useVendor();
 
   // Close drawer on navigation
   const handleLinkClick = () => setOpen(false);
 
   // Logo is "active" on the home/benchmarks page
   const isHome = pathname === "/" || pathname === "/benchmarks";
+
+  const profileHref = selectedVendor
+    ? `/benchmarks/vendors/${encodeURIComponent(selectedVendor)}`
+    : null;
 
   return (
     <>
@@ -98,6 +105,19 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 p-3 overflow-y-auto" onClick={handleLinkClick}>
+          {/* Profile link — only visible when a vendor is selected */}
+          {profileHref && (
+            <div className="mb-4">
+              <div className="space-y-0.5">
+                <NavLink
+                  href={profileHref}
+                  label={`Profile — ${vendorDisplayName(selectedVendor!)}`}
+                  exact
+                />
+              </div>
+            </div>
+          )}
+
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="mb-4">
               <div className="px-3 pt-2 pb-1">
