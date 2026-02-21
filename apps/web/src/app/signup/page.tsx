@@ -27,8 +27,8 @@ export default function SignupPage() {
         setError(data.error || "Signup failed");
         return;
       }
+      window.dispatchEvent(new Event("auth-change"));
       router.push("/");
-      router.refresh();
     } catch {
       setError("Something went wrong");
     } finally {
