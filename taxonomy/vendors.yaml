@@ -342,6 +342,22 @@ vendors:
     website: https://rootly.com
 
   # ─────────────────────────────────────────────
+  # CATEGORY: issue_tracking
+  # ─────────────────────────────────────────────
+
+  - canonical_id: linear
+    display_name: Linear
+    synonyms: [linear-app, linearapp, linear-io]
+    category: issue_tracking
+    website: https://linear.app
+
+  - canonical_id: jira
+    display_name: Jira
+    synonyms: [atlassian-jira, jira-software, jira-cloud]
+    category: issue_tracking
+    website: https://www.atlassian.com/software/jira
+
+  # ─────────────────────────────────────────────
   # CATEGORY: code_search
   # ─────────────────────────────────────────────
 

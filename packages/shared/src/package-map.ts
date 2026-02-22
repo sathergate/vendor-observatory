@@ -75,6 +75,10 @@ export const PACKAGE_TO_VENDOR: Record<string, string> = {
   "langsmith": "langsmith",
   "arize-phoenix": "arize-phoenix",
 
+  // ── Issue Tracking ───────────────────────────────────────────────
+  "@linear/sdk": "linear",
+  "linear-client": "linear",
+
   // ── Incident Management ───────────────────────────────────────────
   "node-pagerduty": "pagerduty",
   "@pagerduty/pdjs": "pagerduty",

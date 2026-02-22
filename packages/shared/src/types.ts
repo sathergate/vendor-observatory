@@ -19,7 +19,7 @@ export type WorkCategory =
   | "ai_ml" | "messaging" | "cdn" | "dns" | "observability"
   | "error_monitoring" | "feature_flags" | "secrets_management"
   | "developer_portal" | "llm_observability" | "incident_management"
-  | "code_search" | "security_scanning" | "edge_compute" | "other";
+  | "issue_tracking" | "code_search" | "security_scanning" | "edge_compute" | "other";
 
 // ── Vendor Mention (extracted from a transcript) ────────────────────
 

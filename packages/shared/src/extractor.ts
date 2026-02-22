@@ -30,6 +30,7 @@ const CONNECTION_PATTERNS: Array<{ pattern: RegExp; vendor: string }> = [
   { pattern: /fly\.dev/i, vendor: "fly-io" },
   { pattern: /workers\.dev/i, vendor: "cloudflare-workers" },
   { pattern: /deno\.dev/i, vendor: "deno-deploy" },
+  { pattern: /linear\.app/i, vendor: "linear" },
 ];
 
 // ── ENV Var Patterns ────────────────────────────────────────────────
@@ -56,6 +57,7 @@ const ENV_VAR_PATTERNS: Array<{ pattern: RegExp; vendor: string }> = [
   { pattern: /INFISICAL_TOKEN/i, vendor: "infisical" },
   { pattern: /SNYK_TOKEN/i, vendor: "snyk" },
   { pattern: /FAUNA_SECRET/i, vendor: "fauna" },
+  { pattern: /LINEAR_API_KEY|LINEAR_TOKEN/i, vendor: "linear" },
 ];
 
 // ── CLI Command Patterns ────────────────────────────────────────────
