@@ -9,8 +9,8 @@ import {
 } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { PlatformBadge } from "@/components/PlatformBadge";
-import { CATEGORY_META } from "./benchmarks/categories";
-import { PROMPT_COUNTS } from "./benchmarks/prompt-summaries";
+import { CATEGORY_META } from "../benchmarks/categories";
+import { PROMPT_COUNTS } from "../benchmarks/prompt-summaries";
 
 export const dynamic = "force-dynamic";
 

@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function SignupPage() {
+export default function SignupForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const plan = searchParams.get("plan") ?? "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,8 +29,12 @@ export default function SignupPage() {
         setError(data.error || "Signup failed");
         return;
       }
+
+      // TODO: Send email verification to the new user's address.
+      console.log(`[auth] TODO: send email verification to ${email}`);
+
       window.dispatchEvent(new Event("auth-change"));
-      router.push("/");
+      router.push(plan ? `/payment?plan=${encodeURIComponent(plan)}` : "/");
     } catch {
       setError("Something went wrong");
     } finally {
