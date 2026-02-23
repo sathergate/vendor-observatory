@@ -18,17 +18,18 @@ export default function AnalyzePage() {
       const res = await fetch("/api/onboard/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: url.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Something went wrong");
+        setLoading(false);
         return;
       }
       router.push(`/get-started/${data.jobId}`);
+      // Don't reset loading — component will unmount on navigation
     } catch {
       setError("Something went wrong");
-    } finally {
       setLoading(false);
     }
   }
@@ -39,17 +40,17 @@ export default function AnalyzePage() {
         What&apos;s your home page?
       </h1>
       <p className="text-gray-400 text-center mb-8">
-        Enter your product&apos;s URL and we&apos;ll analyze how AI coding
+        Enter your product&apos;s domain and we&apos;ll analyze how AI coding
         assistants talk about it.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <input
-            type="url"
+            type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://yourproduct.com"
+            placeholder="yourproduct.com"
             required
             disabled={loading}
             className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100

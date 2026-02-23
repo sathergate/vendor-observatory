@@ -251,17 +251,24 @@ export function stageStatusFromElapsed(elapsed: number): {
   };
 }
 
+// ── In-memory fallback when no DB is available ──────────────────────
+
+const _memoryJobs = new Map<string, OnboardingJob>();
+
 // ── DB functions ─────────────────────────────────────────────────────
 
 export async function createJob(url: string, domain: string): Promise<string> {
   await ensureTables();
   const id = crypto.randomUUID();
+  const now = new Date();
   const pool = getPool();
   if (pool) {
     await pool.query(
       "INSERT INTO onboarding_jobs (id, url, domain) VALUES ($1, $2, $3)",
       [id, url, domain],
     );
+  } else {
+    _memoryJobs.set(id, { id, url, domain, email: null, created_at: now });
   }
   return id;
 }
@@ -269,43 +276,59 @@ export async function createJob(url: string, domain: string): Promise<string> {
 export async function findRecentJob(domain: string): Promise<string | null> {
   await ensureTables();
   const pool = getPool();
-  if (!pool) return null;
-  const { rows } = await pool.query(
-    `SELECT id FROM onboarding_jobs
-     WHERE domain = $1 AND created_at > NOW() - INTERVAL '24 hours'
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [domain],
-  );
-  return rows.length > 0 ? rows[0].id : null;
+  if (pool) {
+    const { rows } = await pool.query(
+      `SELECT id FROM onboarding_jobs
+       WHERE domain = $1 AND created_at > NOW() - INTERVAL '24 hours'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [domain],
+    );
+    return rows.length > 0 ? rows[0].id : null;
+  }
+  // In-memory fallback
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const job of _memoryJobs.values()) {
+    if (job.domain === domain && job.created_at.getTime() > cutoff) {
+      return job.id;
+    }
+  }
+  return null;
 }
 
 export async function getJob(jobId: string): Promise<OnboardingJob | null> {
   await ensureTables();
   const pool = getPool();
-  if (!pool) return null;
-  const { rows } = await pool.query(
-    "SELECT id, url, domain, email, created_at FROM onboarding_jobs WHERE id = $1",
-    [jobId],
-  );
-  if (rows.length === 0) return null;
-  return {
-    id: rows[0].id,
-    url: rows[0].url,
-    domain: rows[0].domain,
-    email: rows[0].email,
-    created_at: new Date(rows[0].created_at),
-  };
+  if (pool) {
+    const { rows } = await pool.query(
+      "SELECT id, url, domain, email, created_at FROM onboarding_jobs WHERE id = $1",
+      [jobId],
+    );
+    if (rows.length === 0) return null;
+    return {
+      id: rows[0].id,
+      url: rows[0].url,
+      domain: rows[0].domain,
+      email: rows[0].email,
+      created_at: new Date(rows[0].created_at),
+    };
+  }
+  // In-memory fallback
+  return _memoryJobs.get(jobId) ?? null;
 }
 
 export async function saveJobEmail(jobId: string, email: string): Promise<void> {
   await ensureTables();
   const pool = getPool();
-  if (!pool) return;
-  await pool.query(
-    "UPDATE onboarding_jobs SET email = $1 WHERE id = $2",
-    [email, jobId],
-  );
+  if (pool) {
+    await pool.query(
+      "UPDATE onboarding_jobs SET email = $1 WHERE id = $2",
+      [email, jobId],
+    );
+  } else {
+    const job = _memoryJobs.get(jobId);
+    if (job) job.email = email;
+  }
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus | null> {

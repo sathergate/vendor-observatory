@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { createJob, findRecentJob } from "@/lib/onboard";
 
 export async function POST(request: Request) {
-  const { url } = await request.json();
+  let { url } = await request.json();
+
+  // Normalize: prepend https:// if no protocol provided
+  if (url && !url.match(/^https?:\/\//i)) {
+    url = `https://${url}`;
+  }
 
   // Validate and extract domain
   let domain: string;

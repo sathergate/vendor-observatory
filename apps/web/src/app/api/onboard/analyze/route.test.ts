@@ -75,4 +75,14 @@ describe("POST /api/onboard/analyze", () => {
     expect(mockFindRecentJob).toHaveBeenCalledWith("sentry.io");
     expect(mockCreateJob).toHaveBeenCalledWith("https://www.sentry.io", "sentry.io");
   });
+
+  it("accepts bare domain without https:// prefix", async () => {
+    mockFindRecentJob.mockResolvedValue(null);
+    mockCreateJob.mockResolvedValue("job-id");
+
+    const res = await callAnalyze({ url: "sentry.io" });
+    expect(res.status).toBe(200);
+    expect(mockFindRecentJob).toHaveBeenCalledWith("sentry.io");
+    expect(mockCreateJob).toHaveBeenCalledWith("https://sentry.io", "sentry.io");
+  });
 });

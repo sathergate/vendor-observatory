@@ -85,6 +85,13 @@ describe("middleware — protected page routes without token", () => {
     const location = res.headers.get("location");
     expect(location).toContain("/login");
   });
+
+  it("redirects /overview to /login", () => {
+    const res = middleware(makeRequest("/overview"));
+    expect(res.status).toBe(307);
+    const location = res.headers.get("location");
+    expect(location).toContain("/login");
+  });
 });
 
 // ── Protected API routes ─────────────────────────────────────────────

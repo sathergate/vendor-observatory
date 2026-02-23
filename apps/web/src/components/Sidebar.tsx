@@ -43,7 +43,7 @@ export function Sidebar() {
   const handleLinkClick = () => setOpen(false);
 
   // Logo is "active" on the home/benchmarks page
-  const isHome = pathname === "/" || pathname === "/benchmarks";
+  const isHome = pathname === "/overview" || pathname === "/benchmarks";
 
   const profileHref = selectedVendor
     ? `/benchmarks/vendors/${encodeURIComponent(selectedVendor)}`
@@ -85,7 +85,7 @@ export function Sidebar() {
         <div className="p-4 border-b border-gray-800 flex items-center justify-between">
           <div>
             <Link
-              href="/"
+              href="/overview"
               onClick={handleLinkClick}
               className={`text-lg font-bold transition-colors ${
                 isHome ? "text-blue-300" : "text-blue-400 hover:text-blue-300"

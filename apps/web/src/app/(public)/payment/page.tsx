@@ -29,7 +29,7 @@ export default async function PaymentPage({
       </div>
 
       <a
-        href="/"
+        href="/overview"
         className="block w-full text-center py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors"
       >
         Complete Setup &rarr;
