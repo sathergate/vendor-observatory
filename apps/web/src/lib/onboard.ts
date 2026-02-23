@@ -252,6 +252,9 @@ export function stageStatusFromElapsed(elapsed: number): {
 }
 
 // ── In-memory fallback when no DB is available ──────────────────────
+// TODO: Remove this in-memory fallback once DATABASE_URL is configured
+// in all environments. This exists only so the onboarding flow works
+// on Vercel without a Postgres database during early development.
 
 const _memoryJobs = new Map<string, OnboardingJob>();
 

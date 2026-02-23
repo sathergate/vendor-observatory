@@ -31,20 +31,13 @@ function StageCard({
   label,
   status,
   teaser,
-  locked,
 }: {
   label: string;
   status: StageStatus;
   teaser: string | null;
-  locked?: boolean;
 }) {
   return (
-    <div className="relative bg-gray-800 border border-gray-700 rounded-lg p-4">
-      {locked && (
-        <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
-          <span className="text-gray-400 text-sm font-medium">Sent via email</span>
-        </div>
-      )}
+    <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
       <div className="flex items-center gap-3">
         <StageIcon status={status} />
         <div className="min-w-0">
@@ -118,7 +111,7 @@ export default function StatusPage() {
     );
   }
 
-  const balancedDone = status.stages.balanced.status === "complete";
+  const fastDone = status.stages.fast.status === "complete";
   const urlData = status.stages.url_analysis.data;
   const fastData = status.stages.fast.data;
 
@@ -154,12 +147,11 @@ export default function StatusPage() {
           label="Comprehensive Benchmark"
           status={status.stages.comprehensive.status}
           teaser={null}
-          locked
         />
       </div>
 
-      {/* Email capture — show once balanced is done and no email yet */}
-      {balancedDone && !emailSubmitted && (
+      {/* Email capture — show immediately, hide once submitted */}
+      {!emailSubmitted && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
           <p className="font-medium mb-1">Your comprehensive report is almost ready</p>
           <p className="text-sm text-gray-400 mb-4">
@@ -188,7 +180,7 @@ export default function StatusPage() {
       )}
 
       {/* Email submitted confirmation */}
-      {balancedDone && emailSubmitted && (
+      {emailSubmitted && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
           <p className="text-green-400 font-medium">
             We&apos;ll send your comprehensive report when it&apos;s ready.
@@ -196,8 +188,8 @@ export default function StatusPage() {
         </div>
       )}
 
-      {/* Scorecard CTA */}
-      {balancedDone && (
+      {/* Scorecard CTA — show once fast benchmark is done */}
+      {fastDone && (
         <a
           href={`/get-started/${jobId}/scorecard`}
           className={`block w-full text-center py-3 rounded-lg font-medium transition-colors ${
