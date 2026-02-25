@@ -1,5 +1,16 @@
 import { NextResponse } from "next/server";
+import { Pool } from "pg";
 import { createJob, findRecentJob } from "@/lib/onboard";
+import { runUrlAnalysis } from "@/lib/url-analyzer";
+
+let _pool: Pool | null = null;
+function getPool(): Pool | null {
+  if (_pool) return _pool;
+  const cs = process.env.DATABASE_URL;
+  if (!cs) return null;
+  _pool = new Pool({ connectionString: cs });
+  return _pool;
+}
 
 export async function POST(request: Request) {
   let { url } = await request.json();
@@ -21,13 +32,16 @@ export async function POST(request: Request) {
   const existing = await findRecentJob(domain);
   if (existing) return NextResponse.json({ jobId: existing });
 
-  // TODO: In production, dispatch 4 background analysis jobs here:
-  // 1. URL analysis (<30s) — extracts product name, category, competitors
-  // 2. Fast benchmark (30s)
-  // 3. Balanced benchmark (2 min)
-  // 4. Comprehensive benchmark (5 min)
-  // For now, results are mocked based on elapsed time in GET /api/onboard/analyze/[jobId].
-
   const jobId = await createJob(url, domain);
+
+  // Fire URL analysis as a background task (don't await — let the response return immediately).
+  // The worker on Fly.io will pick up fast + balanced benchmarks from the DB.
+  const pool = getPool();
+  if (pool && process.env.USE_REAL_BENCHMARK === "true") {
+    runUrlAnalysis(jobId, pool).catch((err) => {
+      console.error("[analyze] Background URL analysis failed:", err);
+    });
+  }
+
   return NextResponse.json({ jobId });
 }

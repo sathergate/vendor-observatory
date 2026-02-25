@@ -1,0 +1,22 @@
+{
+  "name": "@obs/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@obs/shared": "workspace:*",
+    "@obs/ingest": "workspace:*",
+    "@obs/benchmark": "workspace:*",
+    "pg": "^8.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.16.0"
+  }
+}
