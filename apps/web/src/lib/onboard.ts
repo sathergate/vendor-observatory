@@ -10,6 +10,12 @@ export interface OnboardingJob {
   created_at: Date;
 }
 
+export interface Competitor {
+  name: string;
+  domain: string;
+  canonicalId?: string;
+}
+
 export interface UrlAnalysisData {
   detected_name: string;
   category: string;
@@ -94,6 +100,43 @@ async function ensureTables() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // Migrate: add result columns if missing
+    const { rows: cols } = await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'onboarding_jobs' AND table_schema = 'public'`
+    );
+    const existing = new Set(cols.map((c: { column_name: string }) => c.column_name));
+    const migrations: Array<[string, string]> = [
+      // URL analysis results
+      ["product_name", "TEXT"],
+      ["detected_category", "TEXT"],
+      ["competitors", "JSONB"],
+      // Fast benchmark results
+      ["fast_mention_rate", "FLOAT"],
+      ["fast_session_count", "INT"],
+      ["fast_platform_coverage", "JSONB"],
+      ["fast_competitor_rates", "JSONB"],
+      // Balanced benchmark results
+      ["balanced_mention_rate", "FLOAT"],
+      ["balanced_session_count", "INT"],
+      ["balanced_ai_readiness", "INT"],
+      ["balanced_platform_coverage", "JSONB"],
+      ["balanced_competitor_rates", "JSONB"],
+      ["balanced_recommendations", "JSONB"],
+      // Stage timestamps
+      ["url_analysis_completed_at", "TIMESTAMPTZ"],
+      ["fast_completed_at", "TIMESTAMPTZ"],
+      ["balanced_completed_at", "TIMESTAMPTZ"],
+      // Worker lock
+      ["worker_claimed_at", "TIMESTAMPTZ"],
+      ["worker_id", "TEXT"],
+      // Error tracking
+      ["error", "TEXT"],
+    ];
+    for (const [col, type] of migrations) {
+      if (!existing.has(col)) {
+        await pool.query(`ALTER TABLE onboarding_jobs ADD COLUMN ${col} ${type}`);
+      }
+    }
     _tablesReady = true;
   } catch (err) {
     console.error("[onboard] Failed to create tables:", err);
@@ -335,6 +378,81 @@ export async function saveJobEmail(jobId: string, email: string): Promise<void> 
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
+  const useReal = process.env.USE_REAL_BENCHMARK === "true";
+
+  // Try real DB path first when feature flag is on
+  if (useReal) {
+    const pool = getPool();
+    if (pool) {
+      await ensureTables();
+      const { rows } = await pool.query(
+        `SELECT id, url, domain, email, created_at,
+                product_name, detected_category, competitors,
+                fast_mention_rate, fast_session_count, fast_platform_coverage, fast_competitor_rates,
+                balanced_mention_rate, balanced_session_count, balanced_ai_readiness,
+                balanced_platform_coverage, balanced_competitor_rates, balanced_recommendations,
+                url_analysis_completed_at, fast_completed_at, balanced_completed_at,
+                worker_claimed_at, error
+         FROM onboarding_jobs WHERE id = $1`,
+        [jobId]
+      );
+      if (rows.length > 0) {
+        const r = rows[0];
+        const urlDone = !!r.url_analysis_completed_at;
+        const fastDone = !!r.fast_completed_at;
+        const balancedDone = !!r.balanced_completed_at;
+        const workerClaimed = !!r.worker_claimed_at;
+
+        const urlAnalysisStatus: StageStatus = urlDone ? "complete" : workerClaimed ? "running" : "pending";
+        const fastStatus: StageStatus = fastDone ? "complete" : (urlDone && workerClaimed) ? "running" : "pending";
+        const balancedStatus: StageStatus = balancedDone ? "complete" : (fastDone && workerClaimed) ? "running" : "pending";
+
+        const urlData: UrlAnalysisData | null = urlDone ? {
+          detected_name: r.product_name ?? r.domain.split(".")[0],
+          category: r.detected_category ?? "other",
+          competitors: r.competitors ? (r.competitors as Competitor[]).map((c: Competitor) => c.name) : [],
+        } : null;
+
+        const fastData: FastBenchmarkData | null = fastDone ? {
+          sessions_analyzed: r.fast_session_count ?? 0,
+          mention_rate: r.fast_mention_rate != null ? Math.round(r.fast_mention_rate) : 0,
+          platforms: r.fast_platform_coverage ? Object.keys(r.fast_platform_coverage).filter(k => r.fast_platform_coverage[k]) : [],
+          primary_mention_type: "mentioned",
+        } : null;
+
+        const balancedData: BalancedBenchmarkData | null = balancedDone ? {
+          sessions_analyzed: r.balanced_session_count ?? 0,
+          mention_rate: r.balanced_mention_rate != null ? Math.round(r.balanced_mention_rate) : 0,
+          platforms: r.balanced_platform_coverage ? Object.keys(r.balanced_platform_coverage).filter(k => r.balanced_platform_coverage[k]) : [],
+          ai_readiness_score: r.balanced_ai_readiness ?? 0,
+          competitor_comparison: (r.balanced_competitor_rates as Array<{ name: string; mentionRate: number; delta: number }> ?? []).map(c => ({
+            name: c.name,
+            mention_rate: Math.round(c.mentionRate),
+            delta: Math.round(c.delta),
+          })),
+          recommendation_count: r.balanced_recommendations ? (r.balanced_recommendations as unknown[]).length : 0,
+          top_recommendation: r.balanced_recommendations && (r.balanced_recommendations as unknown[]).length > 0
+            ? (r.balanced_recommendations as Array<{ title: string; priority: "P1" | "P2" | "P3"; impact: "HIGH" | "MEDIUM" | "LOW"; description: string }>)[0]
+            : { title: "Run a balanced benchmark", priority: "P2" as const, impact: "MEDIUM" as const, description: "Complete the balanced benchmark to get recommendations." },
+        } : null;
+
+        return {
+          jobId: r.id,
+          url: r.url,
+          domain: r.domain,
+          email: r.email,
+          stages: {
+            url_analysis: { status: urlAnalysisStatus, data: urlData },
+            fast: { status: fastStatus, data: fastData },
+            balanced: { status: balancedStatus, data: balancedData },
+            comprehensive: { status: "pending", data: null },
+          },
+        };
+      }
+    }
+  }
+
+  // Fallback to mock data
   const job = await getJob(jobId);
   if (!job) return null;
 
@@ -361,7 +479,7 @@ export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
       },
       comprehensive: {
         status: stages.comprehensive,
-        data: null, // comprehensive report is emailed, never included in API
+        data: null,
       },
     },
   };

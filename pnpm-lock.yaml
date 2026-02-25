@@ -136,6 +136,31 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/worker:
+    dependencies:
+      '@obs/benchmark':
+        specifier: workspace:*
+        version: link:../benchmark
+      '@obs/ingest':
+        specifier: workspace:*
+        version: link:../ingest
+      '@obs/shared':
+        specifier: workspace:*
+        version: link:../shared
+      pg:
+        specifier: ^8.18.0
+        version: 8.18.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.11
+      '@types/pg':
+        specifier: ^8.16.0
+        version: 8.16.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
 packages:
 
   '@acemir/cssom@0.9.31':

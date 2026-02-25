@@ -150,7 +150,20 @@ const SCHEMA_STATEMENTS = [
     generated_at TEXT NOT NULL
   )`,
 
+  `CREATE TABLE IF NOT EXISTS vendors (
+    canonical_id    TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    synonyms        TEXT[] NOT NULL DEFAULT '{}',
+    package_names   TEXT[] NOT NULL DEFAULT '{}',
+    is_dynamic      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
   // Indexes
+  `CREATE INDEX IF NOT EXISTS vendors_synonyms_gin ON vendors USING GIN(synonyms)`,
+  `CREATE INDEX IF NOT EXISTS vendors_package_names_gin ON vendors USING GIN(package_names)`,
+  `CREATE INDEX IF NOT EXISTS vendors_category ON vendors(category)`,
   `CREATE INDEX IF NOT EXISTS idx_observations_vendor ON observations(vendor_canonical_id)`,
   `CREATE INDEX IF NOT EXISTS idx_observations_session ON observations(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(mention_type)`,
@@ -709,6 +722,83 @@ export class ObservatoryDB {
       gotchas_snippet: string | null; extracted_at: string; source_platform: string;
       category: string | null;
     }>;
+  }
+
+  // ── Vendors (taxonomy in DB) ──────────────────────────────────────
+
+  async getVendorsAsTaxonomy(): Promise<{ vendors: Array<{ canonical_id: string; display_name: string; synonyms: string[]; category: string }> }> {
+    const { rows } = await this.queryable.query(
+      "SELECT canonical_id, display_name, category, synonyms FROM vendors ORDER BY canonical_id"
+    );
+    return {
+      vendors: rows.map((r: Record<string, unknown>) => ({
+        canonical_id: r.canonical_id as string,
+        display_name: r.display_name as string,
+        category: r.category as string,
+        synonyms: (r.synonyms as string[]) ?? [],
+      })),
+    };
+  }
+
+  async getVendorById(canonicalId: string): Promise<{ canonical_id: string; display_name: string; category: string; synonyms: string[]; package_names: string[]; is_dynamic: boolean } | null> {
+    const { rows } = await this.queryable.query(
+      "SELECT canonical_id, display_name, category, synonyms, package_names, is_dynamic FROM vendors WHERE canonical_id = $1",
+      [canonicalId]
+    );
+    if (rows.length === 0) return null;
+    const r = rows[0] as Record<string, unknown>;
+    return {
+      canonical_id: r.canonical_id as string,
+      display_name: r.display_name as string,
+      category: r.category as string,
+      synonyms: (r.synonyms as string[]) ?? [],
+      package_names: (r.package_names as string[]) ?? [],
+      is_dynamic: r.is_dynamic as boolean,
+    };
+  }
+
+  async findVendorByDomainOrName(domain: string, productName: string): Promise<string | null> {
+    // Check canonical_id matches domain
+    const { rows: byId } = await this.queryable.query(
+      "SELECT canonical_id FROM vendors WHERE canonical_id = $1 OR canonical_id = $2",
+      [domain.split(".")[0], `unknown/${domain}`]
+    );
+    if (byId.length > 0) return (byId[0] as { canonical_id: string }).canonical_id;
+
+    // Check display_name
+    const { rows: byName } = await this.queryable.query(
+      "SELECT canonical_id FROM vendors WHERE LOWER(display_name) = LOWER($1)",
+      [productName]
+    );
+    if (byName.length > 0) return (byName[0] as { canonical_id: string }).canonical_id;
+
+    // Check synonyms array contains the domain or product name
+    const { rows: bySyn } = await this.queryable.query(
+      "SELECT canonical_id FROM vendors WHERE $1 = ANY(synonyms) OR $2 = ANY(synonyms) LIMIT 1",
+      [domain.split(".")[0].toLowerCase(), productName.toLowerCase()]
+    );
+    if (bySyn.length > 0) return (bySyn[0] as { canonical_id: string }).canonical_id;
+
+    return null;
+  }
+
+  async upsertVendor(vendor: {
+    canonicalId: string;
+    displayName: string;
+    category: string;
+    synonyms: string[];
+    packageNames?: string[];
+    isDynamic: boolean;
+  }): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO vendors (canonical_id, display_name, category, synonyms, package_names, is_dynamic)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT(canonical_id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        category = EXCLUDED.category,
+        synonyms = EXCLUDED.synonyms,
+        package_names = EXCLUDED.package_names
+    `, [vendor.canonicalId, vendor.displayName, vendor.category, vendor.synonyms, vendor.packageNames ?? [], vendor.isDynamic]);
   }
 
   async close(): Promise<void> { await this.pool.end(); }

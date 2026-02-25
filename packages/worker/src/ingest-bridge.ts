@@ -1,0 +1,262 @@
+import { Pool } from "pg";
+import {
+  extractVendorMentions,
+  extractResponseContext,
+  classifyIntent,
+  loadVendorTaxonomy,
+} from "@obs/shared";
+import type { VendorTaxonomy, ParsedSession } from "@obs/shared";
+import type { BenchmarkResult } from "@obs/benchmark/lib";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, basename, join } from "node:path";
+
+// ── Taxonomy loading ────────────────────────────────────────────────
+
+let _taxonomy: VendorTaxonomy | null = null;
+
+async function getTaxonomy(pool: Pool): Promise<VendorTaxonomy> {
+  if (_taxonomy) return _taxonomy;
+
+  // Try loading from DB first
+  try {
+    const { rows } = await pool.query(
+      "SELECT canonical_id, display_name, category, synonyms FROM vendors ORDER BY canonical_id"
+    );
+    if (rows.length > 0) {
+      _taxonomy = {
+        vendors: rows.map((r: Record<string, unknown>) => ({
+          canonical_id: r.canonical_id as string,
+          display_name: r.display_name as string,
+          category: r.category as string,
+          synonyms: (r.synonyms as string[]) ?? [],
+        })),
+      };
+      return _taxonomy;
+    }
+  } catch {
+    // Fall through to YAML
+  }
+
+  // Fallback: load from YAML file
+  const candidates = [
+    resolve(process.cwd(), "taxonomy", "vendors.yaml"),
+    resolve(process.cwd(), "..", "..", "taxonomy", "vendors.yaml"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      _taxonomy = loadVendorTaxonomy(p);
+      return _taxonomy;
+    }
+  }
+
+  throw new Error("Cannot load vendor taxonomy from DB or filesystem");
+}
+
+// ── Transcript parsers (inline, lightweight) ────────────────────────
+
+/**
+ * Parse a Claude Code JSONL transcript into a minimal ParsedSession.
+ * This is a lightweight version — we just need turns for vendor extraction.
+ */
+function parseTranscriptFile(filePath: string): ParsedSession | null {
+  if (!existsSync(filePath)) return null;
+
+  const content = readFileSync(filePath, "utf-8");
+  const lines = content.split("\n").filter(Boolean);
+
+  let sessionId = "";
+  let cwd = "";
+  const turns: ParsedSession["turns"] = [];
+
+  for (const line of lines) {
+    try {
+      const obj = JSON.parse(line);
+
+      if (obj.sessionId && !sessionId) sessionId = obj.sessionId;
+      if (obj.cwd && !cwd) cwd = obj.cwd;
+
+      if (obj.type === "human" && obj.message?.content) {
+        const text = obj.message.content
+          .filter((b: { type: string }) => b.type === "text")
+          .map((b: { text: string }) => b.text)
+          .join("\n");
+        turns.push({
+          role: "user",
+          textContent: text,
+          toolUses: [],
+          toolResults: [],
+          timestamp: obj.timestamp ?? new Date().toISOString(),
+        });
+      }
+
+      if (obj.type === "assistant" && obj.message?.content) {
+        const textParts: string[] = [];
+        const toolUses: ParsedSession["turns"][0]["toolUses"] = [];
+
+        for (const block of obj.message.content) {
+          if (block.type === "text" && block.text) {
+            textParts.push(block.text);
+          } else if (block.type === "tool_use") {
+            toolUses.push({
+              toolName: block.name ?? "",
+              input: block.input ?? {},
+              id: block.id ?? "",
+            });
+          }
+        }
+
+        turns.push({
+          role: "assistant",
+          textContent: textParts.join("\n"),
+          toolUses,
+          toolResults: [],
+          timestamp: obj.timestamp ?? new Date().toISOString(),
+        });
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  if (!sessionId) return null;
+
+  return {
+    id: sessionId,
+    platform: "claude_code",
+    modelId: null,
+    cwd,
+    gitBranch: "__obs_bench__",
+    startedAt: turns[0]?.timestamp ?? new Date().toISOString(),
+    endedAt: turns[turns.length - 1]?.timestamp ?? null,
+    turns,
+    filePath,
+  };
+}
+
+// ── Main ingest function ────────────────────────────────────────────
+
+/**
+ * Ingest benchmark results into PostgreSQL.
+ * For each result with a transcript, parse it and extract vendor observations.
+ */
+export async function ingestResults(
+  results: BenchmarkResult[],
+  jobId: string,
+  pool: Pool,
+): Promise<void> {
+  const taxonomy = await getTaxonomy(pool);
+
+  for (const result of results) {
+    if (result.error && !result.transcriptPath) continue;
+
+    // Try to parse the transcript
+    let session: ParsedSession | null = null;
+    if (result.transcriptPath) {
+      session = parseTranscriptFile(result.transcriptPath);
+    }
+
+    // If no transcript file, create a synthetic session from stdout
+    if (!session && result.stdout) {
+      session = {
+        id: `onboard-${jobId}-${result.promptId}-${result.assistant}`,
+        platform: result.assistant,
+        modelId: null,
+        cwd: `/tmp/obs-bench-onboard/${jobId}/${result.promptId}-${result.assistant}`,
+        gitBranch: "__obs_bench__",
+        startedAt: result.startedAt,
+        endedAt: result.endedAt,
+        turns: [{
+          role: "assistant",
+          textContent: result.stdout,
+          toolUses: [],
+          toolResults: [],
+          timestamp: result.startedAt,
+        }],
+        filePath: `onboard/${jobId}/${result.promptId}-${result.assistant}.jsonl`,
+      };
+    }
+
+    if (!session || session.turns.length === 0) continue;
+
+    // Store session
+    await pool.query(`
+      INSERT INTO sessions (id, source_platform, model_id, started_at, ended_at, cwd, git_branch, turn_count, file_path, is_benchmark)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE)
+      ON CONFLICT(id) DO UPDATE SET
+        ended_at = EXCLUDED.ended_at, turn_count = EXCLUDED.turn_count
+    `, [
+      session.id,
+      session.platform,
+      session.modelId,
+      session.startedAt,
+      session.endedAt,
+      session.cwd,
+      session.gitBranch,
+      session.turns.length,
+      session.filePath,
+    ]);
+
+    // Extract vendor mentions
+    let lastUserText: string | null = null;
+    for (const turn of session.turns) {
+      if (turn.role === "user" && turn.textContent) {
+        lastUserText = turn.textContent.slice(0, 300);
+      }
+
+      const mentions = extractVendorMentions(turn, taxonomy, lastUserText);
+      for (const mention of mentions) {
+        await pool.query(`
+          INSERT INTO observations
+            (session_id, vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, user_prompt_snippet, timestamp)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT DO NOTHING
+        `, [
+          session.id,
+          mention.vendorCanonicalId,
+          mention.vendorRaw,
+          mention.mentionType,
+          mention.workCategory,
+          mention.confidence,
+          mention.contextSnippet,
+          mention.userPromptSnippet,
+          mention.timestamp,
+        ]);
+      }
+    }
+
+    // Extract response context for enrichment
+    try {
+      const sidecarPath = session.cwd ? join(session.cwd, "prompt-metadata.json") : null;
+      let constraints: string[] = [];
+      if (sidecarPath && existsSync(sidecarPath)) {
+        const sidecar = JSON.parse(readFileSync(sidecarPath, "utf-8"));
+        constraints = sidecar.metadata?.constraints ?? [];
+      }
+
+      const responseCtx = extractResponseContext(session.turns, taxonomy, constraints);
+      await pool.query(`
+        INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, rationale_snippet,
+          vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed, extracted_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()::text)
+        ON CONFLICT(session_id, prompt_id) DO UPDATE SET
+          primary_vendor = EXCLUDED.primary_vendor,
+          is_implemented = EXCLUDED.is_implemented,
+          rationale_snippet = EXCLUDED.rationale_snippet,
+          vendors_mentioned = EXCLUDED.vendors_mentioned,
+          extracted_at = NOW()::text
+      `, [
+        session.id,
+        result.promptId,
+        responseCtx.primaryVendor,
+        responseCtx.isImplemented,
+        responseCtx.rationaleSnippet,
+        JSON.stringify(responseCtx.vendorsMentioned),
+        responseCtx.tradeOffsSnippet,
+        responseCtx.gotchasSnippet,
+        JSON.stringify(responseCtx.constraintsAddressed),
+      ]);
+    } catch {
+      // Enrichment failure is non-fatal
+    }
+  }
+}
