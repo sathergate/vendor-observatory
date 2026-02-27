@@ -8,6 +8,7 @@ export interface ParallelRunOptions {
   budgetUsd: number;
   timeoutMs: number;
   workspaceRoot?: string;
+  jobId?: string;
 }
 
 /**
@@ -51,7 +52,7 @@ async function runOnePair(
   options: ParallelRunOptions,
 ): Promise<BenchmarkResult> {
   // Create isolated workspace
-  const workDir = createWorkspace(prompt.id, adapter.name, prompt.template);
+  const workDir = createWorkspace(prompt.id, adapter.name, prompt.template, options.jobId);
 
   // Write prompt metadata sidecar for the ingest pipeline
   try {
