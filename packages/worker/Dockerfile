@@ -9,7 +9,7 @@ RUN npm install -g @anthropic-ai/claude-code @openai/codex
 # Copy monorepo and build
 WORKDIR /app
 COPY . .
-RUN npm install -g pnpm && pnpm install --frozen-lockfile && pnpm -r build
+RUN npm install -g pnpm && CI=true pnpm install --frozen-lockfile && CI=true pnpm -r build
 
 COPY packages/worker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
