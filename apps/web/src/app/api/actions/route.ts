@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { getActionFunnel } from "@/lib/db";
+import { requireActivePayment } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireActivePayment();
+  if (auth.error) return auth.error;
+
   try {
     return NextResponse.json(await getActionFunnel());
   } catch (err) {

@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSessionDetail } from "@/lib/db";
+import { requireActivePayment } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireActivePayment();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await params;
     const detail = await getSessionDetail(id);

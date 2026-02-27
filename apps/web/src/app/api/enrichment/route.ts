@@ -8,10 +8,13 @@ import {
   getPromptEnrichmentSummaries,
   getResponseContextByPrompt,
 } from "@/lib/db";
+import { requireActivePayment } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireActivePayment();
+  if (auth.error) return auth.error;
   const { searchParams } = new URL(request.url);
   const view = searchParams.get("view") || "summary";
 

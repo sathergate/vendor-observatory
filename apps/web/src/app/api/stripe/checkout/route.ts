@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe, getPriceId } from "@/lib/stripe";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const { plan } = (await request.json()) as { plan?: string };
+    const { plan, email: bodyEmail } = (await request.json()) as {
+      plan?: string;
+      email?: string;
+    };
 
     if (!plan || !["starter", "growth"].includes(plan)) {
       return NextResponse.json(
@@ -20,6 +24,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve customer email: prefer logged-in user, fall back to body param
+    const user = await getCurrentUser();
+    const customerEmail = user?.email ?? bodyEmail ?? null;
+
     const origin = request.nextUrl.origin;
     const stripe = getStripe();
 
@@ -29,6 +37,7 @@ export async function POST(request: NextRequest) {
       success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/payment?plan=${plan}&canceled=1`,
       metadata: { plan },
+      ...(customerEmail ? { customer_email: customerEmail } : {}),
     });
 
     return NextResponse.json({ url: session.url });
