@@ -34,9 +34,12 @@ export function createWorkspace(
   promptId: string,
   assistant: string,
   template: TemplateType,
+  jobId?: string,
 ): string {
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const dir = join(BENCH_ROOT, date, `${promptId}-${assistant}`);
+  const dir = jobId
+    ? join(BENCH_ROOT, date, jobId, `${promptId}-${assistant}`)
+    : join(BENCH_ROOT, date, `${promptId}-${assistant}`);
 
   // Clean up if exists from a previous run today
   if (existsSync(dir)) {

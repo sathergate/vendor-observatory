@@ -29,8 +29,17 @@ server.listen(PORT, () => {
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
-  console.error("[worker] DATABASE_URL is required");
+  console.error("[worker] FATAL: DATABASE_URL is not set");
   process.exit(1);
+}
+
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.error("[worker] FATAL: ANTHROPIC_API_KEY is not set. Claude adapter and URL analysis will fail.");
+  process.exit(1);
+}
+
+if (!process.env.OPENAI_API_KEY) {
+  console.warn("[worker] WARNING: OPENAI_API_KEY is not set. Codex CLI adapter will be unavailable.");
 }
 
 const pool = new Pool({ connectionString: dbUrl });

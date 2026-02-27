@@ -78,7 +78,24 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
       const results = await runParallelBatch(pairs, {
         budgetUsd: PER_PROMPT_BUDGET_USD,
         timeoutMs: TIMEOUT_FAST_MS,
+        jobId: job.id,
       });
+
+      // Collect any adapter errors for diagnostics
+      const failedResults = results.filter(r => r.error);
+      if (failedResults.length > 0) {
+        const adapterErrors = failedResults
+          .map(r => `${r.promptId}/${r.assistant}: ${r.error}`)
+          .join("; ");
+        console.warn(`[executor] Fast benchmark adapter errors: ${adapterErrors}`);
+        // If ALL sessions failed, log the first error to the job record
+        if (failedResults.length === results.length) {
+          await pool.query(
+            "UPDATE onboarding_jobs SET error = $1 WHERE id = $2 AND error IS NULL",
+            [`All fast sessions failed. First error: ${failedResults[0].error}`.slice(0, 2000), job.id]
+          );
+        }
+      }
 
       await ingestResults(results, job.id, pool);
       const scores = await computeScores(job.id, vendorId, competitors, pool);
@@ -129,7 +146,23 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
       const results = await runParallelBatch(pairs, {
         budgetUsd: PER_PROMPT_BUDGET_USD,
         timeoutMs: TIMEOUT_BALANCED_MS,
+        jobId: job.id,
       });
+
+      // Collect any adapter errors for diagnostics
+      const failedBalancedResults = results.filter(r => r.error);
+      if (failedBalancedResults.length > 0) {
+        const adapterErrors = failedBalancedResults
+          .map(r => `${r.promptId}/${r.assistant}: ${r.error}`)
+          .join("; ");
+        console.warn(`[executor] Balanced benchmark adapter errors: ${adapterErrors}`);
+        if (failedBalancedResults.length === results.length) {
+          await pool.query(
+            "UPDATE onboarding_jobs SET error = $1 WHERE id = $2 AND error IS NULL",
+            [`All balanced sessions failed. First error: ${failedBalancedResults[0].error}`.slice(0, 2000), job.id]
+          );
+        }
+      }
 
       await ingestResults(results, job.id, pool);
       const scores = await computeScores(job.id, vendorId, competitors, pool);
@@ -204,69 +237,105 @@ function generateRecommendations(scores: ScoreResult): Array<{
 }> {
   const recs: Array<{ title: string; priority: "P1" | "P2" | "P3"; impact: "HIGH" | "MEDIUM" | "LOW"; description: string }> = [];
 
-  if (scores.mentionRate < 10) {
+  // Mention rate recommendations (tiered)
+  if (scores.mentionRate === 0 && scores.sessionCount > 0) {
     recs.push({
       title: "Increase AI visibility",
       priority: "P1",
       impact: "HIGH",
-      description: "Your product is rarely mentioned by AI coding assistants. Improve SDK discoverability and documentation to increase visibility.",
+      description: `Your product was not mentioned in any of ${scores.sessionCount} benchmark sessions. AI assistants are not aware of your product — focus on publishing well-documented SDKs and appearing in popular tutorials.`,
+    });
+  } else if (scores.mentionRate > 0 && scores.mentionRate < 20) {
+    recs.push({
+      title: "Increase AI visibility",
+      priority: "P1",
+      impact: "HIGH",
+      description: `Your product was mentioned in ${scores.mentionRate}% of sessions — below the 20% threshold for reliable AI recommendations. Improve documentation structure and add llms.txt to help AI assistants discover your product.`,
+    });
+  } else if (scores.mentionRate >= 20 && scores.mentionRate < 50) {
+    recs.push({
+      title: "Strengthen AI positioning",
+      priority: "P2",
+      impact: "MEDIUM",
+      description: `Your ${scores.mentionRate}% mention rate shows moderate visibility. To break above 50%, ensure your product appears in comparison guides and framework-specific integration tutorials.`,
     });
   }
 
-  if (scores.installRate < 5) {
+  // Install rate recommendations
+  if (scores.installRate === 0 && scores.mentionRate > 0) {
     recs.push({
       title: "Improve SDK discoverability",
       priority: "P1",
       impact: "HIGH",
-      description: "AI assistants rarely install your SDK. Publish to popular package registries with clear, keyword-rich descriptions.",
+      description: `AI assistants mention your product (${scores.mentionRate}%) but never install it (0%). Ensure your package is on npm/pip with clear names and descriptions that match how developers describe the problem you solve.`,
+    });
+  } else if (scores.installRate > 0 && scores.installRate < 10) {
+    recs.push({
+      title: "Improve SDK discoverability",
+      priority: "P2",
+      impact: "MEDIUM",
+      description: `Only ${scores.installRate}% of sessions install your SDK despite ${scores.mentionRate}% mentioning it. Simplify your installation command and add quick-start examples to your README.`,
     });
   }
 
-  if (scores.configRate < 5) {
+  // Config rate recommendations
+  if (scores.installRate > 10 && scores.configRate < 5) {
     recs.push({
       title: "Create integration guides",
       priority: "P2",
       impact: "MEDIUM",
-      description: "Write step-by-step integration guides for Next.js, Express, and other popular frameworks to increase configuration adoption.",
+      description: `AI assistants install your SDK (${scores.installRate}%) but rarely configure it (${scores.configRate}%). Provide copy-pasteable configuration snippets for Next.js, Express, and other popular frameworks.`,
     });
   }
 
+  // Competitor gap recommendations
   const losing = scores.competitorRates.filter(c => c.delta < -10);
   if (losing.length > 0) {
+    const topCompetitor = losing.reduce((a, b) => a.delta < b.delta ? a : b);
     recs.push({
       title: "Address competitor gap",
       priority: "P1",
       impact: "HIGH",
-      description: `Competitors ${losing.map(c => c.name).join(", ")} are mentioned significantly more often. Build comparison content to help AI assistants accurately position your product.`,
+      description: `${topCompetitor.name} is mentioned ${Math.abs(Math.round(topCompetitor.delta))}pp more often than your product (${topCompetitor.mentionRate}% vs ${scores.mentionRate}%). Create comparison content and ensure AI assistants can accurately position your product against alternatives.`,
     });
   }
 
-  if (!scores.platformCoverage.claude_code && !scores.platformCoverage.codex_cli) {
+  // Platform coverage recommendations
+  const coveredPlatforms = Object.entries(scores.platformCoverage).filter(([, v]) => v).map(([k]) => k);
+  const uncoveredPlatforms = Object.entries(scores.platformCoverage).filter(([, v]) => !v).map(([k]) => k);
+  if (uncoveredPlatforms.length > 0 && coveredPlatforms.length > 0) {
     recs.push({
       title: "Expand platform coverage",
       priority: "P2",
       impact: "MEDIUM",
-      description: "Your product isn't being recommended on any major AI coding platform. Optimize documentation for AI assistant consumption.",
+      description: `Your product is recommended on ${coveredPlatforms.join(", ")} but not on ${uncoveredPlatforms.join(", ")}. Investigate why and optimize documentation for broader AI assistant coverage.`,
     });
-  }
-
-  if (scores.aiReadiness < 40) {
+  } else if (coveredPlatforms.length === 0 && scores.sessionCount > 0) {
     recs.push({
-      title: "Optimize error messages",
-      priority: "P3",
-      impact: "LOW",
-      description: "Make error messages descriptive and actionable so AI assistants can suggest your product as a fix.",
+      title: "Expand platform coverage",
+      priority: "P1",
+      impact: "HIGH",
+      description: `Your product isn't being recommended on any AI coding platform despite ${scores.sessionCount} sessions. Optimize your documentation for AI assistant consumption with structured examples and clear API references.`,
     });
   }
 
   // Always have at least one recommendation
   if (recs.length === 0) {
-    recs.push({
-      title: "Monitor AI mention trends",
-      priority: "P3",
-      impact: "LOW",
-      description: "Your product has good AI visibility. Continue monitoring trends and run periodic benchmarks to track changes.",
-    });
+    if (scores.mentionRate >= 50) {
+      recs.push({
+        title: "Monitor AI mention trends",
+        priority: "P3",
+        impact: "LOW",
+        description: `Strong performance: ${scores.mentionRate}% mention rate with ${scores.installRate}% install rate across ${scores.sessionCount} sessions. Continue monitoring and run periodic benchmarks to track changes.`,
+      });
+    } else {
+      recs.push({
+        title: "Run additional benchmarks",
+        priority: "P3",
+        impact: "LOW",
+        description: `Current data from ${scores.sessionCount} sessions shows ${scores.mentionRate}% mention rate. Consider running more benchmarks to improve statistical confidence.`,
+      });
+    }
   }
 
   return recs;

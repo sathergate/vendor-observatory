@@ -36,11 +36,11 @@ export async function computeScores(
   pool: Pool,
 ): Promise<ScoreResult> {
   // Count total benchmark sessions for this job
-  // Sessions are identified by their cwd containing "obs-bench-onboard" or the job ID
+  // Sessions are scoped by their cwd containing the job ID
   const { rows: sessionRows } = await pool.query(
     `SELECT id, source_platform FROM sessions
      WHERE is_benchmark = TRUE
-       AND (cwd LIKE '%obs-bench%' OR cwd LIKE $1)
+       AND cwd LIKE $1
      ORDER BY started_at DESC`,
     [`%${jobId}%`]
   );
