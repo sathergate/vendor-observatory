@@ -3,8 +3,6 @@ name: Verify Deployment
 on:
   push:
     branches: [main]
-    paths:
-      - "db/observatory.sqlite"
 
 jobs:
   verify:
