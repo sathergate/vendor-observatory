@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { EmailAlertSignup } from "@/components/EmailAlertSignup";
 
 const plans = [
@@ -44,6 +45,8 @@ export default async function PlansPage({
   searchParams: Promise<{ email?: string; jobId?: string }>;
 }) {
   const { email = "", jobId = "" } = await searchParams;
+  const cookieStore = await cookies();
+  const isLoggedIn = !!cookieStore.get("session_token")?.value;
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
@@ -86,7 +89,7 @@ export default async function PlansPage({
               </a>
             ) : (
               <a
-                href={`/signup?email=${encodeURIComponent(email)}&plan=${plan.id}`}
+                href={isLoggedIn ? `/payment?plan=${plan.id}` : `/signup?email=${encodeURIComponent(email)}&plan=${plan.id}`}
                 className={`block w-full text-center py-2.5 rounded-lg font-medium transition-colors ${
                   plan.highlight
                     ? "bg-blue-600 hover:bg-blue-500"
