@@ -46,6 +46,12 @@ describe("middleware — public paths", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-middleware-next")).toBe("1");
   });
+
+  it("allows /api/health without auth", () => {
+    const res = middleware(makeRequest("/api/health"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
 });
 
 // ── Protected page routes ────────────────────────────────────────────

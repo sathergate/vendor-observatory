@@ -5,6 +5,7 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PATHS = ["/", "/login", "/signup"];
 const PUBLIC_PREFIXES = [
   "/api/auth/",
+  "/api/health",
   "/api/onboard/",
   "/api/stripe/",
   "/_next/",
