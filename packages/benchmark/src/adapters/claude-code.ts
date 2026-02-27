@@ -70,9 +70,17 @@ export class ClaudeCodeAdapter implements AssistantAdapter {
       };
     } catch (err) {
       const endedAt = new Date().toISOString();
-      const transcriptPath = this.writeTranscript(
-        sessionId, opts, `Error: ${String(err)}`, startedAt, endedAt,
-      );
+
+      // writeTranscript may also fail (e.g. permission denied, disk full).
+      // Catch it so we don't produce an unhandled rejection that loses all context.
+      let transcriptPath: string | null = null;
+      try {
+        transcriptPath = this.writeTranscript(
+          sessionId, opts, `Error: ${String(err)}`, startedAt, endedAt,
+        );
+      } catch {
+        // Transcript write failed — continue with null path
+      }
 
       return {
         promptId: opts.promptId,

@@ -147,8 +147,6 @@ export async function ingestResults(
   const taxonomy = await getTaxonomy(pool);
 
   for (const result of results) {
-    if (result.error && !result.transcriptPath) continue;
-
     // Try to parse the transcript
     let session: ParsedSession | null = null;
     if (result.transcriptPath) {
@@ -173,6 +171,29 @@ export async function ingestResults(
           timestamp: result.startedAt,
         }],
         filePath: `onboard/${jobId}/${result.promptId}-${result.assistant}.jsonl`,
+      };
+    }
+
+    // For failed runs with no transcript and no stdout, create a minimal error
+    // session so the scorer sees them in sessionCount and platformCoverage.
+    // Without this, failed runs are invisible and produce platformCoverage: {}.
+    if (!session && result.error) {
+      session = {
+        id: `onboard-${jobId}-${result.promptId}-${result.assistant}-err`,
+        platform: result.assistant,
+        modelId: null,
+        cwd: `/tmp/obs-bench/${jobId}/${result.promptId}-${result.assistant}`,
+        gitBranch: "__obs_bench__",
+        startedAt: result.startedAt,
+        endedAt: result.endedAt,
+        turns: [{
+          role: "assistant",
+          textContent: `[benchmark error: ${result.error}]`,
+          toolUses: [],
+          toolResults: [],
+          timestamp: result.startedAt,
+        }],
+        filePath: `onboard/${jobId}/${result.promptId}-${result.assistant}-error.jsonl`,
       };
     }
 
