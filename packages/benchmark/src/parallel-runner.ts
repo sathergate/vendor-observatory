@@ -52,7 +52,27 @@ async function runOnePair(
   options: ParallelRunOptions,
 ): Promise<BenchmarkResult> {
   // Create isolated workspace
-  const workDir = createWorkspace(prompt.id, adapter.name, prompt.template, options.jobId);
+  let workDir: string;
+  try {
+    workDir = createWorkspace(prompt.id, adapter.name, prompt.template, options.jobId);
+  } catch (err) {
+    // Workspace creation failed — return a proper error result instead of
+    // letting the promise reject (which loses transcriptPath context).
+    const now = new Date().toISOString();
+    return {
+      promptId: prompt.id,
+      assistant: adapter.name,
+      startedAt: now,
+      endedAt: now,
+      exitCode: 1,
+      durationMs: 0,
+      stdout: "",
+      stderr: String(err),
+      transcriptPath: null,
+      costUsd: null,
+      error: `Workspace creation failed: ${String(err)}`,
+    };
+  }
 
   // Write prompt metadata sidecar for the ingest pipeline
   try {
