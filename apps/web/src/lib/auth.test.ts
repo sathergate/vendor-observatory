@@ -81,10 +81,11 @@ describe("createUser", () => {
   });
 
   it("returns null on duplicate email (query throws)", async () => {
-    // First two calls succeed (CREATE TABLE), third throws
+    // First three calls succeed (CREATE TABLE), fourth throws
     mockQuery
       .mockResolvedValueOnce({ rows: [] }) // CREATE auth_users
       .mockResolvedValueOnce({ rows: [] }) // CREATE auth_sessions
+      .mockResolvedValueOnce({ rows: [] }) // CREATE subscriptions
       .mockRejectedValueOnce(new Error("unique_violation"));
 
     const { createUser } = await loadAuth();

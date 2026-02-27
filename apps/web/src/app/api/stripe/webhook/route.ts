@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
+import {
+  getUserByEmail,
+  upsertSubscription,
+  updateSubscriptionByStripeId,
+  deactivateSubscriptionByStripeId,
+} from "@/lib/auth";
 import type Stripe from "stripe";
 
 export async function POST(request: NextRequest) {
@@ -27,18 +33,47 @@ export async function POST(request: NextRequest) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      const email = session.customer_email;
+      const plan = session.metadata?.plan ?? "starter";
       console.log(
-        `[stripe/webhook] Checkout completed — customer: ${session.customer_email}, plan: ${session.metadata?.plan}`,
+        `[stripe/webhook] Checkout completed — customer: ${email}, plan: ${plan}`,
       );
-      // TODO: Activate the user's subscription in your database.
-      // e.g. await activateSubscription(session.customer_email, session.metadata?.plan);
+
+      if (email) {
+        const user = await getUserByEmail(email);
+        if (user) {
+          const customerId =
+            typeof session.customer === "string"
+              ? session.customer
+              : session.customer?.id ?? null;
+          const subscriptionId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : session.subscription?.id ?? null;
+
+          await upsertSubscription(user.id, {
+            stripeCustomerId: customerId ?? undefined,
+            stripeSubscriptionId: subscriptionId ?? undefined,
+            plan,
+            status: "active",
+          });
+          console.log(`[stripe/webhook] Subscription activated for ${email}`);
+        } else {
+          console.warn(`[stripe/webhook] No user found for email: ${email}`);
+        }
+      }
       break;
     }
     case "customer.subscription.updated": {
       const subscription = event.data.object as Stripe.Subscription;
       console.log(
-        `[stripe/webhook] Subscription updated — status: ${subscription.status}`,
+        `[stripe/webhook] Subscription updated — id: ${subscription.id}, status: ${subscription.status}`,
       );
+      const periodEnd = subscription.items?.data?.[0]?.current_period_end;
+      await updateSubscriptionByStripeId(subscription.id, {
+        status: subscription.status,
+        ...(periodEnd ? { currentPeriodEnd: new Date(periodEnd * 1000) } : {}),
+      });
       break;
     }
     case "customer.subscription.deleted": {
@@ -46,7 +81,7 @@ export async function POST(request: NextRequest) {
       console.log(
         `[stripe/webhook] Subscription canceled — id: ${subscription.id}`,
       );
-      // TODO: Deactivate the user's subscription in your database.
+      await deactivateSubscriptionByStripeId(subscription.id);
       break;
     }
     default:

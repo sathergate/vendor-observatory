@@ -1,8 +1,21 @@
+import { redirect } from "next/navigation";
 import { VendorProvider } from "@/context/VendorContext";
 import { Sidebar } from "@/components/Sidebar";
 import { AuthHeader } from "@/components/AuthHeader";
+import { getCurrentUser, hasActivePayment } from "@/lib/auth";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const user = await getCurrentUser();
+
+  // Middleware already redirects unauthenticated users to /login,
+  // but if the user is logged in without an active payment, send them to /plans.
+  if (user) {
+    const paid = await hasActivePayment(user.id, user.email);
+    if (!paid) {
+      redirect("/plans");
+    }
+  }
+
   return (
     <VendorProvider>
       <div className="flex min-h-screen">

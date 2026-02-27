@@ -7,6 +7,8 @@ const mockVerifyUser = vi.fn();
 const mockCreateSession = vi.fn();
 const mockDeleteSession = vi.fn();
 const mockGetCurrentUser = vi.fn();
+const mockHasActivePayment = vi.fn();
+const mockGetUserSubscription = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   createUser: (...args: unknown[]) => mockCreateUser(...args),
@@ -14,6 +16,8 @@ vi.mock("@/lib/auth", () => ({
   createSession: (...args: unknown[]) => mockCreateSession(...args),
   deleteSession: (...args: unknown[]) => mockDeleteSession(...args),
   getCurrentUser: () => mockGetCurrentUser(),
+  hasActivePayment: (...args: unknown[]) => mockHasActivePayment(...args),
+  getUserSubscription: (...args: unknown[]) => mockGetUserSubscription(...args),
   sessionCookieOptions: (token: string) => ({
     name: "session_token",
     value: token,
@@ -177,12 +181,16 @@ describe("GET /api/auth/me", () => {
 
   it("returns user when authenticated", async () => {
     mockGetCurrentUser.mockResolvedValue({ id: "u1", email: "a@b.com" });
+    mockHasActivePayment.mockResolvedValue(true);
+    mockGetUserSubscription.mockResolvedValue({ plan: "starter", status: "active" });
 
     const res = await callMe();
     expect(res.status).toBe(200);
 
     const data = await res.json();
     expect(data.user).toEqual({ id: "u1", email: "a@b.com" });
+    expect(data.paymentActive).toBe(true);
+    expect(data.subscription).toEqual({ plan: "starter", status: "active" });
   });
 
   it("returns 401 when not authenticated", async () => {

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { searchCorpus } from "@/lib/db";
+import { requireActivePayment } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireActivePayment();
+  if (auth.error) return auth.error;
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q");
 

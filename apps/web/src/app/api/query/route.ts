@@ -9,10 +9,13 @@ import {
   getQueryAutocompleteData,
 } from "@/lib/query-engine";
 import { getVendorHeadToHead } from "@/lib/db";
+import { requireActivePayment } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireActivePayment();
+  if (auth.error) return auth.error;
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
 
