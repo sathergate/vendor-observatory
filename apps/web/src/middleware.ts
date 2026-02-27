@@ -6,6 +6,7 @@ const PUBLIC_PATHS = ["/", "/login", "/signup"];
 const PUBLIC_PREFIXES = [
   "/api/auth/",
   "/api/onboard/",
+  "/api/stripe/",
   "/_next/",
   "/favicon.ico",
   "/get-started",
