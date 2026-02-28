@@ -11,7 +11,13 @@ export function DashboardButton() {
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : { user: null }))
-      .then((data) => setLoggedIn(!!data.user))
+      .then((data) => {
+        setLoggedIn(!!data.user);
+        // Persist server-assigned vendor (e.g. test account) into localStorage
+        if (data.vendor) {
+          localStorage.setItem(VENDOR_STORAGE_KEY, data.vendor);
+        }
+      })
       .catch(() => setLoggedIn(false));
   }, []);
 

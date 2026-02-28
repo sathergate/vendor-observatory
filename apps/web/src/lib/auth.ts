@@ -148,7 +148,10 @@ export async function deleteSession(token: string): Promise<void> {
 // ── Subscription operations ───────────────────────────────────────
 
 /** Email that always bypasses payment checks. */
-const BYPASS_EMAIL = "test@test.com";
+export const BYPASS_EMAIL = "test@test.com";
+
+/** Vendor always assigned to the bypass/test account. */
+export const BYPASS_VENDOR = "neon";
 
 export interface Subscription {
   id: string;

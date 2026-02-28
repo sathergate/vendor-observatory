@@ -46,7 +46,13 @@ export function AuthHeader() {
     function fetchUser() {
       fetch("/api/auth/me")
         .then((r) => (r.ok ? r.json() : { user: null }))
-        .then((data) => setUser(data.user))
+        .then((data) => {
+          setUser(data.user);
+          // Auto-set vendor for accounts with a server-assigned vendor (e.g. test account)
+          if (data.vendor) {
+            setSelectedVendor(data.vendor);
+          }
+        })
         .catch(() => setUser(null))
         .finally(() => setLoading(false));
     }
@@ -55,7 +61,7 @@ export function AuthHeader() {
 
     window.addEventListener("auth-change", fetchUser);
     return () => window.removeEventListener("auth-change", fetchUser);
-  }, []);
+  }, [setSelectedVendor]);
 
   // Close popover on outside click
   useEffect(() => {

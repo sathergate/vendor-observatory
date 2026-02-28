@@ -18,6 +18,8 @@ vi.mock("@/lib/auth", () => ({
   getCurrentUser: () => mockGetCurrentUser(),
   hasActivePayment: (...args: unknown[]) => mockHasActivePayment(...args),
   getUserSubscription: (...args: unknown[]) => mockGetUserSubscription(...args),
+  BYPASS_EMAIL: "test@test.com",
+  BYPASS_VENDOR: "neon",
   sessionCookieOptions: (token: string) => ({
     name: "session_token",
     value: token,
@@ -191,6 +193,30 @@ describe("GET /api/auth/me", () => {
     expect(data.user).toEqual({ id: "u1", email: "a@b.com" });
     expect(data.paymentActive).toBe(true);
     expect(data.subscription).toEqual({ plan: "starter", status: "active" });
+  });
+
+  it("returns vendor for bypass/test account", async () => {
+    mockGetCurrentUser.mockResolvedValue({ id: "u2", email: "test@test.com" });
+    mockHasActivePayment.mockResolvedValue(true);
+    mockGetUserSubscription.mockResolvedValue(null);
+
+    const res = await callMe();
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.vendor).toBe("neon");
+  });
+
+  it("does not return vendor for regular accounts", async () => {
+    mockGetCurrentUser.mockResolvedValue({ id: "u1", email: "a@b.com" });
+    mockHasActivePayment.mockResolvedValue(true);
+    mockGetUserSubscription.mockResolvedValue({ plan: "starter", status: "active" });
+
+    const res = await callMe();
+    expect(res.status).toBe(200);
+
+    const data = await res.json();
+    expect(data.vendor).toBeUndefined();
   });
 
   it("returns 401 when not authenticated", async () => {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, hasActivePayment, getUserSubscription } from "@/lib/auth";
+import { getCurrentUser, hasActivePayment, getUserSubscription, BYPASS_EMAIL, BYPASS_VENDOR } from "@/lib/auth";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -16,5 +16,6 @@ export async function GET() {
     subscription: subscription
       ? { plan: subscription.plan, status: subscription.status }
       : null,
+    vendor: user.email === BYPASS_EMAIL ? BYPASS_VENDOR : undefined,
   });
 }
