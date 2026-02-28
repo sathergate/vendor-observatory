@@ -34,6 +34,16 @@ const NAV_GROUPS = [
   },
 ];
 
+const VENDOR_NAV_LINKS = (vendorId: string) => [
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}`, label: "My Profile" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/implementation`, label: "Implementation Rate" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/competitive`, label: "Competitive Landscape" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/trends`, label: "Confidence Trends" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/use-cases`, label: "Use Cases" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/reasoning`, label: "Reasoning Samples" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/category-competition`, label: "Category Competition" },
+];
+
 export function Sidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -44,10 +54,6 @@ export function Sidebar() {
 
   // Logo is "active" on the home/benchmarks page
   const isHome = pathname === "/overview" || pathname === "/benchmarks";
-
-  const profileHref = selectedVendor
-    ? `/benchmarks/vendors/${encodeURIComponent(selectedVendor)}`
-    : null;
 
   return (
     <>
@@ -105,37 +111,46 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 p-3 overflow-y-auto" onClick={handleLinkClick}>
-          {/* Profile link — only visible when a vendor is selected */}
-          {profileHref && (
+          {selectedVendor ? (
             <div className="mb-4">
-              <div className="space-y-0.5">
-                <NavLink
-                  href={profileHref}
-                  label={`Profile — ${vendorDisplayName(selectedVendor!)}`}
-                  exact
-                />
-              </div>
-            </div>
-          )}
-
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="mb-4">
               <div className="px-3 pt-2 pb-1">
                 <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  {group.label}
+                  My Dashboard
                 </span>
               </div>
               <div className="space-y-0.5">
-                {group.links.map((link) => (
+                {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
                   <NavLink
                     key={link.href}
                     href={link.href}
                     label={link.label}
+                    exact={link.label === "My Profile"}
                   />
                 ))}
               </div>
             </div>
-          ))}
+          ) : (
+            <>
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label} className="mb-4">
+                  <div className="px-3 pt-2 pb-1">
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      {group.label}
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {group.links.map((link) => (
+                      <NavLink
+                        key={link.href}
+                        href={link.href}
+                        label={link.label}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </nav>
 
         <div className="p-4 border-t border-gray-800 text-xs text-gray-500">
