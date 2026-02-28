@@ -9,7 +9,7 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   try {
-    return NextResponse.json(await getPlatformComparison());
+    return NextResponse.json(await getPlatformComparison(auth.vendorCanonicalId));
   } catch (err) {
     console.error("/api/platforms error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

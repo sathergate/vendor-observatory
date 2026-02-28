@@ -190,7 +190,7 @@ describe("GET /api/auth/me", () => {
     const data = await res.json();
     expect(data.user).toEqual({ id: "u1", email: "a@b.com" });
     expect(data.paymentActive).toBe(true);
-    expect(data.subscription).toEqual({ plan: "starter", status: "active" });
+    expect(data.subscription).toEqual({ plan: "starter", status: "active", vendorCanonicalId: null });
   });
 
   it("returns 401 when not authenticated", async () => {

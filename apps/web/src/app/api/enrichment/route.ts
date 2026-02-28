@@ -18,10 +18,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const view = searchParams.get("view") || "summary";
 
+  const vs = auth.vendorCanonicalId;
+
   try {
     switch (view) {
       case "summary": {
-        const summaries = await getPromptEnrichmentSummaries();
+        const summaries = await getPromptEnrichmentSummaries(vs);
         return NextResponse.json({ summaries });
       }
 
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
         const platform = searchParams.get("platform") || undefined;
         const contentTag = searchParams.get("contentTag") || undefined;
         const patternTag = searchParams.get("patternTag") || undefined;
-        const counts = await getPrimaryVendorCounts({ category, platform, contentTag, patternTag });
+        const counts = await getPrimaryVendorCounts({ category, platform, contentTag, patternTag, vendorScope: vs });
         return NextResponse.json({ vendorCounts: counts });
       }
 

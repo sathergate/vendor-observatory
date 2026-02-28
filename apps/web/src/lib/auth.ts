@@ -57,9 +57,19 @@ async function ensureTables() {
         plan TEXT NOT NULL DEFAULT 'starter',
         status TEXT NOT NULL DEFAULT 'active',
         current_period_end TIMESTAMPTZ,
+        vendor_canonical_id TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+    // Migration: add vendor_canonical_id if missing (existing installs)
+    await pool.query(`
+      ALTER TABLE subscriptions
+        ADD COLUMN IF NOT EXISTS vendor_canonical_id TEXT
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_vendor
+        ON subscriptions(vendor_canonical_id)
     `);
     _tablesReady = true;
   } catch (err) {
@@ -158,6 +168,7 @@ export interface Subscription {
   plan: string;
   status: string;
   current_period_end: Date | null;
+  vendor_canonical_id: string | null;
 }
 
 /** Create or update a subscription for a user (keyed by user_id). */
@@ -169,6 +180,7 @@ export async function upsertSubscription(
     plan?: string;
     status?: string;
     currentPeriodEnd?: Date;
+    vendorCanonicalId?: string;
   },
 ): Promise<void> {
   await ensureTables();
@@ -187,6 +199,7 @@ export async function upsertSubscription(
              plan = COALESCE($4, plan),
              status = COALESCE($5, status),
              current_period_end = COALESCE($6, current_period_end),
+             vendor_canonical_id = COALESCE($7, vendor_canonical_id),
              updated_at = NOW()
          WHERE user_id = $1`,
         [
@@ -196,13 +209,14 @@ export async function upsertSubscription(
           data.plan ?? null,
           data.status ?? null,
           data.currentPeriodEnd ?? null,
+          data.vendorCanonicalId ?? null,
         ],
       );
     } else {
       const id = crypto.randomUUID();
       await pool.query(
-        `INSERT INTO subscriptions (id, user_id, stripe_customer_id, stripe_subscription_id, plan, status, current_period_end)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO subscriptions (id, user_id, stripe_customer_id, stripe_subscription_id, plan, status, current_period_end, vendor_canonical_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           id,
           userId,
@@ -211,6 +225,7 @@ export async function upsertSubscription(
           data.plan ?? "starter",
           data.status ?? "active",
           data.currentPeriodEnd ?? null,
+          data.vendorCanonicalId ?? null,
         ],
       );
     }
@@ -242,7 +257,7 @@ export async function getUserSubscription(userId: string): Promise<Subscription 
   if (!pool) return null;
   try {
     const { rows } = await pool.query(
-      "SELECT id, user_id, stripe_customer_id, stripe_subscription_id, plan, status, current_period_end FROM subscriptions WHERE user_id = $1",
+      "SELECT id, user_id, stripe_customer_id, stripe_subscription_id, plan, status, current_period_end, vendor_canonical_id FROM subscriptions WHERE user_id = $1",
       [userId],
     );
     return (rows[0] as Subscription) ?? null;
@@ -296,6 +311,9 @@ export async function deactivateSubscriptionByStripeId(
   }
 }
 
+/** Default vendor for the test bypass account. */
+const BYPASS_VENDOR = "supabase";
+
 /**
  * Check whether a user has an active payment linked.
  * Returns true for the bypass email (test@test.com) unconditionally.
@@ -305,6 +323,59 @@ export async function hasActivePayment(userId: string, email: string): Promise<b
   const sub = await getUserSubscription(userId);
   if (!sub) return false;
   return sub.status === "active" || sub.status === "trialing";
+}
+
+/** Get subscription details for the current user (active/trialing only). */
+export async function getSubscriptionForUser(userId: string): Promise<{
+  plan: string;
+  status: string;
+  vendor_canonical_id: string | null;
+} | null> {
+  await ensureTables();
+  const pool = getPool();
+  if (!pool) return null;
+  try {
+    const { rows } = await pool.query<{
+      plan: string;
+      status: string;
+      vendor_canonical_id: string | null;
+    }>(
+      `SELECT plan, status, vendor_canonical_id
+       FROM subscriptions
+       WHERE user_id = $1
+         AND status IN ('active', 'trialing')
+       LIMIT 1`,
+      [userId],
+    );
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Set vendor_canonical_id on a subscription (only if currently NULL). */
+export async function setSubscriptionVendor(userId: string, vendorCanonicalId: string): Promise<"ok" | "already_set" | "no_subscription"> {
+  await ensureTables();
+  const pool = getPool();
+  if (!pool) return "no_subscription";
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, vendor_canonical_id FROM subscriptions
+       WHERE user_id = $1 AND status IN ('active', 'trialing')
+       LIMIT 1`,
+      [userId],
+    );
+    if (rows.length === 0) return "no_subscription";
+    const sub = rows[0] as { id: string; vendor_canonical_id: string | null };
+    if (sub.vendor_canonical_id) return "already_set";
+    await pool.query(
+      `UPDATE subscriptions SET vendor_canonical_id = $2, updated_at = NOW() WHERE id = $1`,
+      [sub.id, vendorCanonicalId],
+    );
+    return "ok";
+  } catch {
+    return "no_subscription";
+  }
 }
 
 // ── Cookie helper for server components / route handlers ──────────
@@ -347,10 +418,10 @@ export function deleteSessionCookie() {
 
 /**
  * Verify the current user is authenticated AND has an active payment.
- * Returns the user if all checks pass, or a NextResponse error to return early.
+ * Returns the user and their linked vendor if all checks pass, or a NextResponse error to return early.
  */
 export async function requireActivePayment(): Promise<
-  { user: AuthUser; error?: never } | { user?: never; error: Response }
+  { user: AuthUser; vendorCanonicalId: string | null; error?: never } | { user?: never; vendorCanonicalId?: never; error: Response }
 > {
   // Dynamic import to avoid pulling NextResponse into non-API contexts
   const { NextResponse } = await import("next/server");
@@ -360,8 +431,13 @@ export async function requireActivePayment(): Promise<
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const paid = await hasActivePayment(user.id, user.email);
-  if (!paid) {
+  // Bypass user gets a hardcoded vendor
+  if (user.email === BYPASS_EMAIL) {
+    return { user, vendorCanonicalId: BYPASS_VENDOR };
+  }
+
+  const sub = await getSubscriptionForUser(user.id);
+  if (!sub) {
     return {
       error: NextResponse.json(
         { error: "Payment required. Please subscribe to access this resource." },
@@ -370,5 +446,5 @@ export async function requireActivePayment(): Promise<
     };
   }
 
-  return { user };
+  return { user, vendorCanonicalId: sub.vendor_canonical_id };
 }

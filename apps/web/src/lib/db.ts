@@ -85,13 +85,17 @@ export interface VendorStatsRow {
   work_category: string;
 }
 
-export async function getVendorStats(platformFilter?: string, categoryFilter?: string): Promise<VendorStatsRow[]> {
+export async function getVendorStats(platformFilter?: string, categoryFilter?: string, vendorScope?: string | null): Promise<VendorStatsRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
     let where = "WHERE 1=1";
     const params: string[] = [];
     let paramIdx = 1;
+    if (vendorScope) {
+      where += ` AND o.vendor_canonical_id = $${paramIdx++}`;
+      params.push(vendorScope);
+    }
     if (platformFilter) {
       where += ` AND o.session_id IN (SELECT id FROM sessions WHERE source_platform = $${paramIdx++})`;
       params.push(platformFilter);
@@ -144,10 +148,16 @@ export interface PlatformCompRow {
   codex_cli_count: number;
 }
 
-export async function getPlatformComparison(): Promise<PlatformCompRow[]> {
+export async function getPlatformComparison(vendorScope?: string | null): Promise<PlatformCompRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
+    const params: string[] = [];
+    let vendorWhere = "";
+    if (vendorScope) {
+      vendorWhere = "WHERE o.vendor_canonical_id = $1";
+      params.push(vendorScope);
+    }
     const { rows } = await pool.query(`
       SELECT
         o.vendor_canonical_id,
@@ -155,11 +165,12 @@ export async function getPlatformComparison(): Promise<PlatformCompRow[]> {
         SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) AS codex_cli_count
       FROM observations o
       JOIN sessions s ON o.session_id = s.id
+      ${vendorWhere}
       GROUP BY o.vendor_canonical_id
       HAVING SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) > 0
          OR SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) > 0
       ORDER BY (SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) + SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END)) DESC
-    `);
+    `, params);
     return rows.map((r: Record<string, unknown>) => ({
       vendor_canonical_id: r.vendor_canonical_id as string,
       claude_code_count: Number(r.claude_code_count),
@@ -177,10 +188,16 @@ export interface FunnelRow {
   installed_total: number;
 }
 
-export async function getActionFunnel(): Promise<FunnelRow[]> {
+export async function getActionFunnel(vendorScope?: string | null): Promise<FunnelRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
+    const params: string[] = [];
+    let vendorWhere = "";
+    if (vendorScope) {
+      vendorWhere = "WHERE vendor_canonical_id = $1";
+      params.push(vendorScope);
+    }
     const { rows } = await pool.query(`
       SELECT
         vendor_canonical_id,
@@ -188,10 +205,11 @@ export async function getActionFunnel(): Promise<FunnelRow[]> {
         SUM(CASE WHEN mention_type IN ('recommended') THEN 1 ELSE 0 END) AS recommended_total,
         SUM(CASE WHEN mention_type IN ('installed', 'configured', 'implemented') THEN 1 ELSE 0 END) AS installed_total
       FROM observations
+      ${vendorWhere}
       GROUP BY vendor_canonical_id
       HAVING SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) > 0
       ORDER BY SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) DESC
-    `);
+    `, params);
     return rows.map((r: Record<string, unknown>) => ({
       vendor_canonical_id: r.vendor_canonical_id as string,
       mentioned_total: Number(r.mentioned_total),
@@ -214,10 +232,18 @@ export interface SessionListRow {
   vendors: string;
 }
 
-export async function getSessionList(limit = 50, offset = 0): Promise<SessionListRow[]> {
+export async function getSessionList(limit = 50, offset = 0, vendorScope?: string | null): Promise<SessionListRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
+    const params: (string | number)[] = [];
+    let paramIdx = 1;
+    let vendorWhere = "";
+    if (vendorScope) {
+      vendorWhere = `WHERE s.id IN (SELECT session_id FROM observations WHERE vendor_canonical_id = $${paramIdx++})`;
+      params.push(vendorScope);
+    }
+    params.push(limit, offset);
     const { rows } = await pool.query(`
       SELECT
         s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
@@ -225,10 +251,11 @@ export async function getSessionList(limit = 50, offset = 0): Promise<SessionLis
         string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
       FROM sessions s
       LEFT JOIN observations o ON s.id = o.session_id
+      ${vendorWhere}
       GROUP BY s.id
       ORDER BY s.started_at DESC
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+    `, params);
     return rows.map((r: Record<string, unknown>) => ({
       id: r.id as string,
       source_platform: r.source_platform as string,
@@ -248,10 +275,18 @@ export interface SessionDetail {
   toolActions: Array<{ tool_name: string; command_or_path: string | null; vendor_canonical_id: string | null; action_type: string | null; success: number | null; timestamp: string }>;
 }
 
-export async function getSessionDetail(id: string): Promise<SessionDetail | null> {
+export async function getSessionDetail(id: string, vendorScope?: string | null): Promise<SessionDetail | null> {
   const pool = getPool();
   if (!pool) return null;
   try {
+    // If vendor scoped, verify this session has observations for the vendor
+    if (vendorScope) {
+      const check = await pool.query(
+        "SELECT 1 FROM observations WHERE session_id = $1 AND vendor_canonical_id = $2 LIMIT 1",
+        [id, vendorScope],
+      );
+      if (check.rows.length === 0) return null;
+    }
     const sessionResult = await pool.query("SELECT * FROM sessions WHERE id = $1", [id]);
     const session = sessionResult.rows[0] as SessionDetail["session"] | undefined;
     if (!session) return null;
@@ -305,18 +340,26 @@ export interface BenchmarkRunRow {
   vendors: string;
 }
 
-export async function getBenchmarkSessions(limit = 100): Promise<BenchmarkRunRow[]> {
+export async function getBenchmarkSessions(limit = 100, vendorScope?: string | null): Promise<BenchmarkRunRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
+    const params: (string | number)[] = [];
+    let paramIdx = 1;
+    let extraWhere = "";
+    if (vendorScope) {
+      extraWhere = `AND s.id IN (SELECT session_id FROM observations WHERE vendor_canonical_id = $${paramIdx++})`;
+      params.push(vendorScope);
+    }
+    params.push(limit);
     const { rows } = await pool.query(`
       SELECT s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
         COUNT(o.id) AS observation_count,
         string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
       FROM sessions s LEFT JOIN observations o ON s.id = o.session_id
-      WHERE s.is_benchmark = TRUE
-      GROUP BY s.id ORDER BY s.started_at DESC LIMIT $1
-    `, [limit]);
+      WHERE s.is_benchmark = TRUE ${extraWhere}
+      GROUP BY s.id ORDER BY s.started_at DESC LIMIT $${paramIdx}
+    `, params);
     return rows.map((r: Record<string, unknown>) => ({
       id: r.id as string,
       source_platform: r.source_platform as string,
@@ -338,10 +381,16 @@ export interface BenchmarkVendorCompRow {
   total: number;
 }
 
-export async function getBenchmarkVendorComparison(): Promise<BenchmarkVendorCompRow[]> {
+export async function getBenchmarkVendorComparison(vendorScope?: string | null): Promise<BenchmarkVendorCompRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
+    const params: string[] = [];
+    let extraWhere = "";
+    if (vendorScope) {
+      extraWhere = "AND o.vendor_canonical_id = $1";
+      params.push(vendorScope);
+    }
     const { rows } = await pool.query(`
       SELECT o.vendor_canonical_id,
         SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) AS claude_code_count,
@@ -349,9 +398,9 @@ export async function getBenchmarkVendorComparison(): Promise<BenchmarkVendorCom
         SUM(CASE WHEN s.source_platform = 'cursor' THEN 1 ELSE 0 END) AS cursor_count,
         COUNT(*) AS total
       FROM observations o JOIN sessions s ON o.session_id = s.id
-      WHERE s.is_benchmark = TRUE
+      WHERE s.is_benchmark = TRUE ${extraWhere}
       GROUP BY o.vendor_canonical_id ORDER BY total DESC
-    `);
+    `, params);
     return rows.map((r: Record<string, unknown>) => ({
       vendor_canonical_id: r.vendor_canonical_id as string,
       claude_code_count: Number(r.claude_code_count),
@@ -362,13 +411,20 @@ export async function getBenchmarkVendorComparison(): Promise<BenchmarkVendorCom
   } catch { return []; }
 }
 
-export async function getBenchmarkStats() {
+export async function getBenchmarkStats(vendorScope?: string | null) {
   const pool = getPool();
   if (!pool) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
   try {
-    const sessions = (await pool.query("SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE")).rows[0] as { c: string };
-    const observations = (await pool.query("SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = TRUE)")).rows[0] as { c: string };
-    const { rows: platforms } = await pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE GROUP BY source_platform");
+    const vendorFilter = vendorScope
+      ? "AND id IN (SELECT session_id FROM observations WHERE vendor_canonical_id = $1)"
+      : "";
+    const obsVendorFilter = vendorScope
+      ? "AND vendor_canonical_id = $1"
+      : "";
+    const params = vendorScope ? [vendorScope] : [];
+    const sessions = (await pool.query(`SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE ${vendorFilter}`, params)).rows[0] as { c: string };
+    const observations = (await pool.query(`SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = TRUE) ${obsVendorFilter}`, params)).rows[0] as { c: string };
+    const { rows: platforms } = await pool.query(`SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE ${vendorFilter} GROUP BY source_platform`, params);
     const platformBreakdown: Record<string, number> = {};
     for (const p of platforms as Array<{ source_platform: string; c: string }>) platformBreakdown[p.source_platform] = Number(p.c);
     return { totalBenchmarkSessions: Number(sessions.c), totalBenchmarkObservations: Number(observations.c), platformBreakdown };
@@ -462,6 +518,7 @@ export async function getPrimaryVendorCounts(filters?: {
   platform?: string;
   contentTag?: string;
   patternTag?: string;
+  vendorScope?: string | null;
 }): Promise<PrimaryVendorCountRow[]> {
   const pool = getPool();
   if (!pool) return [];
@@ -470,6 +527,10 @@ export async function getPrimaryVendorCounts(filters?: {
     let where = "rc.primary_vendor IS NOT NULL";
     const params: string[] = [];
     let paramIdx = 1;
+    if (filters?.vendorScope) {
+      where += ` AND rc.primary_vendor = $${paramIdx++}`;
+      params.push(filters.vendorScope);
+    }
     if (filters?.category) {
       where += ` AND pm.category = $${paramIdx++}`;
       params.push(filters.category);
@@ -584,14 +645,18 @@ export interface PromptEnrichmentSummary {
   implementation_rate: number;
 }
 
-export async function getPromptEnrichmentSummaries(): Promise<PromptEnrichmentSummary[]> {
+export async function getPromptEnrichmentSummaries(vendorScope?: string | null): Promise<PromptEnrichmentSummary[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
     if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
 
     const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
-    const { rows: allContexts } = await pool.query("SELECT * FROM response_context");
+    const rcQuery = vendorScope
+      ? "SELECT * FROM response_context WHERE primary_vendor = $1"
+      : "SELECT * FROM response_context";
+    const rcParams = vendorScope ? [vendorScope] : [];
+    const { rows: allContexts } = await pool.query(rcQuery, rcParams);
 
     const results: PromptEnrichmentSummary[] = [];
 
@@ -1934,6 +1999,7 @@ export async function searchCorpus(
   query: string,
   filters?: { vendor?: string; category?: string; platform?: string; sourceType?: string },
   limit = 20,
+  vendorScope?: string | null,
 ): Promise<SearchResult[]> {
   const pool = getPool();
   if (!pool) return [];
@@ -1944,6 +2010,10 @@ export async function searchCorpus(
     const params: (string | number)[] = [query];
     let paramIdx = 2;
 
+    if (vendorScope) {
+      whereClause += ` AND vendor = $${paramIdx++}`;
+      params.push(vendorScope);
+    }
     if (filters?.vendor) {
       whereClause += ` AND vendor = $${paramIdx++}`;
       params.push(filters.vendor);

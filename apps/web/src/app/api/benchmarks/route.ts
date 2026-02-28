@@ -9,11 +9,12 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   try {
-    const stats = await getBenchmarkStats();
-    const sessions = await getBenchmarkSessions(100);
-    const vendorComparison = await getBenchmarkVendorComparison();
-    const primaryVendorCounts = await getPrimaryVendorCounts();
-    const enrichmentSummaries = await getPromptEnrichmentSummaries();
+    const vs = auth.vendorCanonicalId;
+    const stats = await getBenchmarkStats(vs);
+    const sessions = await getBenchmarkSessions(100, vs);
+    const vendorComparison = await getBenchmarkVendorComparison(vs);
+    const primaryVendorCounts = await getPrimaryVendorCounts({ vendorScope: vs });
+    const enrichmentSummaries = await getPromptEnrichmentSummaries(vs);
     return NextResponse.json({ stats, sessions, vendorComparison, primaryVendorCounts, enrichmentSummaries });
   } catch (err) {
     console.error("/api/benchmarks error:", err);

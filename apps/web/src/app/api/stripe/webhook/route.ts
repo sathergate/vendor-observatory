@@ -35,8 +35,9 @@ export async function POST(request: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session;
       const email = session.customer_email;
       const plan = session.metadata?.plan ?? "starter";
+      const vendorId = session.metadata?.vendorId ?? undefined;
       console.log(
-        `[stripe/webhook] Checkout completed — customer: ${email}, plan: ${plan}`,
+        `[stripe/webhook] Checkout completed — customer: ${email}, plan: ${plan}, vendor: ${vendorId ?? "none"}`,
       );
 
       if (email) {
@@ -56,8 +57,9 @@ export async function POST(request: NextRequest) {
             stripeSubscriptionId: subscriptionId ?? undefined,
             plan,
             status: "active",
+            vendorCanonicalId: vendorId,
           });
-          console.log(`[stripe/webhook] Subscription activated for ${email}`);
+          console.log(`[stripe/webhook] Subscription activated for ${email} (vendor: ${vendorId ?? "none"})`);
         } else {
           console.warn(`[stripe/webhook] No user found for email: ${email}`);
         }

@@ -23,7 +23,12 @@ const PLAN_FEATURES: Record<string, string[]> = {
   ],
 };
 
-export default function PaymentForm() {
+interface PaymentFormProps {
+  vendorId: string | null;
+  vendorName: string | null;
+}
+
+export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") ?? "starter";
   const canceled = searchParams.get("canceled") === "1";
@@ -32,6 +37,11 @@ export default function PaymentForm() {
   const [error, setError] = useState("");
 
   async function handleCheckout() {
+    if (!vendorId) {
+      setError("Could not determine your vendor. Please start from the analysis page.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -39,7 +49,7 @@ export default function PaymentForm() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, vendorId }),
       });
 
       const data = await res.json();
@@ -89,6 +99,27 @@ export default function PaymentForm() {
         )}
       </div>
 
+      {/* Vendor display (resolved from onboarding analysis) */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 mb-6">
+        <p className="text-sm text-gray-400 mb-1">Monitoring</p>
+        {vendorId ? (
+          <>
+            <p className="text-lg font-semibold">{vendorName ?? vendorId}</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Your dashboard will show analytics scoped to this vendor.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-yellow-300">
+            Could not detect your vendor.{" "}
+            <a href="/get-started/analyze" className="underline hover:text-yellow-200">
+              Start a new analysis
+            </a>{" "}
+            to continue.
+          </p>
+        )}
+      </div>
+
       {error && (
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 mb-6 text-center">
           <p className="text-red-300 text-sm">{error}</p>
@@ -98,7 +129,7 @@ export default function PaymentForm() {
       {/* Checkout button */}
       <button
         onClick={handleCheckout}
-        disabled={loading}
+        disabled={loading || !vendorId}
         className="block w-full text-center py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
       >
         {loading ? "Redirecting to checkout..." : "Continue to payment"}

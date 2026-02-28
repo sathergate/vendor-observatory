@@ -89,7 +89,7 @@ export default async function PlansPage({
               </a>
             ) : (
               <a
-                href={isLoggedIn ? `/payment?plan=${plan.id}` : `/signup?email=${encodeURIComponent(email)}&plan=${plan.id}`}
+                href={isLoggedIn ? `/payment?plan=${plan.id}${jobId ? `&jobId=${jobId}` : ""}` : `/signup?email=${encodeURIComponent(email)}&plan=${plan.id}${jobId ? `&jobId=${jobId}` : ""}`}
                 className={`block w-full text-center py-2.5 rounded-lg font-medium transition-colors ${
                   plan.highlight
                     ? "bg-blue-600 hover:bg-blue-500"

@@ -12,6 +12,7 @@ export default function SignupForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const plan = searchParams.get("plan") ?? "";
+  const jobId = searchParams.get("jobId") ?? "";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,7 +35,10 @@ export default function SignupForm() {
       console.log(`[auth] TODO: send email verification to ${email}`);
 
       window.dispatchEvent(new Event("auth-change"));
-      router.push(plan ? `/payment?plan=${encodeURIComponent(plan)}` : "/");
+      const paymentParams = new URLSearchParams();
+      if (plan) paymentParams.set("plan", plan);
+      if (jobId) paymentParams.set("jobId", jobId);
+      router.push(paymentParams.toString() ? `/payment?${paymentParams.toString()}` : "/");
     } catch {
       setError("Something went wrong");
     } finally {

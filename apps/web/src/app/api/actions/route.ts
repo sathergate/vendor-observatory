@@ -9,7 +9,7 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   try {
-    return NextResponse.json(await getActionFunnel());
+    return NextResponse.json(await getActionFunnel(auth.vendorCanonicalId));
   } catch (err) {
     console.error("/api/actions error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
