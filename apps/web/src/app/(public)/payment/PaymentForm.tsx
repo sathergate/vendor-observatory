@@ -23,15 +23,25 @@ const PLAN_FEATURES: Record<string, string[]> = {
   ],
 };
 
-export default function PaymentForm() {
+interface PaymentFormProps {
+  vendors: Array<{ canonical_id: string; display_name: string }>;
+}
+
+export default function PaymentForm({ vendors }: PaymentFormProps) {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") ?? "starter";
   const canceled = searchParams.get("canceled") === "1";
 
+  const [selectedVendorId, setSelectedVendorId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleCheckout() {
+    if (!selectedVendorId) {
+      setError("Please select the vendor you want to monitor.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -39,7 +49,7 @@ export default function PaymentForm() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, vendorId: selectedVendorId }),
       });
 
       const data = await res.json();
@@ -89,6 +99,30 @@ export default function PaymentForm() {
         )}
       </div>
 
+      {/* Vendor selection */}
+      <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 mb-6">
+        <label htmlFor="vendor-select" className="block text-sm text-gray-400 mb-2">
+          Which vendor are you monitoring?
+        </label>
+        <select
+          id="vendor-select"
+          value={selectedVendorId}
+          onChange={(e) => setSelectedVendorId(e.target.value)}
+          required
+          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">Select your vendor...</option>
+          {vendors.map((v) => (
+            <option key={v.canonical_id} value={v.canonical_id}>
+              {v.display_name}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500 mt-2">
+          Your dashboard will show analytics scoped to this vendor.
+        </p>
+      </div>
+
       {error && (
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 mb-6 text-center">
           <p className="text-red-300 text-sm">{error}</p>
@@ -98,7 +132,7 @@ export default function PaymentForm() {
       {/* Checkout button */}
       <button
         onClick={handleCheckout}
-        disabled={loading}
+        disabled={loading || !selectedVendorId}
         className="block w-full text-center py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
       >
         {loading ? "Redirecting to checkout..." : "Continue to payment"}
