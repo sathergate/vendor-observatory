@@ -6,7 +6,9 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@obs/shared": "workspace:*",
@@ -17,6 +19,7 @@
   "devDependencies": {
     "typescript": "^5.7.0",
     "@types/node": "^22.10.0",
-    "@types/pg": "^8.16.0"
+    "@types/pg": "^8.16.0",
+    "vitest": "^4.0.18"
   }
 }
