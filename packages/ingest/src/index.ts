@@ -11,6 +11,7 @@ import {
   isEnrichmentEnabled,
   extractResponseContextWithLLM,
   classifyIntent,
+  DEFAULT_CATEGORIES,
 } from "@obs/shared";
 import type { VendorTaxonomy } from "@obs/shared";
 import { ObservatoryDB } from "./db.js";
@@ -94,6 +95,10 @@ program
     const dbUrl = getDbUrl(opts);
     const db = await ObservatoryDB.create(dbUrl);
     console.log(chalk.green(`✓ Database connected`));
+
+    // Seed categories from taxonomy (idempotent — only inserts missing ones)
+    await db.seedCategoriesFromTaxonomy(taxonomy.vendors, DEFAULT_CATEGORIES);
+    console.log(chalk.green(`✓ Categories synced`));
 
     let totalSessions = 0;
     let totalObservations = 0;

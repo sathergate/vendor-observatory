@@ -5,7 +5,7 @@ import { vendorDisplayName, VENDOR_META, vendorCategory } from "@/lib/vendor-tax
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { SectionNav } from "@/components/SectionNav";
 import { VendorGuard } from "@/components/VendorGuard";
-import { CATEGORY_META } from "../../categories";
+import { loadCategoryMeta } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
 
 export const dynamic = "force-dynamic";
@@ -120,7 +120,10 @@ function RecommendationCard({ rec, index }: { rec: Recommendation; index: number
 export default async function VendorScorecardPage({ params }: { params: Promise<{ vendor: string }> }) {
   const { vendor } = await params;
   const vendorId = decodeURIComponent(vendor);
-  const scorecard = await getVendorScorecard(vendorId);
+  const [scorecard, CATEGORY_META] = await Promise.all([
+    getVendorScorecard(vendorId),
+    loadCategoryMeta(),
+  ]);
 
   if (!scorecard) {
     return (

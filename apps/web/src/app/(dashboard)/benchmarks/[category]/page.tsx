@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEnrichmentByCategory, safeJsonParse } from "@/lib/db";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { CATEGORY_META } from "../categories";
+import { loadCategoryMeta } from "../categories";
 import { PROMPT_SUMMARIES, PROMPTS_BY_CATEGORY } from "../prompt-summaries";
 import { CONTENT_TAG_LABELS, PATTERN_TAG_LABELS } from "../tag-labels";
 
@@ -14,6 +14,7 @@ export default async function CategoryDetailPage({
   params: Promise<{ category: string }>;
 }) {
   const { category } = await params;
+  const CATEGORY_META = await loadCategoryMeta();
   const meta = CATEGORY_META[category];
   if (!meta) notFound();
 

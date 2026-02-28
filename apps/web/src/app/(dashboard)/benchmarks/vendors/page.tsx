@@ -4,7 +4,7 @@ import { computeAIReadinessScore } from "@/lib/recommendations";
 import { vendorDisplayName, vendorCategory, VENDOR_META } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { PlatformBadge } from "@/components/PlatformBadge";
-import { CATEGORY_META } from "../categories";
+import { loadCategoryMeta } from "../categories";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +13,11 @@ function pct(n: number): string {
 }
 
 export default async function VendorIndexPage() {
-  const [vendors, trends, scorecards] = await Promise.all([
+  const [vendors, trends, scorecards, CATEGORY_META] = await Promise.all([
     getAllVendorNames(),
     getAllVendorTrends(),
     getAllVendorScorecards(),
+    loadCategoryMeta(),
   ]);
 
   // Group vendors: those with recommendations first, then those only mentioned

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getPromptPageData } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { CATEGORY_META } from "../categories";
+import { loadCategoryMeta } from "../categories";
 import { PROMPT_SUMMARIES } from "../prompt-summaries";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,10 @@ function pct(n: number): string {
 }
 
 export default async function PromptIntelligencePage() {
-  const { leaderboard: prompts, constraintDemand } = await getPromptPageData();
+  const [{ leaderboard: prompts, constraintDemand }, CATEGORY_META] = await Promise.all([
+    getPromptPageData(),
+    loadCategoryMeta(),
+  ]);
 
   const contested = prompts.filter((p) => p.is_contested);
   const dominated = prompts.filter((p) => p.is_dominated);

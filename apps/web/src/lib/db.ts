@@ -327,6 +327,27 @@ export async function getCategories(): Promise<string[]> {
   } catch { return []; }
 }
 
+export interface CategoryDbRow {
+  id: string;
+  display_name: string;
+  description: string;
+  icon: string;
+}
+
+/**
+ * Fetch all categories from the `categories` table in the database.
+ * Returns an empty array if the table doesn't exist or the DB is unavailable.
+ */
+export async function getCategoryMeta(): Promise<CategoryDbRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "categories"))) return [];
+    const { rows } = await pool.query("SELECT id, display_name, description, icon FROM categories ORDER BY display_name");
+    return rows as CategoryDbRow[];
+  } catch { return []; }
+}
+
 // ── Benchmark Stats ─────────────────────────────────────────────────
 
 export interface BenchmarkRunRow {
