@@ -3,10 +3,12 @@ import { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { executeJob } from "./executor.js";
 import { cleanupOldWorkspaces } from "./cleanup.js";
+import { checkAndScheduleDailyBenchmark } from "./scheduler.js";
 
 const WORKER_ID = `worker-${randomUUID().slice(0, 8)}`;
 const POLL_INTERVAL_MS = 3000;
 const CLEANUP_EVERY_N = 200; // ~10 min at 3s poll
+const SCHEDULER_EVERY_N = 20; // 20 × 3s = ~60s
 
 // ── Health check server for Fly.io ─────────────────────────────────
 
@@ -126,6 +128,14 @@ async function mainLoop() {
         // Non-fatal
       }
     }
+
+    // Check daily benchmark scheduler (~every 60s)
+    if (iteration % SCHEDULER_EVERY_N === 0) {
+      checkAndScheduleDailyBenchmark(pool, WORKER_ID).catch(err =>
+        console.error("[scheduler] Error:", err)
+      );
+    }
+
     iteration++;
 
     try {
