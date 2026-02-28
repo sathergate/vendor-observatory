@@ -81,11 +81,13 @@ describe("createUser", () => {
   });
 
   it("returns null on duplicate email (query throws)", async () => {
-    // First three calls succeed (CREATE TABLE), fourth throws
+    // First five calls succeed (ensureTables), sixth (INSERT) throws
     mockQuery
       .mockResolvedValueOnce({ rows: [] }) // CREATE auth_users
       .mockResolvedValueOnce({ rows: [] }) // CREATE auth_sessions
       .mockResolvedValueOnce({ rows: [] }) // CREATE subscriptions
+      .mockResolvedValueOnce({ rows: [] }) // ALTER TABLE add vendor_canonical_id
+      .mockResolvedValueOnce({ rows: [] }) // CREATE INDEX idx_subscriptions_vendor
       .mockRejectedValueOnce(new Error("unique_violation"));
 
     const { createUser } = await loadAuth();
