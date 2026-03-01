@@ -46,6 +46,54 @@ if (!process.env.OPENAI_API_KEY) {
 
 const pool = new Pool({ connectionString: dbUrl });
 
+// ── Ensure required columns exist ─────────────────────────────────
+
+async function ensureColumns(): Promise<void> {
+  const { rows: cols } = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'onboarding_jobs' AND table_schema = 'public'`
+  );
+  const existing = new Set(cols.map((c: { column_name: string }) => c.column_name));
+  const migrations: Array<[string, string]> = [
+    ["product_name", "TEXT"],
+    ["detected_category", "TEXT"],
+    ["competitors", "JSONB"],
+    ["fast_mention_rate", "FLOAT"],
+    ["fast_session_count", "INT"],
+    ["fast_platform_coverage", "JSONB"],
+    ["fast_competitor_rates", "JSONB"],
+    ["balanced_mention_rate", "FLOAT"],
+    ["balanced_session_count", "INT"],
+    ["balanced_ai_readiness", "INT"],
+    ["balanced_platform_coverage", "JSONB"],
+    ["balanced_competitor_rates", "JSONB"],
+    ["balanced_recommendations", "JSONB"],
+    ["comprehensive_mention_rate", "FLOAT"],
+    ["comprehensive_session_count", "INT"],
+    ["comprehensive_ai_readiness", "INT"],
+    ["comprehensive_platform_coverage", "JSONB"],
+    ["comprehensive_competitor_rates", "JSONB"],
+    ["comprehensive_recommendations", "JSONB"],
+    ["comprehensive_constraint_coverage", "JSONB"],
+    ["url_analysis_completed_at", "TIMESTAMPTZ"],
+    ["fast_completed_at", "TIMESTAMPTZ"],
+    ["balanced_completed_at", "TIMESTAMPTZ"],
+    ["comprehensive_completed_at", "TIMESTAMPTZ"],
+    ["worker_claimed_at", "TIMESTAMPTZ"],
+    ["worker_id", "TEXT"],
+    ["error", "TEXT"],
+  ];
+  let added = 0;
+  for (const [col, type] of migrations) {
+    if (!existing.has(col)) {
+      await pool.query(`ALTER TABLE onboarding_jobs ADD COLUMN ${col} ${type}`);
+      added++;
+    }
+  }
+  if (added > 0) {
+    console.log(`[worker] Added ${added} missing columns to onboarding_jobs`);
+  }
+}
+
 // ── Job claiming ───────────────────────────────────────────────────
 
 interface JobRow {
@@ -115,6 +163,9 @@ async function markJobFailed(jobId: string, err: unknown): Promise<void> {
 
 async function mainLoop() {
   console.log(`[worker] ${WORKER_ID} starting polling loop`);
+
+  // Ensure DB schema is up to date before polling
+  await ensureColumns();
 
   let iteration = 0;
 
