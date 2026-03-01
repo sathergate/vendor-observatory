@@ -28,6 +28,26 @@ const ASSISTANT_MAP: Record<string, () => AssistantAdapter> = {
 };
 
 /**
+ * Log a structured event to the daily_benchmark_logs table.
+ * Never throws — logging failures are swallowed to avoid disrupting the run.
+ */
+export async function benchmarkLog(
+  pool: Pool,
+  runId: string,
+  event: string,
+  detail?: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO daily_benchmark_logs (run_id, event, detail) VALUES ($1, $2, $3)`,
+      [runId, event, detail ? JSON.stringify(detail) : null],
+    );
+  } catch (e) {
+    console.error(`[daily-runner] Failed to write log (${event}):`, e);
+  }
+}
+
+/**
  * Orchestrate a full daily benchmark run:
  *   1. Load prompts and build adapter list
  *   2. Run in batches of BATCH_SIZE using runParallelBatch
@@ -37,6 +57,7 @@ const ASSISTANT_MAP: Record<string, () => AssistantAdapter> = {
  *   6. Mark run complete
  */
 export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void> {
+  await benchmarkLog(pool, runId, "run_started");
   console.log(`[daily-runner] Starting daily benchmark run ${runId}`);
 
   // Load run config from DB
@@ -121,6 +142,11 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
     if (spentSoFar >= budgetUsd) {
       const remaining = totalPairs - (batchIdx * BATCH_SIZE);
       skipped += remaining;
+      await benchmarkLog(pool, runId, "budget_exhausted", {
+        spent_usd: spentSoFar,
+        budget_usd: budgetUsd,
+        skipped_pairs: remaining,
+      });
       console.log(`[daily-runner] Budget exhausted ($${spentSoFar.toFixed(2)} / $${budgetUsd}). Skipping ${remaining} remaining pairs.`);
       break;
     }
@@ -143,8 +169,20 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
 
       if (result.error) {
         failed++;
+        await benchmarkLog(pool, runId, "session_error", {
+          prompt_id: result.promptId,
+          assistant: result.assistant,
+          error: result.error,
+          duration_ms: result.durationMs,
+        });
       } else {
         successful++;
+        await benchmarkLog(pool, runId, "session_completed", {
+          prompt_id: result.promptId,
+          assistant: result.assistant,
+          cost_usd: result.costUsd,
+          duration_ms: result.durationMs,
+        });
       }
 
       // Record cost in benchmark_costs table
@@ -176,15 +214,20 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
   console.log(`[daily-runner] All batches complete: ${successful} ok, ${failed} failed, ${skipped} skipped`);
 
   // ── 6. Ingest results ────────────────────────────────────────────
+  await benchmarkLog(pool, runId, "ingest_started");
   console.log("[daily-runner] Ingesting results...");
   try {
     await ingestResults(allResults, `daily-${run.run_date}`, pool);
+    await benchmarkLog(pool, runId, "ingest_completed");
     console.log("[daily-runner] Ingest complete");
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await benchmarkLog(pool, runId, "ingest_error", { error: msg });
     console.error("[daily-runner] Ingest failed (continuing):", err);
   }
 
   // ── 7. Post-benchmark analysis (subprocess) ─────────────────────
+  await benchmarkLog(pool, runId, "analysis_started");
   console.log("[daily-runner] Running cross-session analysis...");
   try {
     const analyzeResult = await spawnAndWait(
@@ -194,15 +237,23 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
       300_000, // 5 min timeout
     );
     if (analyzeResult.exitCode !== 0) {
+      await benchmarkLog(pool, runId, "analysis_error", {
+        exit_code: analyzeResult.exitCode,
+        stderr: analyzeResult.stderr.slice(0, 500),
+      });
       console.warn(`[daily-runner] Analysis exited ${analyzeResult.exitCode}: ${analyzeResult.stderr.slice(0, 500)}`);
     } else {
+      await benchmarkLog(pool, runId, "analysis_completed");
       console.log("[daily-runner] Analysis complete");
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await benchmarkLog(pool, runId, "analysis_error", { error: msg });
     console.error("[daily-runner] Analysis failed (continuing):", err);
   }
 
   // ── 8. Daily digest (subprocess) ─────────────────────────────────
+  await benchmarkLog(pool, runId, "digest_started");
   console.log("[daily-runner] Generating daily digest...");
   try {
     const digestResult = await spawnAndWait(
@@ -212,11 +263,18 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
       120_000, // 2 min timeout
     );
     if (digestResult.exitCode !== 0) {
+      await benchmarkLog(pool, runId, "digest_error", {
+        exit_code: digestResult.exitCode,
+        stderr: digestResult.stderr.slice(0, 500),
+      });
       console.warn(`[daily-runner] Digest exited ${digestResult.exitCode}: ${digestResult.stderr.slice(0, 500)}`);
     } else {
+      await benchmarkLog(pool, runId, "digest_completed");
       console.log("[daily-runner] Digest complete");
     }
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await benchmarkLog(pool, runId, "digest_error", { error: msg });
     console.error("[daily-runner] Digest failed (continuing):", err);
   }
 
@@ -232,6 +290,12 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
     WHERE id = $4
   `, [successful, failed, skipped, runId]);
 
+  await benchmarkLog(pool, runId, "run_completed", {
+    successful,
+    failed,
+    skipped,
+    total_pairs: totalPairs,
+  });
   console.log(`[daily-runner] Daily benchmark run ${runId} complete`);
 }
 
@@ -319,6 +383,7 @@ function findJsonlFiles(dir: string): string[] {
 export async function markDailyRunFailed(runId: string, err: unknown, pool: Pool): Promise<void> {
   const msg = err instanceof Error ? err.message : String(err);
   console.error(`[daily-runner] Run ${runId} failed:`, msg);
+  await benchmarkLog(pool, runId, "run_error", { error: msg.slice(0, 2000) });
   try {
     await pool.query(
       "UPDATE daily_benchmark_runs SET error = $1, completed_at = NOW() WHERE id = $2",

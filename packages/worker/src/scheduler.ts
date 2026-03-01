@@ -2,10 +2,12 @@ import { Pool } from "pg";
 import { runDailyBenchmark, markDailyRunFailed } from "./daily-runner.js";
 
 /**
- * Check if the daily benchmark should run, and if so, claim today's run and
- * execute it. Uses INSERT ... ON CONFLICT DO NOTHING on the UNIQUE run_date
- * column for atomic claiming — if two workers check simultaneously, exactly
- * one gets the INSERT and proceeds.
+ * Check if there is a pending daily benchmark to run. The daily_benchmark_runs
+ * table is treated as a work queue — rows are inserted by an external cron job,
+ * and this function claims the next unclaimed row and executes it.
+ *
+ * Uses SELECT ... FOR UPDATE SKIP LOCKED for atomic claiming so multiple
+ * workers can safely race without double-processing.
  *
  * Called every ~60 seconds from the main loop.
  */
@@ -13,29 +15,28 @@ export async function checkAndScheduleDailyBenchmark(
   pool: Pool,
   workerId: string,
 ): Promise<void> {
-  const now = new Date();
-  const utcHour = now.getUTCHours();
-
-  // Don't attempt before 12:00 UTC
-  if (utcHour < 12) return;
-
-  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
-
-  // Try to claim today's run atomically
+  // Try to claim the next pending run atomically
   const result = await pool.query(`
-    INSERT INTO daily_benchmark_runs (run_date, started_at, worker_id, budget_usd)
-    VALUES ($1, NOW(), $2, 25.0)
-    ON CONFLICT (run_date) DO NOTHING
-    RETURNING id
-  `, [today, workerId]);
+    UPDATE daily_benchmark_runs
+    SET started_at = NOW(), worker_id = $1
+    WHERE id = (
+      SELECT id FROM daily_benchmark_runs
+      WHERE started_at IS NULL
+      ORDER BY run_date ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, run_date
+  `, [workerId]);
 
   if (result.rows.length === 0) {
-    // Already claimed by this or another worker today
+    // No pending runs to claim
     return;
   }
 
-  const runId: string = result.rows[0].id;
-  console.log(`[scheduler] Claimed daily benchmark run for ${today} (id: ${runId})`);
+  const { id: runId, run_date } = result.rows[0];
+  const runDate = typeof run_date === "string" ? run_date : run_date.toISOString().slice(0, 10);
+  console.log(`[scheduler] Claimed daily benchmark run for ${runDate} (id: ${runId})`);
 
   // Run the benchmark — errors are caught and recorded
   try {
