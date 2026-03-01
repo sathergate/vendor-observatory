@@ -2,8 +2,9 @@
  * Migration: Create tables for daily benchmark runs on the worker.
  *
  * Tables:
- *   - daily_benchmark_runs: one row per calendar day, tracks overall run state
+ *   - daily_benchmark_runs: one row per calendar day, tracks overall run state (work queue)
  *   - benchmark_costs: per-prompt cost/duration records for budget enforcement
+ *   - daily_benchmark_logs: structured event log for benchmark observability
  *
  * Usage:
  *   DATABASE_URL=postgresql://... npx tsx db/migrate-daily-benchmark.ts
@@ -69,6 +70,28 @@ async function migrate() {
     `);
 
     console.log("✓ Created benchmark_costs table");
+
+    // ── daily_benchmark_logs ────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS daily_benchmark_logs (
+        id          SERIAL PRIMARY KEY,
+        run_id      UUID REFERENCES daily_benchmark_runs(id),
+        event       TEXT NOT NULL,
+        message     TEXT,
+        metadata    JSONB,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS benchmark_logs_run_id ON daily_benchmark_logs(run_id)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS benchmark_logs_event ON daily_benchmark_logs(event)
+    `);
+
+    console.log("✓ Created daily_benchmark_logs table");
 
     await client.query("COMMIT");
     console.log("\nMigration complete.");
