@@ -329,7 +329,7 @@ describe("getJobStatus", () => {
     expect(["HIGH", "MEDIUM", "LOW"]).toContain(balanced!.top_recommendation.impact);
   });
 
-  it("comprehensive.data is always null regardless of elapsed time", async () => {
+  it("comprehensive.data has valid shape when elapsed > 300s", async () => {
     const past = new Date(Date.now() - 400_000);
     mockQuery.mockImplementation(async (sql: string) => {
       if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
@@ -350,7 +350,27 @@ describe("getJobStatus", () => {
     const result = await getJobStatus("job-1");
     expect(result).not.toBeNull();
     expect(result!.stages.comprehensive.status).toBe("complete");
-    expect(result!.stages.comprehensive.data).toBeNull();
+    const comp = result!.stages.comprehensive.data;
+    expect(comp).not.toBeNull();
+    expect(comp!.sessions_analyzed).toBeGreaterThan(0);
+    expect(comp!.mention_rate).toBeGreaterThanOrEqual(0);
+    expect(comp!.platforms).toContain("Claude Code");
+    expect(comp!.platforms).toContain("Codex CLI");
+    expect(comp!.platforms).toContain("Cursor");
+    expect(comp!.ai_readiness_score).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(comp!.competitor_comparison)).toBe(true);
+    expect(Array.isArray(comp!.all_recommendations)).toBe(true);
+    expect(comp!.all_recommendations.length).toBeGreaterThan(0);
+    expect(comp!.recommendation_count).toBe(comp!.all_recommendations.length);
+    expect(comp!.top_recommendation).toHaveProperty("priority");
+    expect(comp!.top_recommendation).toHaveProperty("impact");
+    expect(Array.isArray(comp!.constraint_coverage)).toBe(true);
+    expect(comp!.constraint_coverage.length).toBeGreaterThan(0);
+    for (const cc of comp!.constraint_coverage) {
+      expect(cc).toHaveProperty("constraint");
+      expect(cc.addressed_rate).toBeGreaterThanOrEqual(0);
+      expect(cc.addressed_rate).toBeLessThanOrEqual(100);
+    }
   });
 
   it("mock data is deterministic: two calls return identical data", async () => {

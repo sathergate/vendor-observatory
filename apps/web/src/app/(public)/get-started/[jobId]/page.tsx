@@ -146,7 +146,11 @@ export default function StatusPage() {
         <StageCard
           label="Comprehensive Benchmark"
           status={status.stages.comprehensive.status}
-          teaser={null}
+          teaser={
+            status.stages.comprehensive.data
+              ? `${status.stages.comprehensive.data.sessions_analyzed} sessions across ${status.stages.comprehensive.data.platforms.length} platforms`
+              : null
+          }
         />
       </div>
 

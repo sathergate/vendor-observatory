@@ -58,6 +58,7 @@ interface JobRow {
   url_analysis_completed_at: string | null;
   fast_completed_at: string | null;
   balanced_completed_at: string | null;
+  comprehensive_completed_at: string | null;
 }
 
 async function claimNextJob(): Promise<JobRow | null> {
@@ -67,11 +68,12 @@ async function claimNextJob(): Promise<JobRow | null> {
     await client.query("BEGIN");
     const { rows } = await client.query(`
       SELECT id, url, domain, product_name, detected_category, competitors,
-             url_analysis_completed_at, fast_completed_at, balanced_completed_at
+             url_analysis_completed_at, fast_completed_at, balanced_completed_at,
+             comprehensive_completed_at
       FROM onboarding_jobs
       WHERE worker_claimed_at IS NULL
         AND error IS NULL
-        AND balanced_completed_at IS NULL
+        AND comprehensive_completed_at IS NULL
       ORDER BY created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED

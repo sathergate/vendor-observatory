@@ -48,6 +48,35 @@ export interface BalancedBenchmarkData {
   };
 }
 
+export interface ComprehensiveBenchmarkData {
+  sessions_analyzed: number;
+  mention_rate: number;
+  platforms: string[];
+  ai_readiness_score: number;
+  competitor_comparison: Array<{
+    name: string;
+    mention_rate: number;
+    delta: number;
+  }>;
+  recommendation_count: number;
+  top_recommendation: {
+    title: string;
+    priority: "P1" | "P2" | "P3";
+    impact: "HIGH" | "MEDIUM" | "LOW";
+    description: string;
+  };
+  all_recommendations: Array<{
+    title: string;
+    priority: "P1" | "P2" | "P3";
+    impact: "HIGH" | "MEDIUM" | "LOW";
+    description: string;
+  }>;
+  constraint_coverage: Array<{
+    constraint: string;
+    addressed_rate: number;
+  }>;
+}
+
 export type StageStatus = "pending" | "running" | "complete";
 
 export interface JobStatus {
@@ -59,7 +88,7 @@ export interface JobStatus {
     url_analysis: { status: StageStatus; data: UrlAnalysisData | null };
     fast: { status: StageStatus; data: FastBenchmarkData | null };
     balanced: { status: StageStatus; data: BalancedBenchmarkData | null };
-    comprehensive: { status: StageStatus; data: null };
+    comprehensive: { status: StageStatus; data: ComprehensiveBenchmarkData | null };
   };
 }
 
@@ -122,10 +151,19 @@ async function ensureTables() {
       ["balanced_platform_coverage", "JSONB"],
       ["balanced_competitor_rates", "JSONB"],
       ["balanced_recommendations", "JSONB"],
+      // Comprehensive benchmark results
+      ["comprehensive_mention_rate", "FLOAT"],
+      ["comprehensive_session_count", "INT"],
+      ["comprehensive_ai_readiness", "INT"],
+      ["comprehensive_platform_coverage", "JSONB"],
+      ["comprehensive_competitor_rates", "JSONB"],
+      ["comprehensive_recommendations", "JSONB"],
+      ["comprehensive_constraint_coverage", "JSONB"],
       // Stage timestamps
       ["url_analysis_completed_at", "TIMESTAMPTZ"],
       ["fast_completed_at", "TIMESTAMPTZ"],
       ["balanced_completed_at", "TIMESTAMPTZ"],
+      ["comprehensive_completed_at", "TIMESTAMPTZ"],
       // Worker lock
       ["worker_claimed_at", "TIMESTAMPTZ"],
       ["worker_id", "TEXT"],
@@ -276,6 +314,55 @@ function generateBalancedBenchmark(domain: string): BalancedBenchmarkData {
   };
 }
 
+// TODO: Replace with real comprehensive benchmark analysis.
+function generateComprehensiveBenchmark(domain: string): ComprehensiveBenchmarkData {
+  const urlAnalysis = generateUrlAnalysis(domain);
+  const mentionRate = Math.round(domainSeed(domain, 3) * 80 + 5);
+  const aiScore = Math.round(domainSeed(domain, 12) * 70 + 25);
+
+  const competitor_comparison = urlAnalysis.competitors.map((name, i) => {
+    const compRate = Math.round(domainSeed(domain, 20 + i) * 80 + 5);
+    return {
+      name,
+      mention_rate: compRate,
+      delta: mentionRate - compRate,
+    };
+  });
+
+  const priorities: Array<"P1" | "P2" | "P3"> = ["P1", "P2", "P3"];
+  const impacts: Array<"HIGH" | "MEDIUM" | "LOW"> = ["HIGH", "MEDIUM", "LOW"];
+
+  const all_recommendations = RECOMMENDATIONS.map((rec, i) => ({
+    title: rec.title,
+    priority: priorities[Math.floor(domainSeed(domain, 30 + i) * priorities.length)],
+    impact: impacts[Math.floor(domainSeed(domain, 40 + i) * impacts.length)],
+    description: rec.description,
+  }));
+
+  const CONSTRAINTS = [
+    "serverless_compatible", "pgvector_required", "eu_data_residency",
+    "realtime_websockets", "offline_first", "conflict_resolution",
+    "zero_downtime_deploy", "branch_preview", "multi_region",
+  ];
+
+  const constraint_coverage = CONSTRAINTS.map((constraint, i) => ({
+    constraint,
+    addressed_rate: Math.round(domainSeed(domain, 50 + i) * 100),
+  }));
+
+  return {
+    sessions_analyzed: Math.floor(400 + domainSeed(domain, 13) * 800),
+    mention_rate: mentionRate,
+    platforms: ["Claude Code", "Codex CLI", "Cursor"],
+    ai_readiness_score: aiScore,
+    competitor_comparison,
+    recommendation_count: all_recommendations.length,
+    top_recommendation: all_recommendations[0],
+    all_recommendations,
+    constraint_coverage,
+  };
+}
+
 // ── Stage timing logic ───────────────────────────────────────────────
 
 // TODO: Replace with real job dispatch and status tracking.
@@ -391,7 +478,11 @@ export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
                 fast_mention_rate, fast_session_count, fast_platform_coverage, fast_competitor_rates,
                 balanced_mention_rate, balanced_session_count, balanced_ai_readiness,
                 balanced_platform_coverage, balanced_competitor_rates, balanced_recommendations,
+                comprehensive_mention_rate, comprehensive_session_count, comprehensive_ai_readiness,
+                comprehensive_platform_coverage, comprehensive_competitor_rates,
+                comprehensive_recommendations, comprehensive_constraint_coverage,
                 url_analysis_completed_at, fast_completed_at, balanced_completed_at,
+                comprehensive_completed_at,
                 worker_claimed_at, error
          FROM onboarding_jobs WHERE id = $1`,
         [jobId]
@@ -401,11 +492,13 @@ export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
         const urlDone = !!r.url_analysis_completed_at;
         const fastDone = !!r.fast_completed_at;
         const balancedDone = !!r.balanced_completed_at;
+        const comprehensiveDone = !!r.comprehensive_completed_at;
         const workerClaimed = !!r.worker_claimed_at;
 
         const urlAnalysisStatus: StageStatus = urlDone ? "complete" : workerClaimed ? "running" : "pending";
         const fastStatus: StageStatus = fastDone ? "complete" : (urlDone && workerClaimed) ? "running" : "pending";
         const balancedStatus: StageStatus = balancedDone ? "complete" : (fastDone && workerClaimed) ? "running" : "pending";
+        const comprehensiveStatus: StageStatus = comprehensiveDone ? "complete" : (balancedDone && workerClaimed) ? "running" : "pending";
 
         const urlData: UrlAnalysisData | null = urlDone ? {
           detected_name: r.product_name ?? r.domain.split(".")[0],
@@ -436,6 +529,28 @@ export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
             : { title: "Run a balanced benchmark", priority: "P2" as const, impact: "MEDIUM" as const, description: "Complete the balanced benchmark to get recommendations." },
         } : null;
 
+        const allRecs = comprehensiveDone && r.comprehensive_recommendations
+          ? (r.comprehensive_recommendations as Array<{ title: string; priority: "P1" | "P2" | "P3"; impact: "HIGH" | "MEDIUM" | "LOW"; description: string }>)
+          : [];
+
+        const comprehensiveData: ComprehensiveBenchmarkData | null = comprehensiveDone ? {
+          sessions_analyzed: r.comprehensive_session_count ?? 0,
+          mention_rate: r.comprehensive_mention_rate != null ? Math.round(r.comprehensive_mention_rate) : 0,
+          platforms: r.comprehensive_platform_coverage ? Object.keys(r.comprehensive_platform_coverage).filter(k => r.comprehensive_platform_coverage[k]) : [],
+          ai_readiness_score: r.comprehensive_ai_readiness ?? 0,
+          competitor_comparison: (r.comprehensive_competitor_rates as Array<{ name: string; mentionRate: number; delta: number }> ?? []).map(c => ({
+            name: c.name,
+            mention_rate: Math.round(c.mentionRate),
+            delta: Math.round(c.delta),
+          })),
+          recommendation_count: allRecs.length,
+          top_recommendation: allRecs.length > 0
+            ? allRecs[0]
+            : { title: "Run a comprehensive benchmark", priority: "P2" as const, impact: "MEDIUM" as const, description: "Complete the comprehensive benchmark to get recommendations." },
+          all_recommendations: allRecs,
+          constraint_coverage: (r.comprehensive_constraint_coverage as Array<{ constraint: string; addressed_rate: number }>) ?? [],
+        } : null;
+
         return {
           jobId: r.id,
           url: r.url,
@@ -445,7 +560,7 @@ export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
             url_analysis: { status: urlAnalysisStatus, data: urlData },
             fast: { status: fastStatus, data: fastData },
             balanced: { status: balancedStatus, data: balancedData },
-            comprehensive: { status: "pending", data: null },
+            comprehensive: { status: comprehensiveStatus, data: comprehensiveData },
           },
         };
       }
@@ -479,7 +594,7 @@ export async function getJobStatus(jobId: string): Promise<JobStatus | null> {
       },
       comprehensive: {
         status: stages.comprehensive,
-        data: null,
+        data: stages.comprehensive === "complete" ? generateComprehensiveBenchmark(job.domain) : null,
       },
     },
   };
