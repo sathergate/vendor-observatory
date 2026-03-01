@@ -44,6 +44,7 @@ export type {
 
 // ── Extractor ───────────────────────────────────────────────────────
 export { extractVendorMentions } from "./extractor.js";
+export type { ExtractorOptions } from "./extractor.js";
 
 // ── Rejection Extractor ─────────────────────────────────────────────
 export { extractVendorRejections } from "./rejection-extractor.js";
@@ -73,3 +74,11 @@ export type { CategoryMeta } from "./default-categories.js";
 
 // ── Loaders ─────────────────────────────────────────────────────────
 export { loadVendorTaxonomy } from "./taxonomy-loader.js";
+
+// ── Database Loaders ────────────────────────────────────────────────
+export {
+  loadVendorTaxonomyFromDb,
+  loadPackageMapFromDb,
+  createPackageResolver,
+} from "./db-taxonomy-loader.js";
+export type { DbQueryable } from "./db-taxonomy-loader.js";
