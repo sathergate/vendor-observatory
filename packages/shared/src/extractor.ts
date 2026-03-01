@@ -1,5 +1,15 @@
 import type { VendorMention, MentionType, WorkCategory, VendorTaxonomy, ParsedTurn } from "./types.js";
-import { resolvePackageToVendor } from "./package-map.js";
+import { resolvePackageToVendor as resolvePackageToVendorStatic } from "./package-map.js";
+
+/** Optional configuration for extractVendorMentions. */
+export interface ExtractorOptions {
+  /**
+   * Custom package-name → vendor resolver. When provided, this is used instead
+   * of the hardcoded PACKAGE_TO_VENDOR map.  Typically created via
+   * `createPackageResolver(await loadPackageMapFromDb(pool))`.
+   */
+  packageResolver?: (packageName: string) => string | null;
+}
 
 // ── Package Manager Patterns ────────────────────────────────────────
 
@@ -93,12 +103,17 @@ const RECOMMENDATION_PHRASES = [
 /**
  * Extract vendor mentions from a single turn (user or assistant).
  * Returns an array of VendorMentions with deduplication within the turn.
+ *
+ * @param options.packageResolver - custom resolver for package → vendor mapping.
+ *   When omitted, falls back to the static PACKAGE_TO_VENDOR map.
  */
 export function extractVendorMentions(
   turn: ParsedTurn,
   taxonomy: VendorTaxonomy,
   userPromptSnippet: string | null,
+  options?: ExtractorOptions,
 ): VendorMention[] {
+  const resolvePackage = options?.packageResolver ?? resolvePackageToVendorStatic;
   const mentions: VendorMention[] = [];
   const seen = new Set<string>(); // "vendorId:mentionType" for dedup within turn
 
@@ -127,7 +142,7 @@ export function extractVendorMentions(
         // Split on whitespace to handle "npm install pkg1 pkg2"
         const pkgs = pkgStr.split(/\s+/).filter(p => p && !p.startsWith("-"));
         for (const pkg of pkgs) {
-          const vendorId = resolvePackageToVendor(pkg);
+          const vendorId = resolvePackage(pkg);
           if (vendorId) {
             addMention({
               vendorCanonicalId: vendorId,
@@ -202,7 +217,7 @@ export function extractVendorMentions(
     );
     for (const im of importMatches) {
       const pkg = im[1];
-      const vendorId = resolvePackageToVendor(pkg);
+      const vendorId = resolvePackage(pkg);
       if (vendorId) {
         addMention({
           vendorCanonicalId: vendorId,
