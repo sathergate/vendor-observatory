@@ -2205,3 +2205,59 @@ function getConstraintCoverageForCategory(
 
   return result.sort((a, b) => b.coverage_pct - a.coverage_pct);
 }
+
+// ── Co-mentions (competitive landscape) ────────────────────────────
+
+export interface CoMentionRow {
+  co_vendor: string;
+  session_count: number;
+}
+
+export async function getVendorCoMentions(vendor: string): Promise<CoMentionRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "observations"))) return [];
+    const { rows } = await pool.query(`
+      SELECT v2.vendor_canonical_id AS co_vendor, COUNT(DISTINCT v1.session_id) AS session_count
+      FROM observations v1
+      JOIN observations v2
+        ON v1.session_id = v2.session_id
+        AND v2.vendor_canonical_id != $1
+      WHERE v1.vendor_canonical_id = $1
+      GROUP BY v2.vendor_canonical_id
+      ORDER BY session_count DESC
+      LIMIT 20
+    `, [vendor]);
+    return rows.map((r: Record<string, unknown>) => ({
+      co_vendor: r.co_vendor as string,
+      session_count: Number(r.session_count),
+    }));
+  } catch { return []; }
+}
+
+// ── Category competitor density ────────────────────────────────────
+
+export interface CategoryDensityRow {
+  work_category: string;
+  vendor_count: number;
+}
+
+export async function getCategoryCompetitorDensity(): Promise<CategoryDensityRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "observations"))) return [];
+    const { rows } = await pool.query(`
+      SELECT work_category, COUNT(DISTINCT vendor_canonical_id) AS vendor_count
+      FROM observations
+      WHERE work_category IS NOT NULL
+      GROUP BY work_category
+      ORDER BY vendor_count DESC
+    `);
+    return rows.map((r: Record<string, unknown>) => ({
+      work_category: r.work_category as string,
+      vendor_count: Number(r.vendor_count),
+    }));
+  } catch { return []; }
+}
