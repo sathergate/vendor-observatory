@@ -54,39 +54,46 @@ describe("Sidebar", () => {
     expect(links.length).toBe(0);
   });
 
-  it("shows Profile link when a vendor is selected", () => {
+  it("shows vendor dashboard nav when a vendor is selected", () => {
     mockSelectedVendor = "supabase";
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    const profileLink = screen.getByText(/Profile — Supabase/);
+    // Vendor nav shows "My Dashboard" group with vendor-specific links
+    expect(screen.getByText("My Dashboard")).toBeDefined();
+    const profileLink = screen.getByText("My Profile");
     expect(profileLink).toBeDefined();
     expect(profileLink.getAttribute("href")).toBe("/benchmarks/vendors/supabase");
+    expect(screen.getByText("Implementation Rate")).toBeDefined();
+    expect(screen.getByText("Competitive Landscape")).toBeDefined();
+    expect(screen.getByText("Confidence Trends")).toBeDefined();
+    expect(screen.getByText("Use Cases")).toBeDefined();
+    expect(screen.getByText("Reasoning Samples")).toBeDefined();
+    expect(screen.getByText("Category Competition")).toBeDefined();
   });
 
-  it("Profile link uses correct href for vendor IDs with special characters", () => {
+  it("vendor nav uses correct href for vendor IDs with special characters", () => {
     mockSelectedVendor = "cloudflare-workers";
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    const profileLink = screen.getByText(/Profile — Cloudflare Workers/);
+    const profileLink = screen.getByText("My Profile");
     expect(profileLink).toBeDefined();
     expect(profileLink.getAttribute("href")).toBe("/benchmarks/vendors/cloudflare-workers");
   });
 
-  it("renders all standard nav groups regardless of vendor selection", () => {
+  it("hides standard nav groups when vendor is selected", () => {
     mockSelectedVendor = "neon";
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    expect(screen.getByText("Benchmarks")).toBeDefined();
-    expect(screen.getByText("Analytics")).toBeDefined();
-    expect(screen.getByText("Data")).toBeDefined();
-    expect(screen.getByText("Vendor Intel")).toBeDefined();
-    expect(screen.getByText("Query")).toBeDefined();
-    expect(screen.getByText("Sessions")).toBeDefined();
+    // Vendor users see "My Dashboard" instead of standard groups
+    expect(screen.getByText("My Dashboard")).toBeDefined();
+    expect(screen.queryByText("Benchmarks")).toBeNull();
+    expect(screen.queryByText("Analytics")).toBeNull();
+    expect(screen.queryByText("Data")).toBeNull();
   });
 });
