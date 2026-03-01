@@ -8,13 +8,17 @@ import { BENCHMARK_PROMPTS, type BenchmarkPrompt } from "./prompts.js";
  *   - if category has <3 prompts, fill from highest-coverage general prompts
  *
  * Balanced tier: 10 prompts — 5 from detected category + 5 cross-category
+ *
+ * Comprehensive tier: ~20 prompts — ALL from detected category + ALL cross-category
+ *   + fill remaining from other categories for diversity
  */
 export function selectOnboardingPrompts(
   category: string | null,
-  tier: "fast" | "balanced",
+  tier: "fast" | "balanced" | "comprehensive",
 ): BenchmarkPrompt[] {
-  const count = tier === "fast" ? 3 : 10;
-  const categoryCount = tier === "fast" ? 3 : 5;
+  const COMPREHENSIVE_TARGET = 20;
+  const count = tier === "fast" ? 3 : tier === "balanced" ? 10 : COMPREHENSIVE_TARGET;
+  const categoryCount = tier === "fast" ? 3 : tier === "balanced" ? 5 : Infinity; // comprehensive: take ALL from category
 
   // Separate prompts by category match
   const categoryPrompts: BenchmarkPrompt[] = [];
@@ -46,7 +50,7 @@ export function selectOnboardingPrompts(
     const crossCategory = otherPrompts.filter(p => p.category === "cross-category");
     const nonCross = otherPrompts.filter(p => p.category !== "cross-category");
 
-    // Shuffle to get diversity
+    // Shuffle non-cross-category prompts for diversity
     const shuffled = [...crossCategory, ...shuffleArray(nonCross)];
     selected.push(...shuffled.slice(0, remaining));
   }

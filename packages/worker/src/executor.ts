@@ -5,11 +5,13 @@ import {
   runParallelBatch,
   ClaudeCodeAdapter,
   CodexCliAdapter,
+  CursorAgentAdapter,
   type AssistantAdapter,
   type BenchmarkResult,
+  type BenchmarkPrompt,
 } from "@obs/benchmark/lib";
 import { ingestResults } from "./ingest-bridge.js";
-import { computeScores, type ScoreResult } from "./scorer.js";
+import { computeScores, computeConstraintCoverage, type ScoreResult } from "./scorer.js";
 import { ensureVendor } from "./vendor-mapper.js";
 import { runUrlAnalysisFallback } from "./url-analysis-fallback.js";
 
@@ -23,17 +25,21 @@ interface JobRow {
   url_analysis_completed_at: string | null;
   fast_completed_at: string | null;
   balanced_completed_at: string | null;
+  comprehensive_completed_at: string | null;
 }
 
 const TIMEOUT_FAST_MS = 90_000;   // 90s per prompt (generous for fast tier)
 const TIMEOUT_BALANCED_MS = 120_000; // 120s per prompt
+const TIMEOUT_COMPREHENSIVE_MS = 120_000; // 120s per prompt
 const PER_PROMPT_BUDGET_USD = 0.50;
+const COMPREHENSIVE_BATCH_SIZE = 15;
 
 /**
  * Orchestrate a single onboarding job end-to-end:
  * 1. URL analysis (if not already done by Next.js API)
  * 2. Fast benchmark (claude_code only, 3 prompts in parallel)
  * 3. Balanced benchmark (claude_code + codex_cli, 10 prompts in parallel)
+ * 4. Comprehensive benchmark (all 3 adapters, ~20 prompts in batches of 15)
  */
 export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
   // ── URL analysis fallback ──────────────────────────────────────
@@ -197,6 +203,107 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
              balanced_ai_readiness = 0, balanced_platform_coverage = '{}',
              balanced_competitor_rates = '[]', balanced_recommendations = '[]',
              balanced_completed_at = NOW()
+         WHERE id = $1`,
+        [job.id]
+      );
+    }
+  }
+
+  // ── Comprehensive benchmark ─────────────────────────────────────
+  if (!job.comprehensive_completed_at) {
+    console.log(`[executor] Running comprehensive benchmark for job ${job.id}`);
+    const prompts = selectOnboardingPrompts(job.detected_category, "comprehensive");
+    const adapters: AssistantAdapter[] = [
+      new ClaudeCodeAdapter(),
+      new CodexCliAdapter(),
+      new CursorAgentAdapter(),
+    ];
+    const availableAdapters = await filterAvailable(adapters);
+
+    if (availableAdapters.length > 0) {
+      const allPairs: Array<[BenchmarkPrompt, AssistantAdapter]> = prompts.flatMap(p =>
+        availableAdapters.map(a => [p, a] as [BenchmarkPrompt, AssistantAdapter])
+      );
+
+      const totalPairs = allPairs.length;
+      console.log(`[executor] Comprehensive: ${prompts.length} prompts × ${availableAdapters.length} adapters = ${totalPairs} pairs`);
+
+      // Run in batches (like the daily runner) to avoid overwhelming resources
+      const allResults: BenchmarkResult[] = [];
+      const batchCount = Math.ceil(totalPairs / COMPREHENSIVE_BATCH_SIZE);
+
+      for (let batchIdx = 0; batchIdx < batchCount; batchIdx++) {
+        const batchStart = batchIdx * COMPREHENSIVE_BATCH_SIZE;
+        const batchPairs = allPairs.slice(batchStart, batchStart + COMPREHENSIVE_BATCH_SIZE);
+
+        console.log(`[executor] Comprehensive batch ${batchIdx + 1}/${batchCount} (${batchPairs.length} pairs)`);
+
+        const results = await runParallelBatch(batchPairs, {
+          budgetUsd: PER_PROMPT_BUDGET_USD,
+          timeoutMs: TIMEOUT_COMPREHENSIVE_MS,
+          jobId: job.id,
+        });
+
+        allResults.push(...results);
+
+        const batchOk = results.filter(r => !r.error).length;
+        const batchFailed = results.filter(r => r.error).length;
+        console.log(`[executor] Comprehensive batch ${batchIdx + 1} done: ${batchOk} ok, ${batchFailed} failed`);
+      }
+
+      // Log overall error diagnostics
+      const failedCompResults = allResults.filter(r => r.error);
+      if (failedCompResults.length > 0) {
+        const adapterErrors = failedCompResults
+          .slice(0, 5)
+          .map(r => `${r.promptId}/${r.assistant}: ${r.error}`)
+          .join("; ");
+        console.warn(`[executor] Comprehensive benchmark errors (${failedCompResults.length}/${allResults.length}): ${adapterErrors}`);
+        if (failedCompResults.length === allResults.length) {
+          await pool.query(
+            "UPDATE onboarding_jobs SET error = $1 WHERE id = $2 AND error IS NULL",
+            [`All comprehensive sessions failed. First error: ${failedCompResults[0].error}`.slice(0, 2000), job.id]
+          );
+        }
+      }
+
+      await ingestResults(allResults, job.id, pool);
+      const scores = await computeScores(job.id, vendorId, competitors, pool);
+      const recommendations = generateRecommendations(scores);
+      const constraintCoverage = await computeConstraintCoverage(job.id, pool);
+
+      await pool.query(
+        `UPDATE onboarding_jobs
+         SET comprehensive_mention_rate = $1,
+             comprehensive_session_count = $2,
+             comprehensive_ai_readiness = $3,
+             comprehensive_platform_coverage = $4,
+             comprehensive_competitor_rates = $5,
+             comprehensive_recommendations = $6,
+             comprehensive_constraint_coverage = $7,
+             comprehensive_completed_at = NOW()
+         WHERE id = $8`,
+        [
+          scores.mentionRate,
+          scores.sessionCount,
+          scores.aiReadiness,
+          JSON.stringify(scores.platformCoverage),
+          JSON.stringify(scores.competitorRates),
+          JSON.stringify(recommendations),
+          JSON.stringify(constraintCoverage),
+          job.id,
+        ]
+      );
+      console.log(`[executor] Comprehensive benchmark complete: ${allResults.length} sessions, mention_rate=${scores.mentionRate}%, ai_readiness=${scores.aiReadiness}`);
+    } else {
+      console.warn("[executor] No adapters available for comprehensive benchmark");
+      await pool.query(
+        `UPDATE onboarding_jobs
+         SET comprehensive_mention_rate = 0, comprehensive_session_count = 0,
+             comprehensive_ai_readiness = 0, comprehensive_platform_coverage = '{}',
+             comprehensive_competitor_rates = '[]', comprehensive_recommendations = '[]',
+             comprehensive_constraint_coverage = '[]',
+             comprehensive_completed_at = NOW()
          WHERE id = $1`,
         [job.id]
       );

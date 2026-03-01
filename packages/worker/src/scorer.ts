@@ -137,6 +137,59 @@ export async function computeScores(
   };
 }
 
+/**
+ * Compute how well a vendor addresses specific technical constraints across
+ * benchmark sessions. Queries the response_context table for constraints_addressed
+ * data written by the ingest bridge.
+ *
+ * Returns an array of { constraint, addressed_rate } where addressed_rate is
+ * the percentage of sessions that addressed that constraint (0-100).
+ */
+export async function computeConstraintCoverage(
+  jobId: string,
+  pool: Pool,
+): Promise<Array<{ constraint: string; addressed_rate: number }>> {
+  // Get all response_context rows for sessions scoped to this job
+  const { rows } = await pool.query(
+    `SELECT rc.constraints_addressed
+     FROM response_context rc
+     JOIN sessions s ON s.id = rc.session_id
+     WHERE s.is_benchmark = TRUE
+       AND s.cwd LIKE $1
+       AND rc.constraints_addressed IS NOT NULL`,
+    [`%${jobId}%`]
+  );
+
+  if (rows.length === 0) return [];
+
+  // Count how many sessions addressed each constraint
+  const constraintCounts = new Map<string, number>();
+  const totalSessions = rows.length;
+
+  for (const row of rows) {
+    let addressed: string[] = [];
+    try {
+      addressed = typeof row.constraints_addressed === "string"
+        ? JSON.parse(row.constraints_addressed)
+        : row.constraints_addressed;
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(addressed)) continue;
+
+    for (const constraint of addressed) {
+      constraintCounts.set(constraint, (constraintCounts.get(constraint) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(constraintCounts.entries())
+    .map(([constraint, count]) => ({
+      constraint,
+      addressed_rate: Math.round((count / totalSessions) * 100),
+    }))
+    .sort((a, b) => b.addressed_rate - a.addressed_rate);
+}
+
 async function findVendorId(name: string, pool: Pool): Promise<string | null> {
   const { rows } = await pool.query(
     "SELECT canonical_id FROM vendors WHERE LOWER(display_name) = LOWER($1) LIMIT 1",
