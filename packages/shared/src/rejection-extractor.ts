@@ -12,7 +12,7 @@ const REASON_PATTERNS: Array<{ reason: RejectionReason; patterns: RegExp[] }> = 
   {
     reason: "too_expensive",
     patterns: [
-      /(?:too\s+expensive|cost(?:s?\s+too\s+much|ly|s?\s+a\s+lot)|pric(?:ing|e)\s+(?:is\s+)?(?:high|steep|prohibitive)|over[- ]?priced|budget|free\s+tier\s+(?:is\s+)?(?:limited|too\s+small|insufficient|restrictive)|billing\s+(?:surprise|shock))/i,
+      /(?:too\s+expensive|cost(?:s?\s+too\s+much|ly|s?\s+a\s+lot)|pric(?:ing|e)\s+(?:is\s+)?(?:too\s+)?(?:high|steep|prohibitive)|over[- ]?priced|budget|free\s+tier\s+(?:is\s+)?(?:limited|too\s+small|insufficient|restrictive)|billing\s+(?:surprise|shock))/i,
     ],
   },
   {
