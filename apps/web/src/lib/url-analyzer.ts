@@ -143,40 +143,26 @@ const VALID_CATEGORIES = [
   "developer_tools", "testing", "cms", "ecommerce", "other",
 ];
 
-const URL_ANALYSIS_PROMPT_FALLBACK = `Given this homepage content for {{DOMAIN}}, extract structured product information.
-
-<page_content>
-{{PAGE_CONTENT}}
-</page_content>
-
-Return a JSON object with exactly these fields:
-- product_name: the canonical name of the product (string)
-- category: one of {{VALID_CATEGORIES}} (string)
-- description: one sentence describing what the product does (string)
-- competitors: top 5 direct competitors as an array of {name: string, domain: string}
-
-Return ONLY valid JSON, no markdown or explanation.`;
-
 let _cachedUrlAnalysisTemplate: string | null = null;
 
-async function getUrlAnalysisTemplate(pool?: Pool): Promise<string> {
+async function getUrlAnalysisTemplate(pool: Pool): Promise<string> {
   if (_cachedUrlAnalysisTemplate) return _cachedUrlAnalysisTemplate;
 
-  if (pool) {
-    const row = await loadPromptById(pool, "system-url-analysis");
-    if (row) {
-      _cachedUrlAnalysisTemplate = row.text;
-      return row.text;
-    }
+  const row = await loadPromptById(pool, "system-url-analysis");
+  if (row) {
+    _cachedUrlAnalysisTemplate = row.text;
+    return row.text;
   }
 
-  return URL_ANALYSIS_PROMPT_FALLBACK;
+  throw new Error(
+    'Prompt "system-url-analysis" not found in DB. Run: DATABASE_URL=... npx tsx db/seed-prompts.ts',
+  );
 }
 
 async function extractWithLLM(
   pageContent: string,
   domain: string,
-  pool?: Pool,
+  pool: Pool,
 ): Promise<UrlAnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

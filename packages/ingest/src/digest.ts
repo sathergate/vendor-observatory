@@ -146,11 +146,6 @@ export function scoreSignificance(deltas: VendorDelta[]): ScoredDelta[] {
 
 // ── Narrative Generation ───────────────────────────────────────────
 
-const DIGEST_PROMPT_FALLBACK = `You are writing a brief daily digest for a developer tool vendor observatory. Summarize these vendor position changes in 3-5 sentences. Focus on the most impactful changes and what they might signal about market dynamics. Be concise and data-driven.
-
-Changes:
-{{CHANGES}}`;
-
 /** Minimal pool interface for DB access */
 interface Queryable {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
@@ -158,23 +153,23 @@ interface Queryable {
 
 let _cachedDigestTemplate: string | null = null;
 
-async function getDigestTemplate(pool?: Queryable): Promise<string> {
+async function getDigestTemplate(pool: Queryable): Promise<string> {
   if (_cachedDigestTemplate) return _cachedDigestTemplate;
 
-  if (pool) {
-    const row = await loadPromptById(pool, "system-digest");
-    if (row) {
-      _cachedDigestTemplate = row.text;
-      return row.text;
-    }
+  const row = await loadPromptById(pool, "system-digest");
+  if (row) {
+    _cachedDigestTemplate = row.text;
+    return row.text;
   }
 
-  return DIGEST_PROMPT_FALLBACK;
+  throw new Error(
+    'Prompt "system-digest" not found in DB. Run: DATABASE_URL=... npx tsx db/seed-prompts.ts',
+  );
 }
 
 export async function generateNarrative(
   significantChanges: ScoredDelta[],
-  pool?: Queryable,
+  pool: Queryable,
 ): Promise<string | null> {
   if (significantChanges.length === 0) {
     return "No significant vendor position changes detected in this benchmark run.";

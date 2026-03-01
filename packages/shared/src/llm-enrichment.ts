@@ -55,58 +55,25 @@ interface LLMExtractionResult {
 
 // ── System Prompt ──────────────────────────────────────────────────
 
-const ENRICHMENT_SYSTEM_PROMPT_FALLBACK = `You are an analyst extracting structured data from AI coding assistant responses about developer tool vendor recommendations.
-
-You will be given the text of an AI assistant's response to a developer question. Extract the following information as JSON:
-
-KNOWN VENDORS (canonical IDs): {{VENDOR_NAMES}}
-
-PROMPT CONSTRAINTS to check for: {{CONSTRAINTS}}
-
-Return ONLY valid JSON matching this schema:
-{
-  "primary_vendor": string | null,       // The canonical vendor ID of the PRIMARY recommendation (the vendor the AI most strongly suggests). null if no clear recommendation.
-  "confidence": number,                   // 0.0-1.0 confidence in primary_vendor extraction
-  "is_implemented": boolean,              // true if the response includes actual implementation code (npm install, import statements, config files, etc.)
-  "reasoning_chain": string,              // 2-4 sentence summary of the logical steps the AI used to arrive at its recommendation
-  "vendors": [                            // ALL vendors mentioned, with their disposition
-    { "vendor": "canonical_id", "disposition": "recommended|compared|rejected|mentioned|implemented" }
-  ],
-  "disqualification_reasons": [           // Why specific vendors were rejected or not chosen
-    { "vendor": "canonical_id", "reason": "brief explanation" }
-  ],
-  "trade_offs": string | null,            // Key trade-offs discussed (2-3 sentences max). null if none.
-  "gotchas": string | null,               // Warnings, pitfalls, gotchas mentioned (2-3 sentences max). null if none.
-  "constraints_addressed": string[],      // Which prompt constraints were genuinely ADDRESSED (not just mentioned) in the response
-  "rationale": string | null              // The AI's stated reason for its primary recommendation (1-2 sentences). null if no clear rationale.
-}
-
-Rules:
-- Use ONLY canonical vendor IDs from the KNOWN VENDORS list. If a vendor is mentioned but not in the list, skip it.
-- For constraints_addressed, only include constraints that were genuinely ADDRESSED (the response explains how the vendor handles it), not merely MENTIONED in passing.
-- "disposition" meanings: "recommended" = explicitly suggested as the solution, "compared" = discussed as an alternative, "rejected" = explicitly advised against, "mentioned" = named but not evaluated, "implemented" = code/config was written for it
-- confidence should be high (>0.8) when there's an explicit "I recommend X" or clear primary choice, medium (0.4-0.8) when the recommendation is implicit, low (<0.4) when it's ambiguous
-- Keep reasoning_chain, trade_offs, gotchas, and rationale concise — focus on substance, not verbosity`;
-
-/** Pool interface for optional DB loading */
+/** Pool interface for DB loading */
 interface Queryable {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 }
 
 let _cachedEnrichmentTemplate: string | null = null;
 
-async function getEnrichmentTemplate(pool?: Queryable): Promise<string> {
+async function getEnrichmentTemplate(pool: Queryable): Promise<string> {
   if (_cachedEnrichmentTemplate) return _cachedEnrichmentTemplate;
 
-  if (pool) {
-    const row = await loadPromptById(pool, "system-enrichment");
-    if (row) {
-      _cachedEnrichmentTemplate = row.text;
-      return row.text;
-    }
+  const row = await loadPromptById(pool, "system-enrichment");
+  if (row) {
+    _cachedEnrichmentTemplate = row.text;
+    return row.text;
   }
 
-  return ENRICHMENT_SYSTEM_PROMPT_FALLBACK;
+  throw new Error(
+    'Prompt "system-enrichment" not found in DB. Run: DATABASE_URL=... npx tsx db/seed-prompts.ts',
+  );
 }
 
 function buildSystemPrompt(template: string, vendorNames: string[], constraints: string[]): string {
@@ -127,7 +94,7 @@ export async function extractResponseContextWithLLM(
   turns: ParsedTurn[],
   taxonomy: VendorTaxonomy,
   promptConstraints: string[],
-  pool?: Queryable,
+  pool: Queryable,
 ): Promise<ExtractedResponseContext | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {

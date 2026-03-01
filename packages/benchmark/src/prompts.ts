@@ -1,4 +1,4 @@
-import { loadPromptsByKind, hasPrompts } from "@obs/shared";
+import { loadPromptsByKind } from "@obs/shared";
 import type { PromptRow } from "@obs/shared";
 
 /** Minimal pool interface — avoids hard dependency on `pg`. */
@@ -1514,15 +1514,15 @@ function rowToBenchmarkPrompt(row: PromptRow): BenchmarkPrompt {
 
 /**
  * Load benchmark prompts from the database.
- * Falls back to the hardcoded BENCHMARK_PROMPTS array when the
- * prompts table is empty or unreachable.
+ * Requires the prompts table to be seeded (run db/seed-prompts.ts).
  */
 export async function loadBenchmarkPrompts(pool: Queryable): Promise<BenchmarkPrompt[]> {
-  const seeded = await hasPrompts(pool, "benchmark");
-  if (!seeded) return BENCHMARK_PROMPTS;
-
   const rows = await loadPromptsByKind(pool, "benchmark");
-  if (rows.length === 0) return BENCHMARK_PROMPTS;
+  if (rows.length === 0) {
+    throw new Error(
+      "No benchmark prompts found in DB. Run: DATABASE_URL=... npx tsx db/seed-prompts.ts",
+    );
+  }
 
   return rows.map(rowToBenchmarkPrompt);
 }

@@ -16,7 +16,6 @@ import {
   loadPackageMapFromDb,
   createPackageResolver,
   loadPromptsByKind,
-  hasPrompts,
 } from "@obs/shared";
 import type { VendorTaxonomy, VendorMention, VendorRejection, ParsedTurn, PromptRow } from "@obs/shared";
 import { computeFastScores, type ScoreResult } from "./scorer.js";
@@ -28,214 +27,6 @@ const MAX_TOKENS = 300;
 const PROMPT_COUNT = 20;
 const PER_PROMPT_TIMEOUT_MS = 15_000;
 
-// ── Fallback Category Prompt Templates ─────────────────────────────
-// Used when the prompts table is empty or unreachable.
-// No vendor names — measures organic recall.
-
-const CATEGORY_PROMPTS_FALLBACK: Record<string, string[]> = {
-  database: [
-    "What's the best serverless database for a Next.js app deployed on Vercel?",
-    "I need a Postgres database with branching for preview deployments. What should I use?",
-    "Recommend a database for a multi-tenant SaaS with row-level security.",
-    "What database works best with Prisma and has a generous free tier?",
-    "I need a globally distributed SQL database for low-latency reads. What are my options?",
-    "What's the best database for a real-time app that needs subscriptions and live queries?",
-    "I'm building an app with vector search and regular CRUD. What database handles both?",
-    "Recommend a serverless database that scales to zero and has a good DX.",
-    "What database should I use for an edge-first app running on Cloudflare Workers?",
-    "I need a MySQL-compatible serverless database. What are the best options?",
-    "What's the easiest database to set up for a hackathon project with Node.js?",
-    "Recommend a database with built-in auth and storage for a full-stack app.",
-    "I need a database that supports automatic schema migrations in CI. What works best?",
-    "What embedded database works well for local-first apps with sync?",
-  ],
-  observability: [
-    "What monitoring tool should I use for a Node.js microservices app in production?",
-    "I need distributed tracing for my API gateway. What's the best option?",
-    "Recommend an observability platform that supports OpenTelemetry natively.",
-    "What's the best way to monitor a Next.js app's server-side performance?",
-    "I need log aggregation and metrics for a Kubernetes cluster. What should I use?",
-    "What observability tool has the best free tier for a small startup?",
-    "Recommend a monitoring solution that handles both frontend and backend traces.",
-    "What's the best tool for tracking API latency and error rates in production?",
-    "I need alerting on custom metrics for my Node.js service. What platform is best?",
-    "What APM tool works best with serverless functions on AWS Lambda?",
-    "Recommend a tool for real-time dashboards showing request throughput and p99 latency.",
-    "What's the best option for structured logging with search and alerting?",
-    "I need to monitor a distributed system with 20+ microservices. What platform scales well?",
-    "What observability tool integrates best with GitHub Actions for CI/CD monitoring?",
-  ],
-  error_monitoring: [
-    "What's the best error tracking tool for a React + Node.js application?",
-    "I need crash reporting for my mobile app backend. What should I use?",
-    "Recommend an error monitoring service that groups errors intelligently.",
-    "What error tracking tool has the best source map support for Next.js?",
-    "I need error monitoring that integrates with Slack and Jira. What's best?",
-    "What's the cheapest error tracking solution for a bootstrapped startup?",
-    "Recommend an error monitoring tool that shows the full user session replay.",
-    "What error tracking service handles both frontend JavaScript and backend Python?",
-    "I need to track unhandled promise rejections in Node.js production. What tool?",
-    "What error monitoring platform has the best release tracking features?",
-    "Recommend an error tracker that deduplicates and auto-assigns issues.",
-    "What's the best tool for monitoring errors in a serverless architecture?",
-    "I need error tracking with performance monitoring built in. What options exist?",
-    "What error monitoring service has the best Vercel integration?",
-  ],
-  ci_cd: [
-    "What's the best CI/CD platform for a monorepo with pnpm workspaces?",
-    "I need fast CI that caches Docker layers. What should I use?",
-    "Recommend a CI service for running tests on every pull request.",
-    "What CI/CD tool has the best integration with GitHub for deploy previews?",
-    "I need a CI pipeline that deploys to multiple cloud providers. What's best?",
-    "What's the fastest CI service for running a large TypeScript test suite?",
-    "Recommend a CI/CD platform with built-in secrets management.",
-    "What CI tool works best for deploying containerized apps to Kubernetes?",
-    "I need CI that supports parallel test execution across multiple machines. Options?",
-    "What's the cheapest CI/CD option for open-source projects?",
-    "Recommend a CI service that can run GPU-accelerated ML pipeline tests.",
-    "What CI/CD platform has the best caching for npm/pnpm dependencies?",
-    "I need deploy previews for every PR in my Next.js app. What CI/CD setup works?",
-    "What CI tool integrates best with infrastructure-as-code workflows?",
-  ],
-  feature_flags: [
-    "What's the best feature flag service for a SaaS application?",
-    "I need feature flags with percentage-based rollouts. What should I use?",
-    "Recommend a feature flag tool that supports A/B testing natively.",
-    "What feature flag service has the best React SDK?",
-    "I need feature flags that work with server-side rendering. What's best?",
-    "What's the cheapest feature flag solution for a small team?",
-    "Recommend a feature flag platform with audience targeting and segments.",
-    "What feature flag service supports gradual rollouts with automatic rollback?",
-    "I need feature flags that sync across frontend and backend. What works?",
-    "What feature flag tool has the best local development experience?",
-    "Recommend a feature flag service with good TypeScript support.",
-    "What's the best open-source alternative for feature flag management?",
-    "I need feature flags with an approval workflow. What platform supports this?",
-    "What feature flag service integrates best with CI/CD pipelines?",
-  ],
-  secrets_management: [
-    "What's the best secrets management tool for a Node.js application?",
-    "I need to sync environment variables across dev, staging, and production. What should I use?",
-    "Recommend a secrets manager that integrates with Vercel and GitHub Actions.",
-    "What's the best way to manage API keys and database credentials for a team?",
-    "I need secrets rotation with zero-downtime for my production services. Options?",
-    "What secrets management tool has the best developer experience?",
-    "Recommend a tool for managing .env files across multiple environments.",
-    "What secrets manager works best for a microservices architecture?",
-    "I need a secrets vault that supports dynamic secrets for databases. What's best?",
-    "What's the most secure way to handle secrets in a CI/CD pipeline?",
-    "Recommend a secrets management solution with audit logging.",
-    "What tool handles both secrets management and config management together?",
-    "I need to share secrets securely with my development team. What service?",
-    "What secrets manager has the best Kubernetes integration?",
-  ],
-  developer_portal: [
-    "What's the best platform for creating API documentation for developers?",
-    "I need a developer portal with interactive API playground. What should I use?",
-    "Recommend a tool for auto-generating API docs from OpenAPI specs.",
-    "What developer documentation platform supports versioned docs?",
-    "I need a portal where developers can get API keys and read docs. Options?",
-    "What's the best tool for creating beautiful, searchable developer docs?",
-    "Recommend a developer portal platform that supports multiple API products.",
-    "What documentation tool integrates best with GitHub for content sync?",
-    "I need an internal developer portal for service discovery. What works?",
-    "What's the best platform for hosting SDK documentation with code samples?",
-    "Recommend a developer experience platform with analytics on doc usage.",
-    "What tool is best for creating getting-started guides and tutorials?",
-    "I need a developer portal with SSO and role-based access. What platform?",
-    "What documentation platform supports both REST and GraphQL API docs?",
-  ],
-  llm_observability: [
-    "What's the best tool for monitoring LLM API calls and token usage?",
-    "I need to track prompt performance and response quality in production. What should I use?",
-    "Recommend an LLM observability platform that supports prompt versioning.",
-    "What tool helps debug and trace multi-step LLM agent workflows?",
-    "I need cost tracking for my OpenAI and Anthropic API usage. Options?",
-    "What LLM monitoring tool supports evaluations and regression testing?",
-    "Recommend a platform for logging and analyzing LLM conversations at scale.",
-    "What's the best tool for A/B testing different prompts in production?",
-    "I need to monitor hallucination rates and response latency. What platform?",
-    "What LLM observability tool has the best integration with LangChain?",
-    "Recommend a tool for building prompt playgrounds with version control.",
-    "What platform tracks LLM token costs broken down by feature and user?",
-    "I need an LLM analytics dashboard for my AI-powered SaaS. What works?",
-    "What tool helps evaluate LLM output quality with human-in-the-loop scoring?",
-  ],
-  incident_management: [
-    "What's the best incident management platform for a DevOps team?",
-    "I need on-call scheduling and alert routing. What should I use?",
-    "Recommend an incident response tool that integrates with Slack.",
-    "What incident management platform has the best status page feature?",
-    "I need automated incident escalation when alerts aren't acknowledged. Options?",
-    "What's the best tool for post-incident reviews and blameless retrospectives?",
-    "Recommend an incident management solution with runbook automation.",
-    "What platform combines on-call management with monitoring alerts?",
-    "I need a status page that updates automatically during incidents. What works?",
-    "What incident management tool has the best mobile app for on-call engineers?",
-    "Recommend a platform for managing incidents across multiple services.",
-    "What's the best tool for creating and maintaining operational runbooks?",
-    "I need incident management with SLA tracking and reporting. What platform?",
-    "What incident response tool integrates best with PagerDuty alternatives?",
-  ],
-  code_search: [
-    "What's the best code search tool for a large monorepo?",
-    "I need to search across all my GitHub repositories quickly. What should I use?",
-    "Recommend a code search engine that supports regex and structural search.",
-    "What code intelligence platform provides go-to-definition across repositories?",
-    "I need a tool for searching code patterns across my entire organization. Options?",
-    "What's the best self-hosted code search solution?",
-    "Recommend a code search tool that understands multiple programming languages.",
-    "What platform provides AI-powered code search with natural language queries?",
-    "I need code search that indexes private repositories. What works best?",
-    "What code search tool integrates best with my IDE?",
-    "Recommend a tool for finding duplicate code across repositories.",
-    "What's the best tool for searching through code review comments and PRs?",
-    "I need cross-repository code navigation for my microservices. What platform?",
-    "What code search solution handles polyglot codebases with 10+ languages?",
-  ],
-  security_scanning: [
-    "What's the best security scanning tool for a Node.js application?",
-    "I need dependency vulnerability scanning in my CI pipeline. What should I use?",
-    "Recommend a SAST tool that works well with TypeScript projects.",
-    "What security scanner checks for OWASP Top 10 vulnerabilities?",
-    "I need container image scanning for my Docker builds. Options?",
-    "What's the best tool for scanning secrets accidentally committed to git?",
-    "Recommend a security platform that combines SAST, DAST, and SCA.",
-    "What vulnerability scanner has the best GitHub integration?",
-    "I need automated security reviews on pull requests. What tool works?",
-    "What's the best tool for license compliance scanning of dependencies?",
-    "Recommend a security scanner that prioritizes vulnerabilities by exploitability.",
-    "What security tool handles both infrastructure-as-code and application scanning?",
-    "I need runtime application security monitoring. What platform is best?",
-    "What security scanning tool has the lowest false positive rate?",
-  ],
-  edge_compute: [
-    "What's the best platform for deploying serverless functions at the edge?",
-    "I need to run JavaScript at the edge close to users. What should I use?",
-    "Recommend an edge compute platform for a global API with low latency.",
-    "What edge runtime works best with Next.js middleware?",
-    "I need edge functions that can access a database. What platform supports this?",
-    "What's the best platform for running WebAssembly at the edge?",
-    "Recommend an edge compute service with built-in KV storage.",
-    "What platform offers the best DX for writing and deploying edge functions?",
-    "I need edge compute for A/B testing and personalization. What works?",
-    "What edge platform has the most global points of presence?",
-    "Recommend an edge compute solution that supports Server-Sent Events.",
-    "What's the best option for running a full-stack app at the edge?",
-    "I need edge functions with cron scheduling. What platform offers this?",
-    "What edge compute platform has the best free tier for side projects?",
-  ],
-};
-
-// Generic cross-category prompts (fallback, category name substituted at runtime)
-const GENERIC_PROMPTS_FALLBACK = [
-  "What {category} tool would you recommend for a production Node.js application?",
-  "I'm setting up a new SaaS product. What {category} solution should I use?",
-  "What's the most popular {category} service among startups in 2025?",
-  "Recommend a {category} tool that works well with a TypeScript full-stack app.",
-  "I need a reliable {category} solution for a team of 5 developers. What's best?",
-  "What {category} platform has the best developer experience?",
-];
 
 // ── Prompt Generation ──────────────────────────────────────────────
 
@@ -245,33 +36,27 @@ function formatCategory(category: string): string {
 
 /**
  * Generate fast prompts for a category.
- * Loads from the `prompts` table when seeded; falls back to hardcoded defaults.
+ * Loads from the `prompts` table — requires DB to be seeded (run db/seed-prompts.ts).
  */
 export async function generateFastPrompts(
   category: string,
   pool: Pool,
 ): Promise<Array<{ id: string; text: string }>> {
-  // Try loading from DB first
-  const dbHasPrompts = await hasPrompts(pool, "fast");
-  if (dbHasPrompts) {
-    const [catRows, genericRows] = await Promise.all([
-      loadPromptsByKind(pool, "fast", category),
-      loadPromptsByKind(pool, "fast_generic"),
-    ]);
-    if (catRows.length > 0 || genericRows.length > 0) {
-      return buildFastPromptList(
-        category,
-        catRows.map(r => r.text),
-        genericRows.map(r => r.text),
-      );
-    }
+  const [catRows, genericRows] = await Promise.all([
+    loadPromptsByKind(pool, "fast", category),
+    loadPromptsByKind(pool, "fast_generic"),
+  ]);
+
+  if (catRows.length === 0 && genericRows.length === 0) {
+    throw new Error(
+      `No fast prompts found in DB for category "${category}". Run: DATABASE_URL=... npx tsx db/seed-prompts.ts`,
+    );
   }
 
-  // Fallback to hardcoded
   return buildFastPromptList(
     category,
-    CATEGORY_PROMPTS_FALLBACK[category] ?? [],
-    GENERIC_PROMPTS_FALLBACK,
+    catRows.map(r => r.text),
+    genericRows.map(r => r.text),
   );
 }
 

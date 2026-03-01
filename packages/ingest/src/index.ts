@@ -358,6 +358,7 @@ program
               pending.turns,
               taxonomy,
               pending.constraints,
+              db.getPool(),
             );
             if (llmCtx) {
               await db.upsertResponseContext({
@@ -577,7 +578,7 @@ program
     console.log(chalk.green(`  ${significant.length} significant changes`));
 
     console.log(chalk.cyan("Generating narrative..."));
-    const summary = await generateNarrative(significant);
+    const summary = await generateNarrative(significant, db.getPool());
     console.log(chalk.green(`  Summary: ${summary?.slice(0, 100) ?? "(template)"}`));
 
     const alerts = emitAlerts(deltas);
