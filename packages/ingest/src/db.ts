@@ -180,6 +180,26 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_search_tsv ON search_index USING GIN(tsv)`,
   `CREATE INDEX IF NOT EXISTS idx_search_source_id ON search_index(source_id)`,
   `CREATE INDEX IF NOT EXISTS idx_insights_type ON cross_session_insights(insight_type)`,
+
+  // Fast benchmark: direct API probe responses (not full transcripts)
+  `CREATE TABLE IF NOT EXISTS fast_benchmark_responses (
+    id SERIAL PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    prompt_id TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    category TEXT NOT NULL,
+    response_text TEXT,
+    duration_ms INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    model TEXT NOT NULL DEFAULT 'claude-haiku-4-5-20251001',
+    vendor_mentions JSONB NOT NULL DEFAULT '[]',
+    primary_vendor TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(job_id, prompt_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_fast_bench_job ON fast_benchmark_responses(job_id)`,
 ];
 
 export class ObservatoryDB {

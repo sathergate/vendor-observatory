@@ -12,6 +12,7 @@ import { ingestResults } from "./ingest-bridge.js";
 import { computeScores, type ScoreResult } from "./scorer.js";
 import { ensureVendor } from "./vendor-mapper.js";
 import { runUrlAnalysisFallback } from "./url-analysis-fallback.js";
+import { runFastBenchmark } from "./fast-benchmark.js";
 
 interface JobRow {
   id: string;
@@ -25,14 +26,13 @@ interface JobRow {
   balanced_completed_at: string | null;
 }
 
-const TIMEOUT_FAST_MS = 90_000;   // 90s per prompt (generous for fast tier)
 const TIMEOUT_BALANCED_MS = 120_000; // 120s per prompt
 const PER_PROMPT_BUDGET_USD = 0.50;
 
 /**
  * Orchestrate a single onboarding job end-to-end:
  * 1. URL analysis (if not already done by Next.js API)
- * 2. Fast benchmark (claude_code only, 3 prompts in parallel)
+ * 2. Fast benchmark (20 parallel API probes via Haiku, ~10-20s)
  * 3. Balanced benchmark (claude_code + codex_cli, 10 prompts in parallel)
  */
 export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
@@ -63,42 +63,17 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
 
   const competitors = parseCompetitors(job.competitors);
 
-  // ── Fast benchmark ────────────────────────────────────────────
+  // ── Fast benchmark (direct API probes, ~10-20s) ─────────────
   if (!job.fast_completed_at) {
     console.log(`[executor] Running fast benchmark for job ${job.id}`);
-    const prompts = selectOnboardingPrompts(job.detected_category, "fast");
-    const adapters: AssistantAdapter[] = [new ClaudeCodeAdapter()];
-    const availableAdapters = await filterAvailable(adapters);
-
-    if (availableAdapters.length > 0) {
-      const pairs = prompts.flatMap(p =>
-        availableAdapters.map(a => [p, a] as [typeof p, typeof a])
+    try {
+      const { scores, totalDurationMs, successCount, errorCount } = await runFastBenchmark(
+        job.id,
+        vendorId,
+        job.detected_category ?? "other",
+        competitors,
+        pool,
       );
-
-      const results = await runParallelBatch(pairs, {
-        budgetUsd: PER_PROMPT_BUDGET_USD,
-        timeoutMs: TIMEOUT_FAST_MS,
-        jobId: job.id,
-      });
-
-      // Collect any adapter errors for diagnostics
-      const failedResults = results.filter(r => r.error);
-      if (failedResults.length > 0) {
-        const adapterErrors = failedResults
-          .map(r => `${r.promptId}/${r.assistant}: ${r.error}`)
-          .join("; ");
-        console.warn(`[executor] Fast benchmark adapter errors: ${adapterErrors}`);
-        // If ALL sessions failed, log the first error to the job record
-        if (failedResults.length === results.length) {
-          await pool.query(
-            "UPDATE onboarding_jobs SET error = $1 WHERE id = $2 AND error IS NULL",
-            [`All fast sessions failed. First error: ${failedResults[0].error}`.slice(0, 2000), job.id]
-          );
-        }
-      }
-
-      await ingestResults(results, job.id, pool);
-      const scores = await computeScores(job.id, vendorId, competitors, pool);
 
       await pool.query(
         `UPDATE onboarding_jobs
@@ -114,11 +89,18 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
           JSON.stringify(scores.platformCoverage),
           JSON.stringify(scores.competitorRates),
           job.id,
-        ]
+        ],
       );
-      console.log(`[executor] Fast benchmark complete: mention_rate=${scores.mentionRate}%`);
-    } else {
-      console.warn("[executor] No adapters available for fast benchmark");
+      console.log(
+        `[executor] Fast benchmark complete in ${totalDurationMs}ms: ` +
+        `mention_rate=${scores.mentionRate}%, ${successCount} ok / ${errorCount} errors`,
+      );
+    } catch (err) {
+      console.error(`[executor] Fast benchmark failed: ${err}`);
+      await pool.query(
+        "UPDATE onboarding_jobs SET error = $1 WHERE id = $2 AND error IS NULL",
+        [String(err).slice(0, 2000), job.id],
+      );
       // Mark as complete with zero results so job can continue
       await pool.query(
         `UPDATE onboarding_jobs
@@ -126,7 +108,7 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
              fast_platform_coverage = '{}', fast_competitor_rates = '[]',
              fast_completed_at = NOW()
          WHERE id = $1`,
-        [job.id]
+        [job.id],
       );
     }
   }
