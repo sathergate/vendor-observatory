@@ -2261,3 +2261,183 @@ export async function getCategoryCompetitorDensity(): Promise<CategoryDensityRow
     }));
   } catch { return []; }
 }
+
+// ── Vendor Rejections ─────────────────────────────────────────────────
+
+export interface RejectionSummaryRow {
+  vendor_canonical_id: string;
+  total_rejections: number;
+  too_expensive: number;
+  too_complex: number;
+  poor_docs: number;
+  not_available_region: number;
+  feature_gap: number;
+  trust_concerns: number;
+  vendor_lock_in: number;
+  top_alternative: string | null;
+  total_mentions: number;
+  rejection_rate: number;
+}
+
+export async function getRejectionSummary(vendorScope?: string | null): Promise<RejectionSummaryRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "vendor_rejections"))) return [];
+    const params: string[] = [];
+    let vendorWhere = "";
+    if (vendorScope) {
+      vendorWhere = "WHERE vr.vendor_canonical_id = $1";
+      params.push(vendorScope);
+    }
+    const { rows } = await pool.query(`
+      SELECT
+        vr.vendor_canonical_id,
+        COUNT(*) AS total_rejections,
+        SUM(CASE WHEN vr.rejection_reason = 'too_expensive' THEN 1 ELSE 0 END) AS too_expensive,
+        SUM(CASE WHEN vr.rejection_reason = 'too_complex' THEN 1 ELSE 0 END) AS too_complex,
+        SUM(CASE WHEN vr.rejection_reason = 'poor_docs' THEN 1 ELSE 0 END) AS poor_docs,
+        SUM(CASE WHEN vr.rejection_reason = 'not_available_region' THEN 1 ELSE 0 END) AS not_available_region,
+        SUM(CASE WHEN vr.rejection_reason = 'feature_gap' THEN 1 ELSE 0 END) AS feature_gap,
+        SUM(CASE WHEN vr.rejection_reason = 'trust_concerns' THEN 1 ELSE 0 END) AS trust_concerns,
+        SUM(CASE WHEN vr.rejection_reason = 'vendor_lock_in' THEN 1 ELSE 0 END) AS vendor_lock_in,
+        (SELECT vr2.chosen_alternative FROM vendor_rejections vr2
+         WHERE vr2.vendor_canonical_id = vr.vendor_canonical_id AND vr2.chosen_alternative IS NOT NULL
+         GROUP BY vr2.chosen_alternative ORDER BY COUNT(*) DESC LIMIT 1) AS top_alternative,
+        COALESCE((SELECT COUNT(*) FROM observations o WHERE o.vendor_canonical_id = vr.vendor_canonical_id), 0) AS total_mentions
+      FROM vendor_rejections vr
+      ${vendorWhere}
+      GROUP BY vr.vendor_canonical_id
+      ORDER BY total_rejections DESC
+    `, params);
+    return rows.map((r: Record<string, unknown>) => {
+      const totalRejections = Number(r.total_rejections);
+      const totalMentions = Number(r.total_mentions);
+      return {
+        vendor_canonical_id: r.vendor_canonical_id as string,
+        total_rejections: totalRejections,
+        too_expensive: Number(r.too_expensive),
+        too_complex: Number(r.too_complex),
+        poor_docs: Number(r.poor_docs),
+        not_available_region: Number(r.not_available_region),
+        feature_gap: Number(r.feature_gap),
+        trust_concerns: Number(r.trust_concerns),
+        vendor_lock_in: Number(r.vendor_lock_in),
+        top_alternative: (r.top_alternative as string) || null,
+        total_mentions: totalMentions,
+        rejection_rate: totalMentions > 0 ? totalRejections / totalMentions : 0,
+      };
+    });
+  } catch { return []; }
+}
+
+export interface RejectionDetailRow {
+  id: number;
+  session_id: string;
+  vendor_canonical_id: string;
+  rejection_reason: string;
+  rejection_reason_detail: string | null;
+  chosen_alternative: string | null;
+  timestamp: string;
+  source_platform: string | null;
+}
+
+export async function getRejectionDetails(vendorId?: string, limit = 100): Promise<RejectionDetailRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "vendor_rejections"))) return [];
+    const params: (string | number)[] = [];
+    let where = "";
+    let paramIdx = 1;
+    if (vendorId) {
+      where = `WHERE vr.vendor_canonical_id = $${paramIdx++}`;
+      params.push(vendorId);
+    }
+    params.push(limit);
+    const { rows } = await pool.query(`
+      SELECT vr.*, s.source_platform
+      FROM vendor_rejections vr
+      LEFT JOIN sessions s ON vr.session_id = s.id
+      ${where}
+      ORDER BY vr.timestamp DESC
+      LIMIT $${paramIdx}
+    `, params);
+    return rows.map((r: Record<string, unknown>) => ({
+      id: Number(r.id),
+      session_id: r.session_id as string,
+      vendor_canonical_id: r.vendor_canonical_id as string,
+      rejection_reason: r.rejection_reason as string,
+      rejection_reason_detail: (r.rejection_reason_detail as string) || null,
+      chosen_alternative: (r.chosen_alternative as string) || null,
+      timestamp: r.timestamp as string,
+      source_platform: (r.source_platform as string) || null,
+    }));
+  } catch { return []; }
+}
+
+export interface RejectionReasonBreakdown {
+  reason: string;
+  count: number;
+  percentage: number;
+}
+
+export async function getRejectionReasonBreakdown(vendorId?: string): Promise<RejectionReasonBreakdown[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "vendor_rejections"))) return [];
+    const params: string[] = [];
+    let where = "";
+    if (vendorId) {
+      where = "WHERE vendor_canonical_id = $1";
+      params.push(vendorId);
+    }
+    const { rows } = await pool.query(`
+      SELECT rejection_reason, COUNT(*) AS count
+      FROM vendor_rejections
+      ${where}
+      GROUP BY rejection_reason
+      ORDER BY count DESC
+    `, params);
+    const total = rows.reduce((acc: number, r: Record<string, unknown>) => acc + Number(r.count), 0);
+    return rows.map((r: Record<string, unknown>) => ({
+      reason: r.rejection_reason as string,
+      count: Number(r.count),
+      percentage: total > 0 ? Number(r.count) / total : 0,
+    }));
+  } catch { return []; }
+}
+
+export interface AlternativeFlowRow {
+  rejected_vendor: string;
+  chosen_alternative: string;
+  count: number;
+}
+
+export async function getAlternativeFlows(vendorScope?: string | null): Promise<AlternativeFlowRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "vendor_rejections"))) return [];
+    const params: string[] = [];
+    let where = "WHERE chosen_alternative IS NOT NULL";
+    if (vendorScope) {
+      where += " AND (vendor_canonical_id = $1 OR chosen_alternative = $1)";
+      params.push(vendorScope);
+    }
+    const { rows } = await pool.query(`
+      SELECT vendor_canonical_id AS rejected_vendor, chosen_alternative, COUNT(*) AS count
+      FROM vendor_rejections
+      ${where}
+      GROUP BY vendor_canonical_id, chosen_alternative
+      ORDER BY count DESC
+      LIMIT 50
+    `, params);
+    return rows.map((r: Record<string, unknown>) => ({
+      rejected_vendor: r.rejected_vendor as string,
+      chosen_alternative: r.chosen_alternative as string,
+      count: Number(r.count),
+    }));
+  } catch { return []; }
+}

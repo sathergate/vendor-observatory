@@ -36,11 +36,18 @@ export type {
   DeveloperIntent,
   IntentClassification,
   PromptIntentRow,
+  // Rejection types
+  RejectionReason,
+  VendorRejection,
+  VendorRejectionRow,
 } from "./types.js";
 
 // ── Extractor ───────────────────────────────────────────────────────
 export { extractVendorMentions } from "./extractor.js";
 export type { ExtractorOptions } from "./extractor.js";
+
+// ── Rejection Extractor ─────────────────────────────────────────────
+export { extractVendorRejections } from "./rejection-extractor.js";
 
 // ── Reasoning Extractor ─────────────────────────────────────────────
 export { extractResponseContext } from "./reasoning-extractor.js";

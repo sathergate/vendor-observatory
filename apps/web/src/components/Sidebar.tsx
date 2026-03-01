@@ -7,6 +7,8 @@ import { NavLink } from "./NavLink";
 import { useVendor } from "@/context/VendorContext";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 
+// DEPRECATED: NAV_GROUPS is going to be deleted. New links should be added
+// to VENDOR_NAV_LINKS instead.
 const NAV_GROUPS = [
   {
     label: "Benchmarks",
@@ -42,6 +44,7 @@ const VENDOR_NAV_LINKS = (vendorId: string) => [
   { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/use-cases`, label: "Use Cases" },
   { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/reasoning`, label: "Reasoning Samples" },
   { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/category-competition`, label: "Category Competition" },
+  { href: "/rejections", label: "Rejections" },
 ];
 
 export function Sidebar() {

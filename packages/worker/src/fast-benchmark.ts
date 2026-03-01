@@ -11,13 +11,14 @@
 import { Pool } from "pg";
 import {
   extractVendorMentions,
+  extractVendorRejections,
   loadVendorTaxonomyFromDb,
   loadPackageMapFromDb,
   createPackageResolver,
   loadPromptsByKind,
   hasPrompts,
 } from "@obs/shared";
-import type { VendorTaxonomy, VendorMention, ParsedTurn, PromptRow } from "@obs/shared";
+import type { VendorTaxonomy, VendorMention, VendorRejection, ParsedTurn, PromptRow } from "@obs/shared";
 import { computeFastScores, type ScoreResult } from "./scorer.js";
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -344,6 +345,7 @@ interface PromptResult {
   outputTokens: number;
   error: string | null;
   vendorMentions: VendorMention[];
+  vendorRejections: VendorRejection[];
   primaryVendor: string | null;
 }
 
@@ -386,6 +388,9 @@ async function callApi(
     };
     const vendorMentions = extractVendorMentions(turn, taxonomy, prompt.text.slice(0, 300), { packageResolver });
 
+    // Extract vendor rejections
+    const vendorRejections = extractVendorRejections([turn], taxonomy);
+
     // Determine primary vendor (highest confidence "recommended" or "mentioned")
     const primaryVendor = pickPrimaryVendor(vendorMentions);
 
@@ -398,6 +403,7 @@ async function callApi(
       outputTokens: response.usage.output_tokens,
       error: null,
       vendorMentions,
+      vendorRejections,
       primaryVendor,
     };
   } catch (err) {
@@ -410,6 +416,7 @@ async function callApi(
       outputTokens: 0,
       error: String(err),
       vendorMentions: [],
+      vendorRejections: [],
       primaryVendor: null,
     };
   }
@@ -472,6 +479,36 @@ async function storeResult(result: PromptResult, jobId: string, category: string
       result.error,
     ],
   );
+
+  // Store rejections in vendor_rejections table
+  // Use a synthetic session ID scoped to the fast benchmark job
+  for (const rejection of result.vendorRejections) {
+    const syntheticSessionId = `fast-bench-${jobId}-${result.promptId}`;
+    // Ensure the synthetic session exists
+    await pool.query(`
+      INSERT INTO sessions (id, source_platform, model_id, started_at, ended_at, cwd, git_branch, turn_count, file_path, is_benchmark)
+      VALUES ($1, 'claude_code', $2, NOW()::text, NOW()::text, $3, '__obs_bench__', 1, $4, TRUE)
+      ON CONFLICT(id) DO NOTHING
+    `, [
+      syntheticSessionId,
+      FAST_MODEL,
+      `/tmp/obs-bench-fast/${jobId}/${result.promptId}`,
+      `fast-bench/${jobId}/${result.promptId}.jsonl`,
+    ]);
+
+    await pool.query(`
+      INSERT INTO vendor_rejections
+        (session_id, vendor_canonical_id, rejection_reason, rejection_reason_detail, chosen_alternative, timestamp)
+      VALUES ($1, $2, $3, $4, $5, NOW()::text)
+      ON CONFLICT DO NOTHING
+    `, [
+      syntheticSessionId,
+      rejection.vendorCanonicalId,
+      rejection.rejectionReason,
+      rejection.rejectionReasonDetail,
+      rejection.chosenAlternative,
+    ]);
+  }
 }
 
 // ── Orchestrator ───────────────────────────────────────────────────

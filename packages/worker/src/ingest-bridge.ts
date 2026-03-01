@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import {
   extractVendorMentions,
+  extractVendorRejections,
   extractResponseContext,
   classifyIntent,
   loadVendorTaxonomyFromDb,
@@ -224,6 +225,24 @@ export async function ingestResults(
           mention.timestamp,
         ]);
       }
+    }
+
+    // Extract vendor rejections
+    const rejections = extractVendorRejections(session.turns, taxonomy);
+    for (const rejection of rejections) {
+      await pool.query(`
+        INSERT INTO vendor_rejections
+          (session_id, vendor_canonical_id, rejection_reason, rejection_reason_detail, chosen_alternative, timestamp)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT DO NOTHING
+      `, [
+        session.id,
+        rejection.vendorCanonicalId,
+        rejection.rejectionReason,
+        rejection.rejectionReasonDetail,
+        rejection.chosenAlternative,
+        rejection.timestamp,
+      ]);
     }
 
     // Extract response context for enrichment

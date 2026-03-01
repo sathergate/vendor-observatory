@@ -9,14 +9,17 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "yaml": "^2.6.1",
-    "@anthropic-ai/sdk": "^0.39.0"
+    "@anthropic-ai/sdk": "^0.39.0",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "typescript": "^5.7.0",
-    "@types/node": "^22.10.0"
+    "vitest": "^4.0.18"
   }
 }

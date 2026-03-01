@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import {
   loadVendorTaxonomy,
   extractVendorMentions,
+  extractVendorRejections,
   extractResponseContext,
   isEnrichmentEnabled,
   extractResponseContextWithLLM,
@@ -196,6 +197,15 @@ program
           totalObservations += sessionObservations;
           if (sessionObservations > 0) {
             console.log(chalk.green(`    Session ${session.id.slice(0, 8)}... → ${sessionObservations} vendor observations`));
+          }
+
+          // ── Rejection Extraction ──
+          const rejections = extractVendorRejections(session.turns, taxonomy);
+          for (const rejection of rejections) {
+            await db.insertVendorRejection(session.id, rejection);
+          }
+          if (rejections.length > 0) {
+            console.log(chalk.red(`    Session ${session.id.slice(0, 8)}... → ${rejections.length} vendor rejections`));
           }
 
           // ── Enrichment: Store prompt metadata + response context for benchmark sessions ──
