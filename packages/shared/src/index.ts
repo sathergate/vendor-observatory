@@ -40,6 +40,7 @@ export type {
 
 // ── Extractor ───────────────────────────────────────────────────────
 export { extractVendorMentions } from "./extractor.js";
+export type { ExtractorOptions } from "./extractor.js";
 
 // ── Reasoning Extractor ─────────────────────────────────────────────
 export { extractResponseContext } from "./reasoning-extractor.js";
@@ -74,3 +75,11 @@ export type { PromptKind, PromptRow } from "./prompt-store.js";
 
 // ── Loaders ─────────────────────────────────────────────────────────
 export { loadVendorTaxonomy } from "./taxonomy-loader.js";
+
+// ── Database Loaders ────────────────────────────────────────────────
+export {
+  loadVendorTaxonomyFromDb,
+  loadPackageMapFromDb,
+  createPackageResolver,
+} from "./db-taxonomy-loader.js";
+export type { DbQueryable } from "./db-taxonomy-loader.js";

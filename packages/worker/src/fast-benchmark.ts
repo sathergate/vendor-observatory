@@ -11,13 +11,13 @@
 import { Pool } from "pg";
 import {
   extractVendorMentions,
-  loadVendorTaxonomy,
+  loadVendorTaxonomyFromDb,
+  loadPackageMapFromDb,
+  createPackageResolver,
   loadPromptsByKind,
   hasPrompts,
 } from "@obs/shared";
 import type { VendorTaxonomy, VendorMention, ParsedTurn, PromptRow } from "@obs/shared";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { computeFastScores, type ScoreResult } from "./scorer.js";
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -315,46 +315,22 @@ function buildFastPromptList(
   return prompts;
 }
 
-// ── Taxonomy Loading ───────────────────────────────────────────────
+// ── Taxonomy & Package Map Loading (DB-backed) ────────────────────
 
 let _taxonomy: VendorTaxonomy | null = null;
+let _packageResolver: ((pkg: string) => string | null) | null = null;
 
 async function getTaxonomy(pool: Pool): Promise<VendorTaxonomy> {
   if (_taxonomy) return _taxonomy;
+  _taxonomy = await loadVendorTaxonomyFromDb(pool);
+  return _taxonomy;
+}
 
-  // Try loading from DB first
-  try {
-    const { rows } = await pool.query(
-      "SELECT canonical_id, display_name, category, synonyms FROM vendors ORDER BY canonical_id"
-    );
-    if (rows.length > 0) {
-      _taxonomy = {
-        vendors: rows.map((r: Record<string, unknown>) => ({
-          canonical_id: r.canonical_id as string,
-          display_name: r.display_name as string,
-          category: r.category as string,
-          synonyms: (r.synonyms as string[]) ?? [],
-        })),
-      };
-      return _taxonomy;
-    }
-  } catch {
-    // Fall through to YAML
-  }
-
-  // Fallback: load from YAML file
-  const candidates = [
-    resolve(process.cwd(), "taxonomy", "vendors.yaml"),
-    resolve(process.cwd(), "..", "..", "taxonomy", "vendors.yaml"),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      _taxonomy = loadVendorTaxonomy(p);
-      return _taxonomy;
-    }
-  }
-
-  throw new Error("Cannot load vendor taxonomy from DB or filesystem");
+async function getPackageResolver(pool: Pool): Promise<(pkg: string) => string | null> {
+  if (_packageResolver) return _packageResolver;
+  const packageMap = await loadPackageMapFromDb(pool);
+  _packageResolver = createPackageResolver(packageMap);
+  return _packageResolver;
 }
 
 // ── API Call ───────────────────────────────────────────────────────
@@ -374,6 +350,7 @@ interface PromptResult {
 async function callApi(
   prompt: { id: string; text: string },
   taxonomy: VendorTaxonomy,
+  packageResolver: (pkg: string) => string | null,
 ): Promise<PromptResult> {
   const start = Date.now();
   try {
@@ -407,7 +384,7 @@ async function callApi(
       toolResults: [],
       timestamp: new Date().toISOString(),
     };
-    const vendorMentions = extractVendorMentions(turn, taxonomy, prompt.text.slice(0, 300));
+    const vendorMentions = extractVendorMentions(turn, taxonomy, prompt.text.slice(0, 300), { packageResolver });
 
     // Determine primary vendor (highest confidence "recommended" or "mentioned")
     const primaryVendor = pickPrimaryVendor(vendorMentions);
@@ -522,13 +499,16 @@ export async function runFastBenchmark(
   const overallStart = Date.now();
 
   console.log(`[fast-bench] Generating ${PROMPT_COUNT} prompts for category "${category}"`);
-  const prompts = await generateFastPrompts(category, pool);
-  const taxonomy = await getTaxonomy(pool);
+  const [prompts, taxonomy, packageResolver] = await Promise.all([
+    generateFastPrompts(category, pool),
+    getTaxonomy(pool),
+    getPackageResolver(pool),
+  ]);
 
   // Fire all prompts in parallel
   console.log(`[fast-bench] Firing ${prompts.length} API calls in parallel (model: ${FAST_MODEL})`);
   const settled = await Promise.allSettled(
-    prompts.map(p => callApi(p, taxonomy)),
+    prompts.map(p => callApi(p, taxonomy, packageResolver)),
   );
 
   // Collect results
