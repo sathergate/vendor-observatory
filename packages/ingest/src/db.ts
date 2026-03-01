@@ -258,6 +258,11 @@ export class ObservatoryDB {
     this.pool = pool;
   }
 
+  /** Expose pool for prompt-store and LLM enrichment queries. */
+  getPool(): Pool {
+    return this.pool;
+  }
+
   static async create(connectionString: string): Promise<ObservatoryDB> {
     const pool = new Pool({ connectionString });
     const instance = new ObservatoryDB(pool);
