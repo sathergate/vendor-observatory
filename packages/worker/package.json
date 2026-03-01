@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@obs/shared": "workspace:*",
     "@obs/ingest": "workspace:*",
     "@obs/benchmark": "workspace:*",
