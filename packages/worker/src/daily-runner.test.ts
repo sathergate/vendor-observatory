@@ -118,6 +118,7 @@ function createMockPool(opts: {
         const total = opts.costSums?.[costSumIndex++] ?? 0;
         return { rows: [{ total }] };
       }
+      // CREATE TABLE, CREATE INDEX, INSERT INTO daily_benchmark_logs, etc.
       return { rows: [] };
     }),
   } as unknown as import("pg").Pool;
@@ -149,7 +150,12 @@ describe("runDailyBenchmark", () => {
 
   it("throws when run ID is not found", async () => {
     const pool = {
-      query: vi.fn(() => ({ rows: [] })),
+      query: vi.fn((sql: string) => {
+        if (sql.includes("SELECT run_date")) {
+          return { rows: [] };
+        }
+        return { rows: [] };
+      }),
     } as unknown as import("pg").Pool;
 
     await expect(runDailyBenchmark("nonexistent", pool)).rejects.toThrow(
@@ -360,6 +366,73 @@ describe("runDailyBenchmark", () => {
     // Should NOT throw
     await runDailyBenchmark("run-analysis-fail", pool);
   });
+
+  it("logs critical events to daily_benchmark_logs table", async () => {
+    mocks.runParallelBatch.mockResolvedValueOnce([
+      makeResult("db-01", "claude_code", 0.05, null),
+      makeResult("db-01", "codex_cli", null, "timeout"),
+    ]);
+
+    const { pool, queries } = createMockPool({
+      runRow: {
+        run_date: "2026-02-28",
+        budget_usd: 25,
+        assistants: ["claude_code", "codex_cli"],
+        category: null,
+      },
+      costSums: [0],
+    });
+
+    await runDailyBenchmark("run-logs", pool);
+
+    // Filter for log INSERT statements
+    const logInserts = queries.filter(q => q.sql.includes("INSERT INTO daily_benchmark_logs"));
+
+    // Should have logged at minimum: run_start, config_loaded, session_start×2, pairs_computed,
+    // batch_start, session_end (success), session_error (failure), batch_end, ingest_complete,
+    // analysis_complete, digest_complete, run_complete
+    expect(logInserts.length).toBeGreaterThanOrEqual(8);
+
+    // Verify run_start is logged
+    const runStartLog = logInserts.find(q => q.params[1] === "run_start");
+    expect(runStartLog).toBeDefined();
+    expect(runStartLog!.params[0]).toBe("run-logs"); // run_id
+
+    // Verify run_complete is logged
+    const runCompleteLog = logInserts.find(q => q.params[1] === "run_complete");
+    expect(runCompleteLog).toBeDefined();
+
+    // Verify session_error is logged for the failed result
+    const sessionErrorLog = logInserts.find(q => q.params[1] === "session_error");
+    expect(sessionErrorLog).toBeDefined();
+    expect(sessionErrorLog!.params[2]).toContain("timeout");
+
+    // Verify session_end is logged for the successful result
+    const sessionEndLog = logInserts.find(q => q.params[1] === "session_end");
+    expect(sessionEndLog).toBeDefined();
+  });
+
+  it("ensures daily_benchmark_logs table is created", async () => {
+    mocks.runParallelBatch.mockResolvedValueOnce([]);
+
+    const { pool, queries } = createMockPool({
+      runRow: {
+        run_date: "2026-02-28",
+        budget_usd: 25,
+        assistants: ["claude_code"],
+        category: "database",
+      },
+      costSums: [0],
+    });
+
+    await runDailyBenchmark("run-table", pool);
+
+    // Should have CREATE TABLE IF NOT EXISTS for daily_benchmark_logs
+    const createTable = queries.find(q =>
+      q.sql.includes("CREATE TABLE IF NOT EXISTS daily_benchmark_logs"),
+    );
+    expect(createTable).toBeDefined();
+  });
 });
 
 describe("markDailyRunFailed", () => {
@@ -379,11 +452,13 @@ describe("markDailyRunFailed", () => {
     const longError = "x".repeat(3000);
     await markDailyRunFailed("run-err", new Error(longError), pool);
 
-    expect(pool.query).toHaveBeenCalledTimes(1);
-    const [sql, params] = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(sql).toContain("UPDATE daily_benchmark_runs SET error");
-    expect((params[0] as string).length).toBe(2000);
-    expect(params[1]).toBe("run-err");
+    // Find the UPDATE query (not the log INSERT)
+    const updateCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([sql]: [string]) => sql.includes("UPDATE daily_benchmark_runs SET error"),
+    );
+    expect(updateCall).toBeDefined();
+    expect((updateCall![1][0] as string).length).toBe(2000);
+    expect(updateCall![1][1]).toBe("run-err");
   });
 
   it("handles non-Error throwables", async () => {
@@ -393,8 +468,11 @@ describe("markDailyRunFailed", () => {
 
     await markDailyRunFailed("run-err", "string error", pool);
 
-    const [, params] = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(params[0]).toBe("string error");
+    const updateCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([sql]: [string]) => sql.includes("UPDATE daily_benchmark_runs SET error"),
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall![1][0]).toBe("string error");
   });
 
   it("does not throw if the DB update itself fails", async () => {
@@ -404,5 +482,20 @@ describe("markDailyRunFailed", () => {
 
     // Should not throw
     await markDailyRunFailed("run-err", new Error("original"), pool);
+  });
+
+  it("logs run_failed event to daily_benchmark_logs", async () => {
+    const pool = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    } as unknown as import("pg").Pool;
+
+    await markDailyRunFailed("run-err", new Error("something broke"), pool);
+
+    const logCall = (pool.query as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([sql]: [string]) => sql.includes("INSERT INTO daily_benchmark_logs"),
+    );
+    expect(logCall).toBeDefined();
+    expect(logCall![1][1]).toBe("run_failed");
+    expect(logCall![1][2]).toContain("something broke");
   });
 });

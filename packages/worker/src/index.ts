@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { executeJob } from "./executor.js";
 import { cleanupOldWorkspaces } from "./cleanup.js";
 import { checkAndScheduleDailyBenchmark } from "./scheduler.js";
+import { ensureBenchmarkLogsTable } from "./daily-runner.js";
 
 const WORKER_ID = `worker-${randomUUID().slice(0, 8)}`;
 const POLL_INTERVAL_MS = 3000;
@@ -206,6 +207,7 @@ async function mainLoop() {
 
   // Ensure DB schema is up to date before polling
   await ensureDailyBenchmarkTables();
+  await ensureBenchmarkLogsTable(pool);
   await ensureColumns();
 
   let iteration = 0;

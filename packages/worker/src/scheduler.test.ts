@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("./daily-runner.js", () => ({
   runDailyBenchmark: vi.fn().mockResolvedValue(undefined),
   markDailyRunFailed: vi.fn().mockResolvedValue(undefined),
+  ensureBenchmarkLogsTable: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { checkAndScheduleDailyBenchmark } from "./scheduler.js";
@@ -11,10 +12,29 @@ import { runDailyBenchmark, markDailyRunFailed } from "./daily-runner.js";
 
 // ── Pool mock helper ─────────────────────────────────────────────────────
 
-function createMockPool(queryImpl?: (...args: unknown[]) => unknown) {
-  return {
-    query: vi.fn(queryImpl ?? (() => ({ rows: [] }))),
+function createMockPool(opts?: {
+  selectRows?: Record<string, unknown>[];
+}) {
+  const client = {
+    query: vi.fn((sql: string, params?: unknown[]) => {
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+        return { rows: [] };
+      }
+      if (sql.includes("SELECT id, run_date")) {
+        return { rows: opts?.selectRows ?? [] };
+      }
+      // UPDATE (claim)
+      return { rows: [] };
+    }),
+    release: vi.fn(),
+  };
+
+  const pool = {
+    connect: vi.fn().mockResolvedValue(client),
+    query: vi.fn(() => ({ rows: [] })),
   } as unknown as import("pg").Pool;
+
+  return { pool, client };
 }
 
 describe("checkAndScheduleDailyBenchmark", () => {
@@ -26,53 +46,49 @@ describe("checkAndScheduleDailyBenchmark", () => {
     vi.useRealTimers();
   });
 
-  it("does nothing before 12:00 UTC", async () => {
-    // Set clock to 11:59 UTC
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T11:59:00Z"));
-
-    const pool = createMockPool();
+  it("does nothing when no pending runs exist in the queue", async () => {
+    const { pool } = createMockPool({ selectRows: [] });
     await checkAndScheduleDailyBenchmark(pool, "worker-abc");
 
-    expect(pool.query).not.toHaveBeenCalled();
     expect(runDailyBenchmark).not.toHaveBeenCalled();
   });
 
-  it("attempts to claim after 12:00 UTC", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T14:00:00Z"));
+  it("claims and runs a pending benchmark from the queue", async () => {
+    const { pool, client } = createMockPool({
+      selectRows: [{ id: "run-uuid-123", run_date: "2026-02-28" }],
+    });
 
-    const pool = createMockPool(() => ({ rows: [{ id: "run-uuid-123" }] }));
     await checkAndScheduleDailyBenchmark(pool, "worker-abc");
 
-    // Should have issued the INSERT query
-    expect(pool.query).toHaveBeenCalledTimes(1);
-    const [sql, params] = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(sql).toContain("INSERT INTO daily_benchmark_runs");
-    expect(sql).toContain("ON CONFLICT (run_date) DO NOTHING");
-    expect(params).toEqual(["2026-02-28", "worker-abc"]);
+    // Should have issued SELECT FOR UPDATE SKIP LOCKED
+    const selectCall = client.query.mock.calls.find(
+      ([sql]: [string]) => typeof sql === "string" && sql.includes("SELECT id, run_date"),
+    );
+    expect(selectCall).toBeDefined();
+    expect(selectCall![0]).toContain("FOR UPDATE SKIP LOCKED");
+    expect(selectCall![0]).toContain("started_at IS NULL");
 
-    // Should have called runDailyBenchmark with the returned id
+    // Should have UPDATE'd to claim
+    const updateCall = client.query.mock.calls.find(
+      ([sql]: [string]) => typeof sql === "string" && sql.includes("UPDATE daily_benchmark_runs SET started_at"),
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall![1]).toEqual(["worker-abc", "run-uuid-123"]);
+
+    // Should have COMMIT'd
+    const commitCall = client.query.mock.calls.find(
+      ([sql]: [string]) => sql === "COMMIT",
+    );
+    expect(commitCall).toBeDefined();
+
+    // Should have called runDailyBenchmark with the run id
     expect(runDailyBenchmark).toHaveBeenCalledWith("run-uuid-123", pool);
   });
 
-  it("skips if today's run was already claimed (empty RETURNING)", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T14:00:00Z"));
-
-    // ON CONFLICT DO NOTHING → empty rows
-    const pool = createMockPool(() => ({ rows: [] }));
-    await checkAndScheduleDailyBenchmark(pool, "worker-abc");
-
-    expect(pool.query).toHaveBeenCalledTimes(1);
-    expect(runDailyBenchmark).not.toHaveBeenCalled();
-  });
-
   it("calls markDailyRunFailed when runDailyBenchmark throws", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T14:00:00Z"));
-
-    const pool = createMockPool(() => ({ rows: [{ id: "run-fail-id" }] }));
+    const { pool } = createMockPool({
+      selectRows: [{ id: "run-fail-id", run_date: "2026-02-28" }],
+    });
     const err = new Error("adapter crash");
     vi.mocked(runDailyBenchmark).mockRejectedValueOnce(err);
 
@@ -81,27 +97,58 @@ describe("checkAndScheduleDailyBenchmark", () => {
     expect(markDailyRunFailed).toHaveBeenCalledWith("run-fail-id", err, pool);
   });
 
-  it("formats today's date correctly across midnight boundary", async () => {
-    vi.useFakeTimers();
-    // 2026-03-01 00:30 UTC → should be date "2026-03-01" but hour 0 < 12
-    vi.setSystemTime(new Date("2026-03-01T00:30:00Z"));
+  it("releases the client connection even on error", async () => {
+    const { pool, client } = createMockPool({
+      selectRows: [{ id: "run-err", run_date: "2026-02-28" }],
+    });
+    vi.mocked(runDailyBenchmark).mockRejectedValueOnce(new Error("boom"));
 
-    const pool = createMockPool();
     await checkAndScheduleDailyBenchmark(pool, "worker-abc");
 
-    // Hour 0 < 12, so no query should be made
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalled();
   });
 
-  it("uses correct date when called at exactly 12:00 UTC", async () => {
+  it("rolls back and releases on claim error", async () => {
+    const client = {
+      query: vi.fn((sql: string) => {
+        if (sql.includes("SELECT id, run_date")) {
+          return Promise.reject(new Error("DB connection lost"));
+        }
+        return Promise.resolve({ rows: [] });
+      }),
+      release: vi.fn(),
+    };
+
+    const pool = {
+      connect: vi.fn().mockResolvedValue(client),
+    } as unknown as import("pg").Pool;
+
+    await expect(
+      checkAndScheduleDailyBenchmark(pool, "worker-abc"),
+    ).rejects.toThrow("DB connection lost");
+
+    // Should attempt ROLLBACK
+    const rollbackCall = client.query.mock.calls.find(
+      ([sql]: [string]) => sql === "ROLLBACK",
+    );
+    expect(rollbackCall).toBeDefined();
+
+    // Should release client
+    expect(client.release).toHaveBeenCalled();
+  });
+
+  it("can run at any time of day (no time gate)", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-15T12:00:00Z"));
+    // 03:00 UTC — previously blocked by the 12:00 gate
+    vi.setSystemTime(new Date("2026-03-01T03:00:00Z"));
 
-    const pool = createMockPool(() => ({ rows: [{ id: "noon-run" }] }));
-    await checkAndScheduleDailyBenchmark(pool, "worker-xyz");
+    const { pool } = createMockPool({
+      selectRows: [{ id: "early-run", run_date: "2026-03-01" }],
+    });
 
-    const [, params] = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(params[0]).toBe("2026-03-15");
-    expect(params[1]).toBe("worker-xyz");
+    await checkAndScheduleDailyBenchmark(pool, "worker-abc");
+
+    // Should have proceeded and called runDailyBenchmark
+    expect(runDailyBenchmark).toHaveBeenCalledWith("early-run", pool);
   });
 });
