@@ -382,7 +382,7 @@ async function main() {
 
   // 3. Benchmark prompts — dynamically import from the benchmark package
   try {
-    const { BENCHMARK_PROMPTS } = await import("../packages/benchmark/src/prompts.js");
+    const { BENCHMARK_PROMPTS } = await import("../packages/benchmark/src/prompt-data.js");
     let benchCount = 0;
     for (const p of BENCHMARK_PROMPTS) {
       await upsert({
