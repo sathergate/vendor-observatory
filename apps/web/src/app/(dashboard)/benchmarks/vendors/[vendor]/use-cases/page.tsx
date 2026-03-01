@@ -4,7 +4,7 @@ import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { SectionNav } from "@/components/SectionNav";
 import { VendorGuard } from "@/components/VendorGuard";
-import { CATEGORY_META } from "../../../categories";
+import { loadCategoryMeta } from "../../../categories";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,10 @@ function pct(n: number): string {
 export default async function UseCasesPage({ params }: { params: Promise<{ vendor: string }> }) {
   const { vendor } = await params;
   const vendorId = decodeURIComponent(vendor);
-  const scorecard = await getVendorScorecard(vendorId);
+  const [scorecard, CATEGORY_META] = await Promise.all([
+    getVendorScorecard(vendorId),
+    loadCategoryMeta(),
+  ]);
 
   return (
     <div className="space-y-8">

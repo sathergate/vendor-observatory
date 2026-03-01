@@ -150,6 +150,14 @@ const SCHEMA_STATEMENTS = [
     generated_at TEXT NOT NULL
   )`,
 
+  `CREATE TABLE IF NOT EXISTS categories (
+    id              TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    icon            TEXT NOT NULL DEFAULT '📦',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
   `CREATE TABLE IF NOT EXISTS vendors (
     canonical_id    TEXT PRIMARY KEY,
     display_name    TEXT NOT NULL,
@@ -161,6 +169,7 @@ const SCHEMA_STATEMENTS = [
   )`,
 
   // Indexes
+  `CREATE INDEX IF NOT EXISTS idx_categories_display_name ON categories(display_name)`,
   `CREATE INDEX IF NOT EXISTS vendors_synonyms_gin ON vendors USING GIN(synonyms)`,
   `CREATE INDEX IF NOT EXISTS vendors_package_names_gin ON vendors USING GIN(package_names)`,
   `CREATE INDEX IF NOT EXISTS vendors_category ON vendors(category)`,
@@ -810,6 +819,15 @@ export class ObservatoryDB {
     packageNames?: string[];
     isDynamic: boolean;
   }): Promise<void> {
+    // Ensure the category exists in the categories table before inserting the vendor.
+    // This resolves the category dynamically: reuses an existing one if it matches,
+    // or creates a new one if no suitable category exists.
+    const resolvedCategory = await this.resolveCategory(vendor.category, {
+      displayName: vendor.category.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+      description: "",
+      icon: "📦",
+    });
+
     await this.queryable.query(`
       INSERT INTO vendors (canonical_id, display_name, category, synonyms, package_names, is_dynamic)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -818,7 +836,90 @@ export class ObservatoryDB {
         category = EXCLUDED.category,
         synonyms = EXCLUDED.synonyms,
         package_names = EXCLUDED.package_names
-    `, [vendor.canonicalId, vendor.displayName, vendor.category, vendor.synonyms, vendor.packageNames ?? [], vendor.isDynamic]);
+    `, [vendor.canonicalId, vendor.displayName, resolvedCategory, vendor.synonyms, vendor.packageNames ?? [], vendor.isDynamic]);
+  }
+
+  // ── Categories ───────────────────────────────────────────────────
+
+  async getAllCategories(): Promise<Array<{ id: string; display_name: string; description: string; icon: string }>> {
+    const { rows } = await this.queryable.query(
+      "SELECT id, display_name, description, icon FROM categories ORDER BY id"
+    );
+    return rows as Array<{ id: string; display_name: string; description: string; icon: string }>;
+  }
+
+  async getCategoryById(id: string): Promise<{ id: string; display_name: string; description: string; icon: string } | null> {
+    const { rows } = await this.queryable.query(
+      "SELECT id, display_name, description, icon FROM categories WHERE id = $1",
+      [id]
+    );
+    return (rows[0] as { id: string; display_name: string; description: string; icon: string }) ?? null;
+  }
+
+  async upsertCategory(category: {
+    id: string;
+    displayName: string;
+    description: string;
+    icon: string;
+  }): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO categories (id, display_name, description, icon)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT(id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        description = EXCLUDED.description,
+        icon = EXCLUDED.icon
+    `, [category.id, category.displayName, category.description, category.icon]);
+  }
+
+  /**
+   * Given a proposed category slug, check if it already exists in the DB.
+   * If it does, return it. If not, create a new category row and return it.
+   */
+  async resolveCategory(
+    categoryId: string,
+    fallback: { displayName: string; description: string; icon: string },
+  ): Promise<string> {
+    const existing = await this.getCategoryById(categoryId);
+    if (existing) return existing.id;
+
+    // Check if any existing category is a close match (prefix/substring)
+    const allCats = await this.getAllCategories();
+    for (const cat of allCats) {
+      // Exact match on display name (case-insensitive)
+      if (cat.display_name.toLowerCase() === fallback.displayName.toLowerCase()) {
+        return cat.id;
+      }
+    }
+
+    // No suitable existing category — create a new one
+    await this.upsertCategory({
+      id: categoryId,
+      displayName: fallback.displayName,
+      description: fallback.description,
+      icon: fallback.icon,
+    });
+    return categoryId;
+  }
+
+  /**
+   * Seed categories from vendor taxonomy entries.
+   * Extracts distinct categories from the vendor list and ensures they exist in the categories table.
+   */
+  async seedCategoriesFromTaxonomy(vendors: Array<{ category: string }>, categoryMeta?: Record<string, { displayName: string; description: string; icon: string }>): Promise<void> {
+    const seen = new Set<string>();
+    for (const v of vendors) {
+      if (seen.has(v.category)) continue;
+      seen.add(v.category);
+
+      const meta = categoryMeta?.[v.category];
+      await this.upsertCategory({
+        id: v.category,
+        displayName: meta?.displayName ?? v.category.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+        description: meta?.description ?? "",
+        icon: meta?.icon ?? "📦",
+      });
+    }
   }
 
   async close(): Promise<void> { await this.pool.end(); }

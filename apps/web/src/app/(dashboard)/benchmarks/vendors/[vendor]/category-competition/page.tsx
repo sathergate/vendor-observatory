@@ -4,7 +4,7 @@ import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { SectionNav } from "@/components/SectionNav";
 import { VendorGuard } from "@/components/VendorGuard";
-import { CATEGORY_META } from "../../../categories";
+import { loadCategoryMeta } from "../../../categories";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +15,10 @@ function pct(n: number): string {
 export default async function CategoryCompetitionPage({ params }: { params: Promise<{ vendor: string }> }) {
   const { vendor } = await params;
   const vendorId = decodeURIComponent(vendor);
-  const [scorecard, categoryDensity] = await Promise.all([
+  const [scorecard, categoryDensity, CATEGORY_META] = await Promise.all([
     getVendorScorecard(vendorId),
     getCategoryCompetitorDensity(),
+    loadCategoryMeta(),
   ]);
 
   const densityMap = new Map(categoryDensity.map(d => [d.work_category, d.vendor_count]));

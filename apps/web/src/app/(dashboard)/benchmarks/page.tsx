@@ -9,7 +9,7 @@ import {
 } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { PlatformBadge } from "@/components/PlatformBadge";
-import { CATEGORY_META } from "./categories";
+import { loadCategoryMeta } from "./categories";
 import { PROMPT_COUNTS } from "./prompt-summaries";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,9 @@ export default async function BenchmarksPage() {
   const dbCategories = await getCategorySummaries();
   const intentDist = await getIntentDistribution();
   const digests = await getLatestDigests(3);
+
+  // Load categories dynamically from DB (falls back to defaults if DB unavailable)
+  const CATEGORY_META = await loadCategoryMeta();
 
   // Merge all categories from CATEGORY_META with any DB data
   const allCategories = Object.entries(CATEGORY_META).map(([key, meta]) => {

@@ -13,13 +13,12 @@ export type MentionType =
   | "mentioned"
   | "rejected";
 
-export type WorkCategory =
-  | "database" | "auth" | "hosting" | "ci_cd" | "monitoring"
-  | "payments" | "email" | "storage" | "search" | "analytics"
-  | "ai_ml" | "messaging" | "cdn" | "dns" | "observability"
-  | "error_monitoring" | "feature_flags" | "secrets_management"
-  | "developer_portal" | "llm_observability" | "incident_management"
-  | "code_search" | "security_scanning" | "edge_compute" | "other";
+/**
+ * Work category for a vendor mention. Now dynamic — categories are stored
+ * in the `categories` table in the database and can be extended at runtime.
+ * Common built-in values include "database", "ci_cd", "observability", etc.
+ */
+export type WorkCategory = string;
 
 // ── Vendor Mention (extracted from a transcript) ────────────────────
 
@@ -115,6 +114,15 @@ export interface ToolActionRow {
   action_type: string | null;
   success: number | null;
   timestamp: string;
+}
+
+// ── Category (DB-backed) ────────────────────────────────────────────
+
+export interface CategoryRow {
+  id: string;
+  display_name: string;
+  description: string;
+  icon: string;
 }
 
 // ── Vendor Taxonomy ─────────────────────────────────────────────────

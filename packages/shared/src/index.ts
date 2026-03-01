@@ -12,6 +12,7 @@ export type {
   SessionRow,
   ObservationRow,
   ToolActionRow,
+  CategoryRow,
   VendorEntry,
   VendorTaxonomy,
   VendorStats,
@@ -58,6 +59,10 @@ export { PACKAGE_TO_VENDOR, resolvePackageToVendor } from "./package-map.js";
 
 // ── Normalizer ──────────────────────────────────────────────────────
 export { normalizeVendorName } from "./normalizer.js";
+
+// ── Default Categories ──────────────────────────────────────────────
+export { DEFAULT_CATEGORIES } from "./default-categories.js";
+export type { CategoryMeta } from "./default-categories.js";
 
 // ── Loaders ─────────────────────────────────────────────────────────
 export { loadVendorTaxonomy } from "./taxonomy-loader.js";
