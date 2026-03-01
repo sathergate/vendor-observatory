@@ -9,7 +9,7 @@ import { loadCategoryMeta } from "../../../categories";
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function CategoryCompetitionPage({ params }: { params: Promise<{ vendor: string }> }) {
@@ -32,11 +32,11 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
       ]} />
 
       <VendorGuard vendorId={vendorId}>
-        <h1 className="text-2xl font-bold">Category Competition</h1>
+        <h1 className="text-2xl font-bold text-primary">Category Competition</h1>
 
         {!scorecard || scorecard.categoryBreakdown.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-            <p>No category data available yet.</p>
+          <div className="quiet-signal">
+            <p className="text-secondary">No category data available yet.</p>
           </div>
         ) : (
           <>
@@ -60,13 +60,13 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
                 );
 
                 return (
-                  <div key={cat.category} id={`cat-${cat.category}`} className="bg-gray-800 rounded-lg p-4">
+                  <div key={cat.category} id={`cat-${cat.category}`} className="bg-surface rounded-[6px] p-4 border border-border">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl">{catMeta?.icon ?? ""}</span>
+                        <span className="text-[20px]">{catMeta?.icon ?? ""}</span>
                         <Link
                           href={`/benchmarks/${cat.category}`}
-                          className="text-lg font-semibold text-gray-100 hover:text-blue-400 transition-colors"
+                          className="text-[18px] font-semibold text-primary hover:text-accent transition-colors"
                         >
                           {catMeta?.label ?? cat.category}
                         </Link>
@@ -74,26 +74,26 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                      <div className="bg-gray-700/50 rounded p-3">
-                        <p className="text-xs text-gray-400">Your Win Rate</p>
-                        <p className={`text-lg font-bold ${
-                          wr > 0.6 ? "text-green-400" : wr > 0.3 ? "text-yellow-400" : "text-red-400"
+                      <div className="bg-raised rounded-[6px] p-3">
+                        <p className="stat-label">Your Win Rate</p>
+                        <p className={`text-[18px] font-bold font-data ${
+                          wr > 0.6 ? "text-signal-strong" : wr > 0.3 ? "text-data-3" : "text-data-4"
                         }`}>
                           {pct(wr)}
                         </p>
                       </div>
-                      <div className="bg-gray-700/50 rounded p-3">
-                        <p className="text-xs text-gray-400">Your Mentions</p>
-                        <p className="text-lg font-bold text-gray-200">{cat.totalInCategory}</p>
+                      <div className="bg-raised rounded-[6px] p-3">
+                        <p className="stat-label">Your Mentions</p>
+                        <p className="text-[18px] font-bold text-primary font-data">{cat.totalInCategory.toLocaleString()}</p>
                       </div>
-                      <div className="bg-gray-700/50 rounded p-3">
-                        <p className="text-xs text-gray-400">Total Vendors</p>
-                        <p className="text-lg font-bold text-gray-200">{totalVendors}</p>
+                      <div className="bg-raised rounded-[6px] p-3">
+                        <p className="stat-label">Total Vendors</p>
+                        <p className="text-[18px] font-bold text-primary font-data">{totalVendors.toLocaleString()}</p>
                       </div>
-                      <div className="bg-gray-700/50 rounded p-3">
-                        <p className="text-xs text-gray-400">Competitive Intensity</p>
-                        <p className={`text-lg font-bold ${
-                          totalVendors > 5 ? "text-red-400" : totalVendors > 3 ? "text-yellow-400" : "text-green-400"
+                      <div className="bg-raised rounded-[6px] p-3">
+                        <p className="stat-label">Competitive Intensity</p>
+                        <p className={`text-[18px] font-bold ${
+                          totalVendors > 5 ? "text-data-4" : totalVendors > 3 ? "text-data-3" : "text-signal-strong"
                         }`}>
                           {totalVendors > 5 ? "High" : totalVendors > 3 ? "Medium" : "Low"}
                         </p>
@@ -102,15 +102,15 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
 
                     {competitorsInCategory.length > 0 && (
                       <div>
-                        <h3 className="text-sm font-medium text-gray-400 mb-2">Competitors in this category</h3>
+                        <h3 className="text-[13px] font-medium text-secondary mb-2">Competitors in this category</h3>
                         <div className="flex flex-wrap gap-2">
                           {competitorsInCategory.map((comp) => (
                             <Link
                               key={comp.competitor}
                               href={`/benchmarks/vendors/${encodeURIComponent(comp.competitor)}`}
-                              className="text-xs px-2 py-1 rounded bg-red-900/30 text-red-300 hover:bg-red-900/50 transition-colors"
+                              className="text-[12px] px-2 py-1 rounded-[6px] bg-data-4/15 text-data-4 hover:bg-data-4/25 transition-colors"
                             >
-                              {vendorDisplayName(comp.competitor)} ({comp.count} wins)
+                              {vendorDisplayName(comp.competitor)} (<span className="font-data">{comp.count.toLocaleString()}</span> wins)
                             </Link>
                           ))}
                         </div>
@@ -118,7 +118,7 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
                     )}
 
                     {competitorsInCategory.length === 0 && (
-                      <p className="text-sm text-gray-500">No direct competitors identified in this category yet.</p>
+                      <p className="text-[13px] text-muted">No direct competitors identified in this category yet.</p>
                     )}
                   </div>
                 );

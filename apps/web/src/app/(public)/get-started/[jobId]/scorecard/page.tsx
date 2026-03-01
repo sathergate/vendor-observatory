@@ -11,56 +11,56 @@ import type {
 } from "@/lib/onboard";
 
 function ScoreColor({ score }: { score: number }) {
-  if (score >= 70) return <span className="text-green-400">{score}</span>;
-  if (score >= 40) return <span className="text-yellow-400">{score}</span>;
-  return <span className="text-red-400">{score}</span>;
+  if (score >= 70) return <span className="text-signal-strong">{score}</span>;
+  if (score >= 40) return <span className="text-data-3">{score}</span>;
+  return <span className="text-signal-noise">{score}</span>;
 }
 
 function DeltaBadge({ delta }: { delta: number }) {
-  if (delta > 0) return <span className="text-green-400">+{delta}%</span>;
-  if (delta < 0) return <span className="text-red-400">{delta}%</span>;
-  return <span className="text-gray-400">0%</span>;
+  if (delta > 0) return <span className="text-signal-strong font-data">+{delta}%</span>;
+  if (delta < 0) return <span className="text-signal-noise font-data">{delta}%</span>;
+  return <span className="text-secondary font-data">0%</span>;
 }
 
-function RecommendationCard({ rec }: {
+function FindingCard({ rec }: {
   rec: { title: string; priority: "P1" | "P2" | "P3"; impact: "HIGH" | "MEDIUM" | "LOW"; description: string };
 }) {
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+    <div className="bg-base border border-border rounded-[6px] p-4">
       <div className="flex items-center gap-2 mb-2">
-        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-[6px] font-data ${
           rec.priority === "P1"
-            ? "bg-red-900/50 text-red-300"
+            ? "bg-signal-noise/15 text-signal-noise"
             : rec.priority === "P2"
-              ? "bg-yellow-900/50 text-yellow-300"
-              : "bg-gray-700 text-gray-300"
+              ? "bg-data-3/15 text-data-3"
+              : "bg-raised text-secondary"
         }`}>
           {rec.priority}
         </span>
-        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-[6px] font-data ${
           rec.impact === "HIGH"
-            ? "bg-green-900/50 text-green-300"
+            ? "bg-signal-strong/15 text-signal-strong"
             : rec.impact === "MEDIUM"
-              ? "bg-yellow-900/50 text-yellow-300"
-              : "bg-gray-700 text-gray-300"
+              ? "bg-data-3/15 text-data-3"
+              : "bg-raised text-secondary"
         }`}>
           {rec.impact} impact
         </span>
       </div>
-      <h3 className="font-medium mb-1">{rec.title}</h3>
-      <p className="text-sm text-gray-400">{rec.description}</p>
+      <h3 className="font-medium mb-1 text-[14px] text-primary">{rec.title}</h3>
+      <p className="text-[13px] text-secondary">{rec.description}</p>
     </div>
   );
 }
 
 function ConstraintBar({ rate }: { rate: number }) {
-  const color = rate >= 70 ? "bg-green-500" : rate >= 40 ? "bg-yellow-500" : "bg-red-500";
+  const color = rate >= 70 ? "bg-signal-strong" : rate >= 40 ? "bg-data-3" : "bg-signal-noise";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-raised rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${rate}%` }} />
       </div>
-      <span className="text-xs text-gray-400 w-10 text-right">{rate}%</span>
+      <span className="text-[12px] text-secondary font-data w-10 text-right">{rate}%</span>
     </div>
   );
 }
@@ -102,12 +102,12 @@ export default function ScorecardPage() {
   }, [jobId, router]);
 
   if (error) {
-    return <div className="p-8 text-gray-400">Job not found.</div>;
+    return <div className="p-8 text-secondary text-[14px]">Job not found.</div>;
   }
 
   if (!status) {
     return (
-      <div className="max-w-3xl mx-auto px-6 py-16 text-center text-gray-400">
+      <div className="max-w-3xl mx-auto px-6 py-16 text-center text-secondary text-[14px]">
         Loading...
       </div>
     );
@@ -129,76 +129,76 @@ export default function ScorecardPage() {
     <div className="max-w-3xl mx-auto px-6 py-12">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">{urlData.detected_name}</h1>
+        <h1 className="text-3xl font-bold text-primary">{urlData.detected_name}</h1>
         <div className="flex items-center gap-3 mt-2">
-          <span className="px-2.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300">
+          <span className="px-2.5 py-0.5 bg-surface border border-border rounded-[6px] text-[13px] text-secondary">
             {urlData.category}
           </span>
-          <span className="text-sm text-gray-500">
+          <span className="text-[13px] text-muted font-data">
             {sessionsAnalyzed} sessions analyzed
           </span>
           {compData && (
-            <span className="px-2 py-0.5 bg-blue-900/50 border border-blue-700/50 rounded text-xs text-blue-300">
+            <span className="px-2 py-0.5 bg-accent/15 border border-accent/30 rounded-[6px] text-[12px] text-accent">
               Comprehensive
             </span>
           )}
         </div>
       </div>
 
-      {/* AI Readiness Score */}
+      {/* Detection Score */}
       {aiReadiness != null && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-          <p className="text-sm text-gray-400 mb-1">AI Readiness Score</p>
-          <div className="text-5xl font-bold">
+        <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+          <p className="section-header mb-1">Detection Score</p>
+          <div className="text-5xl font-bold font-data">
             <ScoreColor score={aiReadiness} />
-            <span className="text-lg text-gray-500 font-normal ml-1">/100</span>
+            <span className="text-lg text-muted font-normal ml-1">/100</span>
           </div>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-[13px] text-muted mt-2">
             Based on mention rate ({mentionRate}%), platform coverage,
-            and recommendation context across {platforms.join(", ")}.
+            and mention context across {platforms.join(", ")}.
           </p>
         </div>
       )}
 
       {/* Fast-only summary when neither balanced nor comprehensive is ready */}
       {aiReadiness == null && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-          <p className="text-sm text-gray-400 mb-1">Mention Rate</p>
-          <div className="text-5xl font-bold">
-            <span className="text-blue-400">{mentionRate}%</span>
+        <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+          <p className="section-header mb-1">Mention Rate</p>
+          <div className="text-5xl font-bold font-data">
+            <span className="text-accent">{mentionRate}%</span>
           </div>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-[13px] text-muted mt-2">
             Across {sessionsAnalyzed} sessions on {platforms.join(", ")}.
-            Full AI Readiness Score available shortly.
+            Full detection score available shortly.
           </p>
         </div>
       )}
 
       {/* Competitor Comparison */}
       {competitorComparison && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Competitor Comparison</h2>
-          <table className="w-full text-sm">
+        <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+          <h2 className="section-header mb-4">Competitor Comparison</h2>
+          <table className="w-full text-[13px]">
             <thead>
-              <tr className="text-gray-400 border-b border-gray-700">
-                <th className="text-left py-2 font-medium">Vendor</th>
-                <th className="text-right py-2 font-medium">Mention Rate</th>
-                <th className="text-right py-2 font-medium">vs. You</th>
+              <tr className="text-secondary border-b border-border">
+                <th className="th-label text-left py-2">Vendor</th>
+                <th className="th-label text-right py-2">Mention Rate</th>
+                <th className="th-label text-right py-2">vs. You</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-gray-700/50">
-                <td className="py-2.5 font-medium">
+              <tr className="border-b border-border-subtle">
+                <td className="py-2.5 font-medium text-primary">
                   {urlData.detected_name}
-                  <span className="ml-2 text-xs text-blue-400">you</span>
+                  <span className="ml-2 text-[11px] text-accent">you</span>
                 </td>
-                <td className="text-right py-2.5">{mentionRate}%</td>
-                <td className="text-right py-2.5 text-gray-500">&mdash;</td>
+                <td className="text-right py-2.5 font-data">{mentionRate}%</td>
+                <td className="text-right py-2.5 text-muted">&mdash;</td>
               </tr>
               {competitorComparison.map((comp) => (
-                <tr key={comp.name} className="border-b border-gray-700/50">
-                  <td className="py-2.5">{comp.name}</td>
-                  <td className="text-right py-2.5">{comp.mention_rate}%</td>
+                <tr key={comp.name} className="border-b border-border-subtle">
+                  <td className="py-2.5 text-secondary">{comp.name}</td>
+                  <td className="text-right py-2.5 font-data">{comp.mention_rate}%</td>
                   <td className="text-right py-2.5">
                     <DeltaBadge delta={comp.delta} />
                   </td>
@@ -211,15 +211,15 @@ export default function ScorecardPage() {
 
       {/* Constraint Coverage — comprehensive only */}
       {compData && compData.constraint_coverage.length > 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Constraint Coverage</h2>
-          <p className="text-sm text-gray-400 mb-4">
-            How well AI assistants address specific technical requirements when recommending your product.
+        <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+          <h2 className="section-header mb-4">Constraint Coverage</h2>
+          <p className="text-[13px] text-secondary mb-4">
+            How well AI assistants address specific technical requirements when mentioning your product.
           </p>
           <div className="space-y-3">
             {compData.constraint_coverage.map((cc) => (
               <div key={cc.constraint}>
-                <p className="text-sm text-gray-300 mb-1">
+                <p className="text-[13px] text-secondary mb-1">
                   {cc.constraint.replace(/_/g, " ")}
                 </p>
                 <ConstraintBar rate={cc.addressed_rate} />
@@ -229,40 +229,40 @@ export default function ScorecardPage() {
         </div>
       )}
 
-      {/* Recommendations — comprehensive: show all; balanced: show top + blur */}
+      {/* Findings — comprehensive: show all; balanced: show first + blur */}
       {compData && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">
-            {compData.all_recommendations.length} Recommendations
+        <div className="bg-surface border border-border rounded-[6px] p-6 mb-8">
+          <h2 className="section-header mb-4">
+            {compData.all_recommendations.length} Findings
           </h2>
           <div className="space-y-4">
             {compData.all_recommendations.map((rec, i) => (
-              <RecommendationCard key={i} rec={rec} />
+              <FindingCard key={i} rec={rec} />
             ))}
           </div>
         </div>
       )}
 
       {!compData && balancedData && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">
-            {balancedData.recommendation_count} Recommendations
+        <div className="bg-surface border border-border rounded-[6px] p-6 mb-8">
+          <h2 className="section-header mb-4">
+            {balancedData.recommendation_count} Findings
           </h2>
 
-          {/* Top recommendation - shown in full */}
-          <RecommendationCard rec={balancedData.top_recommendation} />
+          {/* First finding - shown in full */}
+          <FindingCard rec={balancedData.top_recommendation} />
 
-          {/* Blurred placeholder for remaining recommendations */}
+          {/* Blurred placeholder for remaining findings */}
           {balancedData.recommendation_count > 1 && (
             <div className="relative mt-4">
-              <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 blur-sm">
-                <div className="h-3 bg-gray-700 rounded w-3/4 mb-2" />
-                <div className="h-3 bg-gray-700 rounded w-1/2 mb-2" />
-                <div className="h-3 bg-gray-700 rounded w-2/3" />
+              <div className="bg-base border border-border rounded-[6px] p-4 blur-sm">
+                <div className="h-3 bg-raised rounded w-3/4 mb-2" />
+                <div className="h-3 bg-raised rounded w-1/2 mb-2" />
+                <div className="h-3 bg-raised rounded w-2/3" />
               </div>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-sm font-medium text-gray-300">
-                  {balancedData.recommendation_count - 1} more recommendation{balancedData.recommendation_count - 1 !== 1 ? "s" : ""} — comprehensive report running
+                <span className="bg-surface border border-border rounded-[6px] px-4 py-2 text-[13px] font-medium text-secondary">
+                  {balancedData.recommendation_count - 1} more finding{balancedData.recommendation_count - 1 !== 1 ? "s" : ""} — comprehensive report running
                 </span>
               </div>
             </div>
@@ -274,9 +274,9 @@ export default function ScorecardPage() {
       {!compData && (
         <a
           href={`/plans?jobId=${jobId}&email=${encodeURIComponent(status.email ?? "")}`}
-          className="block w-full text-center py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors"
+          className="block w-full text-center py-3 bg-accent hover:bg-accent/90 rounded-[6px] font-medium text-[14px] transition-colors"
         >
-          Unlock all recommendations — choose a plan &rarr;
+          Unlock all findings — choose a plan &rarr;
         </a>
       )}
     </div>

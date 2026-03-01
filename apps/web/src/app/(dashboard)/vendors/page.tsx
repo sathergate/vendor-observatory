@@ -11,37 +11,37 @@ export default async function VendorsPage() {
   return (
     <div>
       <Breadcrumb items={[{ label: "Vendors" }]} />
-      <h1 className="text-2xl font-bold mb-6">Vendor Frequency</h1>
+      <h2 className="section-header mb-6">Vendor Frequency</h2>
 
       {vendors.length > 0 ? (
-        <div className="bg-gray-800 rounded-lg overflow-hidden">
+        <div className="bg-surface rounded-[6px] border border-border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="text-left px-4 py-3 text-gray-400">Vendor</th>
-                  <th className="text-left px-4 py-3 text-gray-400">Category</th>
-                  <th className="text-right px-4 py-3 text-gray-400">Total</th>
-                  <th className="text-right px-4 py-3 text-green-400">Installed</th>
-                  <th className="text-right px-4 py-3 text-yellow-400">Configured</th>
-                  <th className="text-right px-4 py-3 text-blue-400">Recommended</th>
-                  <th className="text-right px-4 py-3 text-gray-400">Mentioned</th>
-                  <th className="text-right px-4 py-3 text-red-400">Rejected</th>
-                  <th className="text-left px-4 py-3 text-gray-400">Platforms</th>
+                <tr className="border-b border-border">
+                  <th className="th-label text-left px-4 h-12">Vendor</th>
+                  <th className="th-label text-left px-4 h-12">Category</th>
+                  <th className="th-label text-right px-4 h-12">Total</th>
+                  <th className="th-label text-right px-4 h-12">Installed</th>
+                  <th className="th-label text-right px-4 h-12">Configured</th>
+                  <th className="th-label text-right px-4 h-12">Detected</th>
+                  <th className="th-label text-right px-4 h-12">Mentioned</th>
+                  <th className="th-label text-right px-4 h-12">Rejected</th>
+                  <th className="th-label text-left px-4 h-12">Platforms</th>
                 </tr>
               </thead>
               <tbody>
                 {vendors.map((v) => (
-                  <tr key={v.vendor_canonical_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                    <td className="px-4 py-2 font-medium">{vendorDisplayName(v.vendor_canonical_id)}</td>
-                    <td className="px-4 py-2 text-gray-400">{v.work_category ?? "\u2014"}</td>
-                    <td className="px-4 py-2 text-right font-bold">{v.total}</td>
-                    <td className="px-4 py-2 text-right text-green-400">{v.installed || "\u2014"}</td>
-                    <td className="px-4 py-2 text-right text-yellow-400">{v.configured || "\u2014"}</td>
-                    <td className="px-4 py-2 text-right text-blue-400">{v.recommended || "\u2014"}</td>
-                    <td className="px-4 py-2 text-right">{v.mentioned || "\u2014"}</td>
-                    <td className="px-4 py-2 text-right text-red-400">{v.rejected || "\u2014"}</td>
-                    <td className="px-4 py-2 text-gray-400">{v.platforms}</td>
+                  <tr key={v.vendor_canonical_id} className="border-b border-border-subtle hover:bg-raised h-12">
+                    <td className="px-4 py-2 text-primary font-medium">{vendorDisplayName(v.vendor_canonical_id)}</td>
+                    <td className="px-4 py-2 text-secondary">{v.work_category ?? "\u2014"}</td>
+                    <td className="px-4 py-2 text-right text-primary"><span className="font-data">{Number(v.total).toLocaleString()}</span></td>
+                    <td className="px-4 py-2 text-right text-data-1"><span className="font-data">{v.installed ? Number(v.installed).toLocaleString() : "\u2014"}</span></td>
+                    <td className="px-4 py-2 text-right text-data-3"><span className="font-data">{v.configured ? Number(v.configured).toLocaleString() : "\u2014"}</span></td>
+                    <td className="px-4 py-2 text-right text-data-2"><span className="font-data">{v.recommended ? Number(v.recommended).toLocaleString() : "\u2014"}</span></td>
+                    <td className="px-4 py-2 text-right text-secondary"><span className="font-data">{v.mentioned ? Number(v.mentioned).toLocaleString() : "\u2014"}</span></td>
+                    <td className="px-4 py-2 text-right text-data-4"><span className="font-data">{v.rejected ? Number(v.rejected).toLocaleString() : "\u2014"}</span></td>
+                    <td className="px-4 py-2 text-secondary text-[12px]">{v.platforms}</td>
                   </tr>
                 ))}
               </tbody>
@@ -49,8 +49,9 @@ export default async function VendorsPage() {
           </div>
         </div>
       ) : (
-        <div className="text-center py-12 text-gray-500">
-          <p>No vendor data yet. Run <code className="bg-gray-800 px-2 py-1 rounded">obs ingest --source all</code></p>
+        <div className="quiet-signal">
+          <p className="text-secondary text-[14px]">No organic signal detected in this period.</p>
+          <p className="text-muted text-[13px] italic mt-2">Run <code className="bg-raised px-2 py-1 rounded-[6px] text-[12px] font-mono">obs ingest --source all</code> to scan transcripts.</p>
         </div>
       )}
     </div>

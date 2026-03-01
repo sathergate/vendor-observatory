@@ -1,8 +1,8 @@
 const PLATFORM_DISPLAY: Record<string, { label: string; className: string }> = {
-  claude_code: { label: "Claude Code", className: "bg-blue-900/50 text-blue-300" },
-  codex_cli: { label: "Codex CLI", className: "bg-green-900/50 text-green-300" },
-  cursor: { label: "Cursor", className: "bg-purple-900/50 text-purple-300" },
-  cursor_agent: { label: "Cursor", className: "bg-purple-900/50 text-purple-300" },
+  claude_code: { label: "Claude Code", className: "bg-data-1/15 text-data-1" },
+  codex_cli: { label: "Codex CLI", className: "bg-data-2/15 text-data-2" },
+  cursor: { label: "Cursor", className: "bg-data-3/15 text-data-3" },
+  cursor_agent: { label: "Cursor", className: "bg-data-3/15 text-data-3" },
 };
 
 export function PlatformBadge({
@@ -14,11 +14,11 @@ export function PlatformBadge({
 }) {
   const meta = PLATFORM_DISPLAY[platform] ?? {
     label: platform,
-    className: "bg-gray-700 text-gray-300",
+    className: "bg-raised text-secondary",
   };
-  const sizeClass = size === "xs" ? "px-1.5 py-0.5 text-xs" : "px-2 py-0.5 text-xs";
+  const sizeClass = size === "xs" ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-0.5 text-[12px]";
   return (
-    <span className={`inline-block rounded font-medium ${sizeClass} ${meta.className}`}>
+    <span className={`inline-block rounded-[4px] font-medium ${sizeClass} ${meta.className}`}>
       {meta.label}
     </span>
   );

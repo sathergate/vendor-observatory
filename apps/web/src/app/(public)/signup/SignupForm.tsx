@@ -49,42 +49,42 @@ export default function SignupForm() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-6 text-center">Create account</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center text-primary">Create account</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm text-gray-400 mb-1">Email</label>
+            <label htmlFor="email" className="block text-[12px] text-secondary mb-1">Email</label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-surface border border-border rounded-[6px] text-primary text-[14px] focus:outline-none focus:border-accent"
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm text-gray-400 mb-1">Password</label>
+            <label htmlFor="password" className="block text-[12px] text-secondary mb-1">Password</label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-gray-100 focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-surface border border-border rounded-[6px] text-primary text-[14px] focus:outline-none focus:border-accent"
               placeholder="••••••••"
             />
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-red-400 text-[12px]">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-md font-medium transition-colors"
+            className="w-full py-2 bg-accent hover:bg-accent/90 disabled:opacity-50 rounded-[6px] font-medium text-[14px] transition-colors"
           >
             {loading ? "Creating account..." : "Sign up"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="mt-4 text-center text-[12px] text-muted">
           Already have an account?{" "}
-          <Link href="/login" className="text-blue-400 hover:text-blue-300">Log in</Link>
+          <Link href="/login" className="text-accent hover:text-accent/80">Log in</Link>
         </p>
       </div>
     </div>

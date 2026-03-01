@@ -71,17 +71,17 @@ export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) 
   return (
     <>
       {canceled && (
-        <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-3 mb-6 text-center">
-          <p className="text-yellow-300 text-sm">
+        <div className="bg-raised border border-border rounded-[6px] p-3 mb-6 text-center">
+          <p className="text-secondary text-[13px]">
             Payment was canceled. You can try again when you&apos;re ready.
           </p>
         </div>
       )}
 
       {/* Plan summary */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 mb-6">
-        <p className="text-sm text-gray-400 mb-1">Selected plan</p>
-        <p className="text-lg font-semibold mb-3">
+      <div className="bg-surface border border-border rounded-[6px] p-5 mb-6">
+        <p className="text-[12px] text-secondary mb-1">Selected plan</p>
+        <p className="text-lg font-semibold mb-3 text-primary">
           {PLAN_LABELS[plan] ?? plan}
         </p>
         {PLAN_FEATURES[plan] && (
@@ -89,9 +89,9 @@ export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) 
             {PLAN_FEATURES[plan].map((f) => (
               <li
                 key={f}
-                className="text-sm text-gray-300 flex items-start gap-2"
+                className="text-[13px] text-secondary flex items-start gap-2"
               >
-                <span className="text-green-400 mt-0.5">&#10003;</span>
+                <span className="text-signal-strong mt-0.5">&#10003;</span>
                 {f}
               </li>
             ))}
@@ -100,19 +100,19 @@ export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) 
       </div>
 
       {/* Vendor display (resolved from onboarding analysis) */}
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-5 mb-6">
-        <p className="text-sm text-gray-400 mb-1">Monitoring</p>
+      <div className="bg-surface border border-border rounded-[6px] p-5 mb-6">
+        <p className="text-[12px] text-secondary mb-1">Monitoring</p>
         {vendorId ? (
           <>
-            <p className="text-lg font-semibold">{vendorName ?? vendorId}</p>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-lg font-semibold text-primary">{vendorName ?? vendorId}</p>
+            <p className="text-[12px] text-muted mt-2">
               Your dashboard will show analytics scoped to this vendor.
             </p>
           </>
         ) : (
-          <p className="text-sm text-yellow-300">
+          <p className="text-[13px] text-secondary">
             Could not detect your vendor.{" "}
-            <a href="/get-started/analyze" className="underline hover:text-yellow-200">
+            <a href="/get-started/analyze" className="underline text-accent hover:text-accent/80">
               Start a new analysis
             </a>{" "}
             to continue.
@@ -121,8 +121,8 @@ export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) 
       </div>
 
       {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 mb-6 text-center">
-          <p className="text-red-300 text-sm">{error}</p>
+        <div className="bg-raised border border-border rounded-[6px] p-3 mb-6 text-center">
+          <p className="text-red-400 text-[13px]">{error}</p>
         </div>
       )}
 
@@ -130,12 +130,12 @@ export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) 
       <button
         onClick={handleCheckout}
         disabled={loading || !vendorId}
-        className="block w-full text-center py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+        className="block w-full text-center py-3 bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-[6px] font-medium text-[14px] transition-colors"
       >
         {loading ? "Redirecting to checkout..." : "Continue to payment"}
       </button>
 
-      <p className="text-xs text-gray-500 text-center mt-4">
+      <p className="text-[12px] text-muted text-center mt-4">
         You&apos;ll be redirected to Stripe to securely enter your payment
         details. You can cancel anytime from your account settings.
       </p>
@@ -144,7 +144,7 @@ export default function PaymentForm({ vendorId, vendorName }: PaymentFormProps) 
       <div className="mt-6 text-center">
         <a
           href="/plans"
-          className="text-sm text-gray-400 hover:text-gray-300 transition-colors"
+          className="text-[13px] text-secondary hover:text-primary transition-colors"
         >
           &larr; Change plan
         </a>

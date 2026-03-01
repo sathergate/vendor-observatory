@@ -50,32 +50,32 @@ export default async function PlansPage({
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">
-      <h1 className="text-3xl font-bold text-center mb-2">Choose a plan</h1>
-      <p className="text-gray-400 text-center mb-10">
-        Unlock full recommendations and ongoing monitoring.
+      <h1 className="text-3xl font-bold text-center mb-2 text-primary">Choose a plan</h1>
+      <p className="text-[14px] text-secondary text-center mb-10">
+        Unlock full signal data and ongoing monitoring.
       </p>
 
       <div className="grid md:grid-cols-3 gap-6 mb-12">
         {plans.map((plan) => (
           <div
             key={plan.id}
-            className={`bg-gray-800 border rounded-lg p-6 flex flex-col ${
+            className={`bg-surface border rounded-[6px] p-6 flex flex-col ${
               plan.highlight
-                ? "border-blue-500 ring-2 ring-blue-500"
-                : "border-gray-700"
+                ? "border-accent ring-2 ring-accent"
+                : "border-border"
             }`}
           >
             {plan.highlight && (
-              <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
-                Most popular
+              <span className="section-header text-accent mb-2">
+                Frequently chosen
               </span>
             )}
-            <h2 className="text-xl font-bold mb-1">{plan.name}</h2>
-            <p className="text-2xl font-bold text-white mb-4">{plan.price}</p>
+            <h2 className="text-xl font-bold mb-1 text-primary">{plan.name}</h2>
+            <p className="text-2xl font-bold text-primary font-data mb-4">{plan.price}</p>
             <ul className="space-y-2 mb-6 flex-1">
               {plan.features.map((f) => (
-                <li key={f} className="text-sm text-gray-300 flex items-start gap-2">
-                  <span className="text-green-400 mt-0.5">&#10003;</span>
+                <li key={f} className="text-[13px] text-secondary flex items-start gap-2">
+                  <span className="text-signal-strong mt-0.5">&#10003;</span>
                   {f}
                 </li>
               ))}
@@ -83,17 +83,17 @@ export default async function PlansPage({
             {plan.id === "enterprise" ? (
               <a
                 href="mailto:sales@vendor-observatory.com"
-                className="block w-full text-center py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+                className="block w-full text-center py-2.5 bg-raised hover:bg-border-subtle rounded-[6px] font-medium text-[14px] text-secondary transition-colors"
               >
                 Contact us
               </a>
             ) : (
               <a
                 href={isLoggedIn ? `/payment?plan=${plan.id}${jobId ? `&jobId=${jobId}` : ""}` : `/signup?email=${encodeURIComponent(email)}&plan=${plan.id}${jobId ? `&jobId=${jobId}` : ""}`}
-                className={`block w-full text-center py-2.5 rounded-lg font-medium transition-colors ${
+                className={`block w-full text-center py-2.5 rounded-[6px] font-medium text-[14px] transition-colors ${
                   plan.highlight
-                    ? "bg-blue-600 hover:bg-blue-500"
-                    : "bg-gray-700 hover:bg-gray-600"
+                    ? "bg-accent hover:bg-accent/90"
+                    : "bg-raised hover:bg-border-subtle text-secondary"
                 }`}
               >
                 Get started
@@ -105,7 +105,7 @@ export default async function PlansPage({
 
       {/* Email alert signup */}
       <div className="max-w-md mx-auto">
-        <p className="text-sm text-gray-400 text-center mb-3">
+        <p className="text-[12px] text-secondary text-center mb-3">
           Not ready yet? Get notified when your scorecard changes.
         </p>
         <EmailAlertSignup defaultEmail={email} />

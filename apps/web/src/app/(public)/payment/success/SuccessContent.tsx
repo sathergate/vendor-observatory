@@ -25,9 +25,9 @@ export default function SuccessContent() {
 
   return (
     <>
-      <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-green-900/40 border border-green-700 flex items-center justify-center">
+      <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-raised border border-border flex items-center justify-center">
         <svg
-          className="w-8 h-8 text-green-400"
+          className="w-8 h-8 text-signal-strong"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -41,26 +41,26 @@ export default function SuccessContent() {
         </svg>
       </div>
 
-      <h1 className="text-2xl font-bold mb-2">Payment successful</h1>
-      <p className="text-gray-400 mb-8">
+      <h1 className="text-2xl font-bold mb-2 text-primary">Payment confirmed</h1>
+      <p className="text-[14px] text-secondary mb-8">
         Your subscription is active. You now have full access to the Vendor
         Observatory dashboard.
       </p>
 
       {sessionId && (
-        <p className="text-xs text-gray-600 mb-6 font-mono break-all">
+        <p className="text-[12px] text-muted mb-6 font-data break-all">
           Session: {sessionId}
         </p>
       )}
 
       <a
         href="/overview"
-        className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors"
+        className="inline-block px-6 py-3 bg-accent hover:bg-accent/90 rounded-[6px] font-medium text-[14px] transition-colors"
       >
         Go to dashboard
       </a>
 
-      <p className="text-sm text-gray-500 mt-4">
+      <p className="text-[13px] text-muted mt-4">
         Redirecting in {countdown} second{countdown !== 1 ? "s" : ""}...
       </p>
     </>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-// ── Types ──────────────────────────────────────────────────────────────
+// -- Types --
 
 type QueryType =
   | "vendorWinRate"
@@ -55,7 +55,7 @@ const QUERY_CONFIG: Record<
   },
 };
 
-// ── Component ──────────────────────────────────────────────────────────
+// -- Component --
 
 export default function QueryBuilderPage() {
   const [queryType, setQueryType] = useState<QueryType>("vendorWinRate");
@@ -117,20 +117,20 @@ export default function QueryBuilderPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Composable Query Builder</h1>
-        <p className="text-gray-400 mt-1">
+        <h1 className="text-[24px] font-bold text-primary">Composable Query Builder</h1>
+        <p className="text-secondary mt-1">
           Run ad-hoc analytical queries against vendor observatory data
         </p>
       </div>
 
       {/* Query Type Selector */}
-      <div className="bg-gray-800 rounded-lg p-6 space-y-4">
+      <div className="bg-surface rounded-[6px] p-6 border border-border space-y-4">
         <label className="block">
-          <span className="text-sm font-medium text-gray-300">Query Type</span>
+          <span className="stat-label">Query Type</span>
           <select
             value={queryType}
             onChange={(e) => setQueryType(e.target.value as QueryType)}
-            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 block w-full rounded-[6px] bg-raised border-border text-primary px-3 py-2 text-[14px] focus:ring-accent focus:border-accent"
           >
             {(Object.entries(QUERY_CONFIG) as [QueryType, typeof config][]).map(
               ([key, cfg]) => (
@@ -141,7 +141,7 @@ export default function QueryBuilderPage() {
             )}
           </select>
         </label>
-        <p className="text-sm text-gray-400">{config.description}</p>
+        <p className="text-[14px] text-secondary">{config.description}</p>
 
         {/* Dynamic Parameters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
@@ -158,12 +158,12 @@ export default function QueryBuilderPage() {
           <button
             onClick={runQuery}
             disabled={!canRun || loading}
-            className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            className="px-4 py-2 rounded-[6px] bg-accent hover:bg-accent/80 disabled:bg-raised disabled:text-muted disabled:cursor-not-allowed text-[14px] font-medium transition-colors text-primary"
           >
             {loading ? "Running..." : "Run Query"}
           </button>
           {!canRun && (
-            <span className="text-sm text-yellow-400">
+            <span className="text-[14px] text-data-3">
               Required: {config.requiredParams.join(", ")}
             </span>
           )}
@@ -172,15 +172,15 @@ export default function QueryBuilderPage() {
 
       {/* Error */}
       {error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg p-4 text-red-300 text-sm">
+        <div className="bg-data-4/10 border border-data-4/30 rounded-[6px] p-4 text-data-4 text-[14px]">
           {error}
         </div>
       )}
 
       {/* Results */}
       {result && (
-        <div className="bg-gray-800 rounded-lg p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Results</h2>
+        <div className="bg-surface rounded-[6px] p-6 border border-border space-y-4">
+          <h2 className="section-header">Results</h2>
           <ResultRenderer queryType={queryType} result={result} />
         </div>
       )}
@@ -188,7 +188,7 @@ export default function QueryBuilderPage() {
   );
 }
 
-// ── Dynamic Query Parameters ────────────────────────────────────────
+// -- Dynamic Query Parameters --
 
 function QueryParams({
   queryType,
@@ -249,7 +249,7 @@ function QueryParams({
   return <>{fields}</>;
 }
 
-// ── Select Field Component ──────────────────────────────────────────
+// -- Select Field Component --
 
 function SelectField({
   label,
@@ -268,11 +268,11 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-gray-300">{label}</span>
+      <span className="stat-label">{label}</span>
       <select
         value={value || ""}
         onChange={(e) => onChange(param, e.target.value)}
-        className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+        className="mt-1 block w-full rounded-[6px] bg-raised border-border text-primary px-3 py-2 text-[14px] focus:ring-accent focus:border-accent"
       >
         <option value="">{placeholder || `Select ${label.replace(" *", "")}...`}</option>
         {(options || []).map((opt) => (
@@ -285,7 +285,7 @@ function SelectField({
   );
 }
 
-// ── Result Renderers ────────────────────────────────────────────────
+// -- Result Renderers --
 
 function ResultRenderer({
   queryType,
@@ -296,7 +296,7 @@ function ResultRenderer({
   result: Record<string, any>;
 }) {
   if (!result) {
-    return <p className="text-gray-400 text-sm">No results found.</p>;
+    return <p className="text-secondary text-[14px]">No results found.</p>;
   }
 
   switch (queryType) {
@@ -313,11 +313,11 @@ function ResultRenderer({
     case "whatIf":
       return <WhatIfResult data={result as WhatIfData} />;
     default:
-      return <pre className="text-xs text-gray-300 overflow-x-auto">{JSON.stringify(result, null, 2)}</pre>;
+      return <pre className="text-[12px] text-secondary overflow-x-auto font-mono">{JSON.stringify(result, null, 2)}</pre>;
   }
 }
 
-// ── Result Type Definitions ─────────────────────────────────────────
+// -- Result Type Definitions --
 
 interface VendorWinRateData {
   vendor: string;
@@ -370,10 +370,10 @@ interface WhatIfData {
   removedConstraint: string | null;
 }
 
-// ── Result Components ───────────────────────────────────────────────
+// -- Result Components --
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 function VendorWinRateResult({ data }: { data: VendorWinRateData }) {
@@ -381,17 +381,17 @@ function VendorWinRateResult({ data }: { data: VendorWinRateData }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Win Rate" value={pct(data.winRate)} />
-        <Stat label="Wins" value={String(data.wins)} />
-        <Stat label="Total Mentions" value={String(data.total)} />
+        <Stat label="Wins" value={data.wins.toLocaleString()} />
+        <Stat label="Total Mentions" value={data.total.toLocaleString()} />
       </div>
       {data.breakdown.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-300 mb-2">
+          <h3 className="text-[14px] font-medium text-primary mb-2">
             Breakdown by {data.breakdown[0].dimension}
           </h3>
           <DataTable
             headers={["Value", "Wins", "Total", "Win Rate"]}
-            rows={data.breakdown.map((b) => [b.value, String(b.wins), String(b.total), pct(b.winRate)])}
+            rows={data.breakdown.map((b) => [b.value, b.wins.toLocaleString(), b.total.toLocaleString(), pct(b.winRate)])}
           />
         </div>
       )}
@@ -403,8 +403,8 @@ function ConstraintCorrelationResult({ data }: { data: ConstraintCorrelationData
   const significant = data.vendors.filter((v) => v.totalWithConstraint > 0 || v.totalWithout > 0);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-400">
-        Constraint: <span className="text-blue-400 font-mono">{data.constraint}</span>
+      <p className="text-[14px] text-secondary">
+        Constraint: <span className="text-accent font-mono">{data.constraint}</span>
       </p>
       <DataTable
         headers={["Vendor", "Win Rate (with)", "Win Rate (without)", "Delta", "N (with)", "N (without)"]}
@@ -413,8 +413,8 @@ function ConstraintCorrelationResult({ data }: { data: ConstraintCorrelationData
           pct(v.winRateWith),
           pct(v.winRateWithout),
           `${v.delta > 0 ? "+" : ""}${pct(v.delta)}`,
-          String(v.totalWithConstraint),
-          String(v.totalWithout),
+          v.totalWithConstraint.toLocaleString(),
+          v.totalWithout.toLocaleString(),
         ])}
       />
     </div>
@@ -425,25 +425,25 @@ function PlatformComparisonResult({ data }: { data: PlatformComparisonData }) {
   const platformKeys = Object.keys(data.platforms);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-400">
-        {data.groupType}: <span className="text-blue-400 font-mono">{data.groupKey}</span>
+      <p className="text-[14px] text-secondary">
+        {data.groupType}: <span className="text-accent font-mono">{data.groupKey}</span>
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {platformKeys.map((platform) => {
           const p = data.platforms[platform];
           return (
-            <div key={platform} className="bg-gray-700/50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-300 mb-2">{platform}</h4>
-              <p className="text-lg font-bold text-blue-400">{p.primaryVendor || "—"}</p>
-              <p className="text-xs text-gray-500 mt-1">{p.responseCount} responses</p>
+            <div key={platform} className="bg-raised rounded-[6px] p-4 border border-border-subtle">
+              <h4 className="stat-label mb-2">{platform}</h4>
+              <p className="font-data text-[18px] text-accent">{p.primaryVendor || "\u2014"}</p>
+              <p className="stat-context mt-1">{p.responseCount.toLocaleString()} responses</p>
               {Object.keys(p.vendorCounts).length > 1 && (
                 <div className="mt-2 space-y-1">
                   {Object.entries(p.vendorCounts)
                     .sort((a, b) => b[1] - a[1])
                     .map(([vendor, count]) => (
-                      <div key={vendor} className="flex justify-between text-xs text-gray-400">
+                      <div key={vendor} className="flex justify-between text-[12px] text-secondary">
                         <span>{vendor}</span>
-                        <span>{count}</span>
+                        <span className="font-data">{count}</span>
                       </div>
                     ))}
                 </div>
@@ -461,35 +461,35 @@ function HeadToHeadResult({ data }: { data: HeadToHeadData }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-green-900/30 border border-green-800 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-400">{data.vendorA}</p>
-          <p className="text-2xl font-bold text-green-400">{data.aWins}</p>
+        <div className="bg-data-1/10 border border-data-1/30 rounded-[6px] p-4 text-center">
+          <p className="stat-label">{data.vendorA}</p>
+          <p className="font-data text-[24px] text-data-1 mt-1">{data.aWins.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-700/50 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-400">Ties</p>
-          <p className="text-2xl font-bold text-gray-300">{data.ties}</p>
+        <div className="bg-raised rounded-[6px] p-4 text-center border border-border-subtle">
+          <p className="stat-label">Ties</p>
+          <p className="font-data text-[24px] text-secondary mt-1">{data.ties.toLocaleString()}</p>
         </div>
-        <div className="bg-blue-900/30 border border-blue-800 rounded-lg p-4 text-center">
-          <p className="text-sm text-gray-400">{data.vendorB}</p>
-          <p className="text-2xl font-bold text-blue-400">{data.bWins}</p>
+        <div className="bg-data-4/10 border border-data-4/30 rounded-[6px] p-4 text-center">
+          <p className="stat-label">{data.vendorB}</p>
+          <p className="font-data text-[24px] text-data-4 mt-1">{data.bWins.toLocaleString()}</p>
         </div>
       </div>
       {data.scenarios.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-300 mb-2">
-            Scenarios ({totalScenarios})
+          <h3 className="text-[14px] font-medium text-primary mb-2">
+            Scenarios ({totalScenarios.toLocaleString()})
           </h3>
           <DataTable
             headers={["Prompt", "Category", "Winner"]}
             rows={data.scenarios.slice(0, 20).map((s) => [
               s.prompt_id,
               s.category,
-              s.winner || "—",
+              s.winner || "\u2014",
             ])}
           />
           {data.scenarios.length > 20 && (
-            <p className="text-xs text-gray-500 mt-2">
-              Showing 20 of {data.scenarios.length} scenarios
+            <p className="text-[12px] text-muted mt-2">
+              Showing 20 of {data.scenarios.length.toLocaleString()} scenarios
             </p>
           )}
         </div>
@@ -502,21 +502,21 @@ function PromptDifficultyResult({ data }: { data: PromptDifficultyData }) {
   const entropyLabel =
     data.entropy > 1.5 ? "Highly contested" : data.entropy > 0.8 ? "Moderately contested" : "Dominated";
   const entropyColor =
-    data.entropy > 1.5 ? "text-red-400" : data.entropy > 0.8 ? "text-yellow-400" : "text-green-400";
+    data.entropy > 1.5 ? "text-data-4" : data.entropy > 0.8 ? "text-data-3" : "text-data-5";
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Stat label="Shannon Entropy" value={data.entropy.toFixed(2)} />
-        <div className="bg-gray-700/50 rounded-lg p-3">
-          <p className="text-xs text-gray-400">Contestedness</p>
-          <p className={`text-lg font-bold mt-1 ${entropyColor}`}>{entropyLabel}</p>
+        <div className="bg-raised rounded-[6px] p-3 border border-border-subtle">
+          <p className="stat-label">Contestedness</p>
+          <p className={`font-data text-[18px] mt-1 ${entropyColor}`}>{entropyLabel}</p>
         </div>
-        <Stat label="Unique Vendors" value={String(data.vendorCount)} />
-        <Stat label="Responses" value={String(data.responseCount)} />
+        <Stat label="Unique Vendors" value={data.vendorCount.toLocaleString()} />
+        <Stat label="Responses" value={data.responseCount.toLocaleString()} />
       </div>
       <div>
-        <h3 className="text-sm font-medium text-gray-300 mb-2">Vendor Distribution</h3>
+        <h3 className="text-[14px] font-medium text-primary mb-2">Vendor Distribution</h3>
         <div className="space-y-2">
           {Object.entries(data.vendorDistribution)
             .sort((a, b) => b[1] - a[1])
@@ -524,14 +524,14 @@ function PromptDifficultyResult({ data }: { data: PromptDifficultyData }) {
               const pctVal = data.responseCount > 0 ? count / data.responseCount : 0;
               return (
                 <div key={vendor} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-300 w-40 truncate">{vendor}</span>
-                  <div className="flex-1 bg-gray-700 rounded-full h-4 overflow-hidden">
+                  <span className="text-[14px] text-primary w-40 truncate">{vendor}</span>
+                  <div className="flex-1 bg-data-muted rounded-[6px] h-4 overflow-hidden">
                     <div
-                      className="bg-blue-500 h-full rounded-full transition-all"
+                      className="bg-accent h-full rounded-[6px] transition-all"
                       style={{ width: `${Math.round(pctVal * 100)}%` }}
                     />
                   </div>
-                  <span className="text-xs text-gray-400 w-16 text-right">
+                  <span className="text-[12px] text-secondary w-16 text-right font-data">
                     {count} ({pct(pctVal)})
                   </span>
                 </div>
@@ -544,7 +544,7 @@ function PromptDifficultyResult({ data }: { data: PromptDifficultyData }) {
 }
 
 function WhatIfResult({ data }: { data: WhatIfData }) {
-  const deltaColor = data.delta > 0 ? "text-green-400" : data.delta < 0 ? "text-red-400" : "text-gray-400";
+  const deltaColor = data.delta > 0 ? "text-data-5" : data.delta < 0 ? "text-data-4" : "text-secondary";
   const deltaPrefix = data.delta > 0 ? "+" : "";
 
   return (
@@ -552,40 +552,40 @@ function WhatIfResult({ data }: { data: WhatIfData }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Stat label="Current Win Rate" value={pct(data.currentWinRate)} />
         <Stat label="Simulated Win Rate" value={pct(data.simulatedWinRate)} />
-        <div className="bg-gray-700/50 rounded-lg p-3">
-          <p className="text-xs text-gray-400">Delta</p>
-          <p className={`text-lg font-bold mt-1 ${deltaColor}`}>
+        <div className="bg-raised rounded-[6px] p-3 border border-border-subtle">
+          <p className="stat-label">Delta</p>
+          <p className={`font-data text-[18px] mt-1 ${deltaColor}`}>
             {deltaPrefix}{pct(data.delta)}
           </p>
         </div>
-        <Stat label="Simulated N" value={`${data.simulatedWins}/${data.simulatedTotal}`} />
+        <Stat label="Simulated N" value={`${data.simulatedWins.toLocaleString()}/${data.simulatedTotal.toLocaleString()}`} />
       </div>
-      <div className="text-sm text-gray-400 space-y-1">
+      <div className="text-[14px] text-secondary space-y-1">
         {data.addedConstraint && (
           <p>
-            📎 Added constraint: <span className="text-blue-400 font-mono">{data.addedConstraint}</span>
+            Added constraint: <span className="text-accent font-mono">{data.addedConstraint}</span>
           </p>
         )}
         {data.removedConstraint && (
           <p>
-            🗑️ Removed constraint: <span className="text-red-400 font-mono">{data.removedConstraint}</span>
+            Removed constraint: <span className="text-data-4 font-mono">{data.removedConstraint}</span>
           </p>
         )}
         {!data.addedConstraint && !data.removedConstraint && (
-          <p className="text-yellow-400">No constraint changes specified — results show baseline.</p>
+          <p className="text-data-3">No constraint changes specified -- results show baseline.</p>
         )}
       </div>
     </div>
   );
 }
 
-// ── Shared UI Components ────────────────────────────────────────────
+// -- Shared UI Components --
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-gray-700/50 rounded-lg p-3">
-      <p className="text-xs text-gray-400">{label}</p>
-      <p className="text-lg font-bold mt-1">{value}</p>
+    <div className="bg-raised rounded-[6px] p-3 border border-border-subtle">
+      <p className="stat-label">{label}</p>
+      <p className="font-data text-[18px] mt-1 text-primary">{value}</p>
     </div>
   );
 }
@@ -593,11 +593,11 @@ function Stat({ label, value }: { label: string; value: string }) {
 function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-[14px]">
         <thead>
-          <tr className="border-b border-gray-700">
+          <tr className="border-b border-border">
             {headers.map((h) => (
-              <th key={h} className="text-left py-2 px-3 text-gray-400 font-medium">
+              <th key={h} className="th-label text-left py-2 px-3">
                 {h}
               </th>
             ))}
@@ -605,9 +605,9 @@ function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+            <tr key={i} className="border-b border-border-subtle hover:bg-raised">
               {row.map((cell, j) => (
-                <td key={j} className="py-2 px-3 text-gray-300">
+                <td key={j} className="py-2 px-3 text-primary font-data">
                   {cell}
                 </td>
               ))}

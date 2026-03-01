@@ -25,11 +25,11 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
       ]} />
 
       <VendorGuard vendorId={vendorId}>
-        <h1 className="text-2xl font-bold">Reasoning Samples</h1>
+        <h1 className="text-2xl font-bold text-primary">Reasoning Samples</h1>
 
         {!scorecard || !hasAnyData ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-            <p>No reasoning samples available yet.</p>
+          <div className="quiet-signal">
+            <p className="text-secondary">No reasoning samples available yet.</p>
           </div>
         ) : (
           <>
@@ -42,10 +42,10 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
             {/* Rationale Snippets */}
             {hasRationale && (
               <div id="rationale">
-                <h2 className="text-lg font-semibold mb-3">Why AI Recommends This Vendor</h2>
-                <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+                <h2 className="section-header mb-3">Why AI Recommends This Vendor</h2>
+                <div className="bg-surface rounded-[6px] p-4 space-y-3 border border-border">
                   {scorecard.rationaleSnippets.map((s, i) => (
-                    <p key={i} className="text-sm text-gray-300 border-l-2 border-blue-800 pl-3">
+                    <p key={i} className="text-[13px] text-primary border-l-2 border-accent pl-3">
                       {s}
                     </p>
                   ))}
@@ -56,10 +56,10 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
             {/* Trade-off Snippets */}
             {hasTradeOffs && (
               <div id="tradeoffs">
-                <h2 className="text-lg font-semibold mb-3">Trade-offs Cited</h2>
-                <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+                <h2 className="section-header mb-3">Trade-offs Cited</h2>
+                <div className="bg-surface rounded-[6px] p-4 space-y-3 border border-border">
                   {scorecard.tradeOffSnippets.map((s, i) => (
-                    <p key={i} className="text-sm text-gray-300 border-l-2 border-yellow-800 pl-3">
+                    <p key={i} className="text-[13px] text-primary border-l-2 border-data-3 pl-3">
                       {s}
                     </p>
                   ))}
@@ -70,10 +70,10 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
             {/* Gotcha Snippets */}
             {hasGotchas && (
               <div id="gotchas">
-                <h2 className="text-lg font-semibold mb-3">Gotchas / Caveats</h2>
-                <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+                <h2 className="section-header mb-3">Gotchas / Caveats</h2>
+                <div className="bg-surface rounded-[6px] p-4 space-y-3 border border-border">
                   {scorecard.gotchaSnippets.map((s, i) => (
-                    <p key={i} className="text-sm text-gray-300 border-l-2 border-orange-800 pl-3">
+                    <p key={i} className="text-[13px] text-primary border-l-2 border-data-4 pl-3">
                       {s}
                     </p>
                   ))}
