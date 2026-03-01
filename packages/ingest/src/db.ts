@@ -5,6 +5,8 @@ import type {
   ObservationRow,
   ToolActionRow,
   VendorMention,
+  VendorRejection,
+  VendorRejectionRow,
   VendorStats,
   PlatformStats,
   CoOccurrence,
@@ -189,6 +191,21 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_search_tsv ON search_index USING GIN(tsv)`,
   `CREATE INDEX IF NOT EXISTS idx_search_source_id ON search_index(source_id)`,
   `CREATE INDEX IF NOT EXISTS idx_insights_type ON cross_session_insights(insight_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_vendor ON vendor_rejections(vendor_canonical_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_session ON vendor_rejections(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_reason ON vendor_rejections(rejection_reason)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_alternative ON vendor_rejections(chosen_alternative)`,
+
+  `CREATE TABLE IF NOT EXISTS vendor_rejections (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    vendor_canonical_id TEXT NOT NULL,
+    rejection_reason TEXT NOT NULL,
+    rejection_reason_detail TEXT,
+    chosen_alternative TEXT,
+    timestamp TEXT NOT NULL,
+    UNIQUE(session_id, vendor_canonical_id, rejection_reason)
+  )`,
 
   // Fast benchmark: direct API probe responses (not full transcripts)
   `CREATE TABLE IF NOT EXISTS fast_benchmark_responses (
@@ -299,6 +316,7 @@ export class ObservatoryDB {
     for (const s of sessions as { id: string }[]) {
       await this.queryable.query("DELETE FROM tool_actions WHERE session_id = $1", [s.id]);
       await this.queryable.query("DELETE FROM observations WHERE session_id = $1", [s.id]);
+      await this.queryable.query("DELETE FROM vendor_rejections WHERE session_id = $1", [s.id]);
     }
     await this.queryable.query("DELETE FROM sessions WHERE file_path = $1", [filePath]);
   }
@@ -310,6 +328,20 @@ export class ObservatoryDB {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT DO NOTHING
     `, [sessionId, mention.vendorCanonicalId, mention.vendorRaw, mention.mentionType, mention.workCategory, mention.confidence, mention.contextSnippet, mention.userPromptSnippet, mention.timestamp]);
+  }
+
+  async insertVendorRejection(sessionId: string, rejection: VendorRejection): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO vendor_rejections
+        (session_id, vendor_canonical_id, rejection_reason, rejection_reason_detail, chosen_alternative, timestamp)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT DO NOTHING
+    `, [sessionId, rejection.vendorCanonicalId, rejection.rejectionReason, rejection.rejectionReasonDetail, rejection.chosenAlternative, rejection.timestamp]);
+  }
+
+  async getRejectionsBySessionId(sessionId: string): Promise<VendorRejectionRow[]> {
+    const { rows } = await this.queryable.query("SELECT * FROM vendor_rejections WHERE session_id = $1 ORDER BY timestamp", [sessionId]);
+    return rows as VendorRejectionRow[];
   }
 
   async insertToolAction(sessionId: string, toolName: string, commandOrPath: string | null, vendorCanonicalId: string | null, actionType: string | null, success: number | null, timestamp: string): Promise<void> {

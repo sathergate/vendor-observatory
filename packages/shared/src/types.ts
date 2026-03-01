@@ -116,6 +116,35 @@ export interface ToolActionRow {
   timestamp: string;
 }
 
+// ── Vendor Rejections ────────────────────────────────────────────────
+
+export type RejectionReason =
+  | "too_expensive"
+  | "too_complex"
+  | "poor_docs"
+  | "not_available_region"
+  | "feature_gap"
+  | "trust_concerns"
+  | "vendor_lock_in";
+
+export interface VendorRejection {
+  vendorCanonicalId: string;
+  rejectionReason: RejectionReason;
+  rejectionReasonDetail: string | null;
+  chosenAlternative: string | null;
+  timestamp: string;
+}
+
+export interface VendorRejectionRow {
+  id: number;
+  session_id: string;
+  vendor_canonical_id: string;
+  rejection_reason: RejectionReason;
+  rejection_reason_detail: string | null;
+  chosen_alternative: string | null;
+  timestamp: string;
+}
+
 // ── Category (DB-backed) ────────────────────────────────────────────
 
 export interface CategoryRow {

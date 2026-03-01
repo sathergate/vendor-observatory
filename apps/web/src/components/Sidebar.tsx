@@ -27,6 +27,7 @@ const NAV_GROUPS = [
     label: "Data",
     links: [
       { href: "/vendors", label: "Vendors" },
+      { href: "/rejections", label: "Rejections" },
       { href: "/platforms", label: "Platforms" },
       { href: "/actions", label: "Actions" },
       { href: "/sessions", label: "Sessions" },
