@@ -241,12 +241,15 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
  */
 async function uploadTranscriptsToDatabricks(runDate: string): Promise<void> {
   const token = process.env.DATABRICKS_TOKEN;
-  const host = process.env.DATABRICKS_HOST;
+  const rawHost = process.env.DATABRICKS_HOST;
 
-  if (!token || !host) {
+  if (!token || !rawHost) {
     console.log("[daily-runner] DATABRICKS_TOKEN or DATABRICKS_HOST not set, skipping transcript upload");
     return;
   }
+
+  // Strip protocol prefix to avoid double-protocol URLs (e.g. https://https://...)
+  const host = rawHost.replace(/^https?:\/\//, "");
 
   // Collect transcript files from Claude Code and Codex CLI output directories
   const transcriptDirs = [
