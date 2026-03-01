@@ -1,37 +1,63 @@
+#!/usr/bin/env npx tsx
 /**
- * Fast Benchmark — Direct API Probes
+ * Seed the `prompts` table with all hardcoded prompts.
  *
- * Fires 20 short category-aware prompts in parallel via the Anthropic API
- * (Haiku for speed), extracts vendor mentions from responses, and stores
- * results in the fast_benchmark_responses table.
+ * Usage:
+ *   DATABASE_URL=postgresql://... npx tsx db/seed-prompts.ts
  *
- * Target: 10-20 seconds total wall clock.
+ * Safe to re-run — uses ON CONFLICT DO UPDATE (upsert).
+ *
+ * Prompt kinds:
+ *   "benchmark"     — comprehensive benchmark scenarios
+ *   "fast"          — category-specific fast-benchmark questions
+ *   "fast_generic"  — generic cross-category fast-benchmark templates
+ *   "system"        — LLM system prompts (enrichment, URL analysis, digest)
  */
 
 import { Pool } from "pg";
-import {
-  extractVendorMentions,
-  loadVendorTaxonomyFromDb,
-  loadPackageMapFromDb,
-  createPackageResolver,
-  loadPromptsByKind,
-  hasPrompts,
-} from "@obs/shared";
-import type { VendorTaxonomy, VendorMention, ParsedTurn, PromptRow } from "@obs/shared";
-import { computeFastScores, type ScoreResult } from "./scorer.js";
 
-// ── Configuration ──────────────────────────────────────────────────
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error("DATABASE_URL is required");
+  process.exit(1);
+}
 
-const FAST_MODEL = "claude-haiku-4-5-20251001";
-const MAX_TOKENS = 300;
-const PROMPT_COUNT = 20;
-const PER_PROMPT_TIMEOUT_MS = 15_000;
+const pool = new Pool({ connectionString: DATABASE_URL });
 
-// ── Fallback Category Prompt Templates ─────────────────────────────
-// Used when the prompts table is empty or unreachable.
-// No vendor names — measures organic recall.
+async function upsert(prompt: {
+  id: string;
+  kind: string;
+  category?: string | null;
+  template?: string | null;
+  text: string;
+  metadata?: Record<string, unknown>;
+}) {
+  await pool.query(
+    `INSERT INTO prompts (id, kind, category, template, text, metadata, is_active, version, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, TRUE, 1, NOW())
+     ON CONFLICT(id) DO UPDATE SET
+       kind = EXCLUDED.kind,
+       category = EXCLUDED.category,
+       template = EXCLUDED.template,
+       text = EXCLUDED.text,
+       metadata = EXCLUDED.metadata,
+       updated_at = NOW()`,
+    [
+      prompt.id,
+      prompt.kind,
+      prompt.category ?? null,
+      prompt.template ?? null,
+      prompt.text,
+      JSON.stringify(prompt.metadata ?? {}),
+    ],
+  );
+}
 
-const CATEGORY_PROMPTS_FALLBACK: Record<string, string[]> = {
+// ═══════════════════════════════════════════════════════════════════
+// 1. Fast benchmark prompts (category-specific)
+// ═══════════════════════════════════════════════════════════════════
+
+const FAST_PROMPTS: Record<string, string[]> = {
   database: [
     "What's the best serverless database for a Next.js app deployed on Vercel?",
     "I need a Postgres database with branching for preview deployments. What should I use?",
@@ -226,8 +252,11 @@ const CATEGORY_PROMPTS_FALLBACK: Record<string, string[]> = {
   ],
 };
 
-// Generic cross-category prompts (fallback, category name substituted at runtime)
-const GENERIC_PROMPTS_FALLBACK = [
+// ═══════════════════════════════════════════════════════════════════
+// 2. Fast generic prompts (cross-category templates)
+// ═══════════════════════════════════════════════════════════════════
+
+const FAST_GENERIC = [
   "What {category} tool would you recommend for a production Node.js application?",
   "I'm setting up a new SaaS product. What {category} solution should I use?",
   "What's the most popular {category} service among startups in 2025?",
@@ -236,316 +265,163 @@ const GENERIC_PROMPTS_FALLBACK = [
   "What {category} platform has the best developer experience?",
 ];
 
-// ── Prompt Generation ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// 3. System prompts (LLM templates)
+// ═══════════════════════════════════════════════════════════════════
 
-function formatCategory(category: string): string {
-  return category.replace(/_/g, " ").replace(/-/g, " ");
+const SYSTEM_PROMPTS: Array<{ id: string; category: string; text: string; metadata?: Record<string, unknown> }> = [
+  {
+    id: "system-enrichment",
+    category: "enrichment",
+    text: `You are an analyst extracting structured data from AI coding assistant responses about developer tool vendor recommendations.
+
+You will be given the text of an AI assistant's response to a developer question. Extract the following information as JSON:
+
+KNOWN VENDORS (canonical IDs): {{VENDOR_NAMES}}
+
+PROMPT CONSTRAINTS to check for: {{CONSTRAINTS}}
+
+Return ONLY valid JSON matching this schema:
+{
+  "primary_vendor": string | null,       // The canonical vendor ID of the PRIMARY recommendation (the vendor the AI most strongly suggests). null if no clear recommendation.
+  "confidence": number,                   // 0.0-1.0 confidence in primary_vendor extraction
+  "is_implemented": boolean,              // true if the response includes actual implementation code (npm install, import statements, config files, etc.)
+  "reasoning_chain": string,              // 2-4 sentence summary of the logical steps the AI used to arrive at its recommendation
+  "vendors": [                            // ALL vendors mentioned, with their disposition
+    { "vendor": "canonical_id", "disposition": "recommended|compared|rejected|mentioned|implemented" }
+  ],
+  "disqualification_reasons": [           // Why specific vendors were rejected or not chosen
+    { "vendor": "canonical_id", "reason": "brief explanation" }
+  ],
+  "trade_offs": string | null,            // Key trade-offs discussed (2-3 sentences max). null if none.
+  "gotchas": string | null,               // Warnings, pitfalls, gotchas mentioned (2-3 sentences max). null if none.
+  "constraints_addressed": string[],      // Which prompt constraints were genuinely ADDRESSED (not just mentioned) in the response
+  "rationale": string | null              // The AI's stated reason for its primary recommendation (1-2 sentences). null if no clear rationale.
 }
 
-/**
- * Generate fast prompts for a category.
- * Loads from the `prompts` table when seeded; falls back to hardcoded defaults.
- */
-export async function generateFastPrompts(
-  category: string,
-  pool: Pool,
-): Promise<Array<{ id: string; text: string }>> {
-  // Try loading from DB first
-  const dbHasPrompts = await hasPrompts(pool, "fast");
-  if (dbHasPrompts) {
-    const [catRows, genericRows] = await Promise.all([
-      loadPromptsByKind(pool, "fast", category),
-      loadPromptsByKind(pool, "fast_generic"),
-    ]);
-    if (catRows.length > 0 || genericRows.length > 0) {
-      return buildFastPromptList(
-        category,
-        catRows.map(r => r.text),
-        genericRows.map(r => r.text),
-      );
+Rules:
+- Use ONLY canonical vendor IDs from the KNOWN VENDORS list. If a vendor is mentioned but not in the list, skip it.
+- For constraints_addressed, only include constraints that were genuinely ADDRESSED (the response explains how the vendor handles it), not merely MENTIONED in passing.
+- "disposition" meanings: "recommended" = explicitly suggested as the solution, "compared" = discussed as an alternative, "rejected" = explicitly advised against, "mentioned" = named but not evaluated, "implemented" = code/config was written for it
+- confidence should be high (>0.8) when there's an explicit "I recommend X" or clear primary choice, medium (0.4-0.8) when the recommendation is implicit, low (<0.4) when it's ambiguous
+- Keep reasoning_chain, trade_offs, gotchas, and rationale concise — focus on substance, not verbosity`,
+    metadata: { substitutions: ["VENDOR_NAMES", "CONSTRAINTS"] },
+  },
+  {
+    id: "system-url-analysis",
+    category: "url_analysis",
+    text: `Given this homepage content for {{DOMAIN}}, extract structured product information.
+
+<page_content>
+{{PAGE_CONTENT}}
+</page_content>
+
+Return a JSON object with exactly these fields:
+- product_name: the canonical name of the product (string)
+- category: one of {{VALID_CATEGORIES}} (string)
+- description: one sentence describing what the product does (string)
+- competitors: top 5 direct competitors as an array of {name: string, domain: string}
+
+Return ONLY valid JSON, no markdown or explanation.`,
+    metadata: { substitutions: ["DOMAIN", "PAGE_CONTENT", "VALID_CATEGORIES"] },
+  },
+  {
+    id: "system-digest",
+    category: "digest",
+    text: `You are writing a brief daily digest for a developer tool vendor observatory. Summarize these vendor position changes in 3-5 sentences. Focus on the most impactful changes and what they might signal about market dynamics. Be concise and data-driven.
+
+Changes:
+{{CHANGES}}`,
+    metadata: { substitutions: ["CHANGES"] },
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// Main
+// ═══════════════════════════════════════════════════════════════════
+
+async function main() {
+  // Ensure the prompts table exists
+  await pool.query(`CREATE TABLE IF NOT EXISTS prompts (
+    id              TEXT PRIMARY KEY,
+    kind            TEXT NOT NULL,
+    category        TEXT,
+    template        TEXT,
+    text            TEXT NOT NULL,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    version         INTEGER NOT NULL DEFAULT 1,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompts_kind ON prompts(kind)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompts_category ON prompts(category)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompts_active ON prompts(is_active) WHERE is_active = TRUE`);
+
+  let count = 0;
+
+  // 1. Fast category prompts
+  for (const [category, texts] of Object.entries(FAST_PROMPTS)) {
+    for (let i = 0; i < texts.length; i++) {
+      const id = `fast-${category}-${String(i + 1).padStart(2, "0")}`;
+      await upsert({ id, kind: "fast", category, text: texts[i] });
+      count++;
     }
   }
+  console.log(`Seeded ${count} fast category prompts`);
 
-  // Fallback to hardcoded
-  return buildFastPromptList(
-    category,
-    CATEGORY_PROMPTS_FALLBACK[category] ?? [],
-    GENERIC_PROMPTS_FALLBACK,
-  );
-}
-
-function buildFastPromptList(
-  category: string,
-  categoryTemplates: string[],
-  genericTemplates: string[],
-): Array<{ id: string; text: string }> {
-  const formatted = formatCategory(category);
-  const prompts: Array<{ id: string; text: string }> = [];
-
-  // Add category-specific prompts
-  for (let i = 0; i < categoryTemplates.length && prompts.length < 14; i++) {
-    prompts.push({
-      id: `fast-${category}-${String(i + 1).padStart(2, "0")}`,
-      text: categoryTemplates[i],
-    });
+  // 2. Fast generic prompts
+  let genericCount = 0;
+  for (let i = 0; i < FAST_GENERIC.length; i++) {
+    const id = `fast-generic-${String(i + 1).padStart(2, "0")}`;
+    await upsert({ id, kind: "fast_generic", text: FAST_GENERIC[i] });
+    genericCount++;
   }
+  console.log(`Seeded ${genericCount} fast generic prompts`);
+  count += genericCount;
 
-  // Fill remaining with generic prompts (category name substituted)
-  for (let i = 0; prompts.length < PROMPT_COUNT && i < genericTemplates.length; i++) {
-    prompts.push({
-      id: `fast-generic-${String(i + 1).padStart(2, "0")}`,
-      text: genericTemplates[i].replace("{category}", formatted),
-    });
-  }
-
-  // If we still need more, generate extras
-  while (prompts.length < PROMPT_COUNT) {
-    prompts.push({
-      id: `fast-extra-${String(prompts.length + 1).padStart(2, "0")}`,
-      text: `What ${formatted} tool or service do you recommend for a modern web application?`,
-    });
-  }
-
-  // Shuffle to avoid ordering bias
-  for (let i = prompts.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [prompts[i], prompts[j]] = [prompts[j], prompts[i]];
-  }
-
-  return prompts;
-}
-
-// ── Taxonomy & Package Map Loading (DB-backed) ────────────────────
-
-let _taxonomy: VendorTaxonomy | null = null;
-let _packageResolver: ((pkg: string) => string | null) | null = null;
-
-async function getTaxonomy(pool: Pool): Promise<VendorTaxonomy> {
-  if (_taxonomy) return _taxonomy;
-  _taxonomy = await loadVendorTaxonomyFromDb(pool);
-  return _taxonomy;
-}
-
-async function getPackageResolver(pool: Pool): Promise<(pkg: string) => string | null> {
-  if (_packageResolver) return _packageResolver;
-  const packageMap = await loadPackageMapFromDb(pool);
-  _packageResolver = createPackageResolver(packageMap);
-  return _packageResolver;
-}
-
-// ── API Call ───────────────────────────────────────────────────────
-
-interface PromptResult {
-  promptId: string;
-  promptText: string;
-  responseText: string | null;
-  durationMs: number;
-  inputTokens: number;
-  outputTokens: number;
-  error: string | null;
-  vendorMentions: VendorMention[];
-  primaryVendor: string | null;
-}
-
-async function callApi(
-  prompt: { id: string; text: string },
-  taxonomy: VendorTaxonomy,
-  packageResolver: (pkg: string) => string | null,
-): Promise<PromptResult> {
-  const start = Date.now();
+  // 3. Benchmark prompts — dynamically import from the benchmark package
   try {
-    const Anthropic = (await import("@anthropic-ai/sdk")).default;
-    const client = new Anthropic();
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), PER_PROMPT_TIMEOUT_MS);
-
-    const response = await client.messages.create(
-      {
-        model: FAST_MODEL,
-        max_tokens: MAX_TOKENS,
-        messages: [{ role: "user", content: prompt.text }],
-      },
-      { signal: controller.signal },
-    );
-
-    clearTimeout(timeout);
-
-    const responseText = response.content
-      .filter(b => b.type === "text")
-      .map(b => (b as { type: "text"; text: string }).text)
-      .join("\n");
-
-    // Extract vendor mentions using the shared extractor
-    const turn: ParsedTurn = {
-      role: "assistant",
-      textContent: responseText,
-      toolUses: [],
-      toolResults: [],
-      timestamp: new Date().toISOString(),
-    };
-    const vendorMentions = extractVendorMentions(turn, taxonomy, prompt.text.slice(0, 300), { packageResolver });
-
-    // Determine primary vendor (highest confidence "recommended" or "mentioned")
-    const primaryVendor = pickPrimaryVendor(vendorMentions);
-
-    return {
-      promptId: prompt.id,
-      promptText: prompt.text,
-      responseText,
-      durationMs: Date.now() - start,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-      error: null,
-      vendorMentions,
-      primaryVendor,
-    };
-  } catch (err) {
-    return {
-      promptId: prompt.id,
-      promptText: prompt.text,
-      responseText: null,
-      durationMs: Date.now() - start,
-      inputTokens: 0,
-      outputTokens: 0,
-      error: String(err),
-      vendorMentions: [],
-      primaryVendor: null,
-    };
-  }
-}
-
-function pickPrimaryVendor(mentions: VendorMention[]): string | null {
-  // Prefer "recommended" mentions, then "installed", then highest confidence
-  const recommended = mentions.filter(m => m.mentionType === "recommended");
-  if (recommended.length > 0) {
-    return recommended.sort((a, b) => b.confidence - a.confidence)[0].vendorCanonicalId;
-  }
-
-  const installed = mentions.filter(m => m.mentionType === "installed");
-  if (installed.length > 0) {
-    return installed.sort((a, b) => b.confidence - a.confidence)[0].vendorCanonicalId;
-  }
-
-  if (mentions.length > 0) {
-    return mentions.sort((a, b) => b.confidence - a.confidence)[0].vendorCanonicalId;
-  }
-
-  return null;
-}
-
-// ── Storage ────────────────────────────────────────────────────────
-
-async function storeResult(result: PromptResult, jobId: string, category: string, pool: Pool): Promise<void> {
-  const mentionsJson = result.vendorMentions.map(m => ({
-    vendor: m.vendorCanonicalId,
-    mentionType: m.mentionType,
-    confidence: m.confidence,
-    raw: m.vendorRaw,
-  }));
-
-  await pool.query(
-    `INSERT INTO fast_benchmark_responses
-       (job_id, prompt_id, prompt_text, category, response_text, duration_ms,
-        input_tokens, output_tokens, model, vendor_mentions, primary_vendor, error)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-     ON CONFLICT (job_id, prompt_id) DO UPDATE SET
-       response_text = EXCLUDED.response_text,
-       duration_ms = EXCLUDED.duration_ms,
-       input_tokens = EXCLUDED.input_tokens,
-       output_tokens = EXCLUDED.output_tokens,
-       vendor_mentions = EXCLUDED.vendor_mentions,
-       primary_vendor = EXCLUDED.primary_vendor,
-       error = EXCLUDED.error`,
-    [
-      jobId,
-      result.promptId,
-      result.promptText,
-      category,
-      result.responseText,
-      result.durationMs,
-      result.inputTokens,
-      result.outputTokens,
-      FAST_MODEL,
-      JSON.stringify(mentionsJson),
-      result.primaryVendor,
-      result.error,
-    ],
-  );
-}
-
-// ── Orchestrator ───────────────────────────────────────────────────
-
-export interface FastBenchmarkResult {
-  scores: ScoreResult;
-  totalDurationMs: number;
-  successCount: number;
-  errorCount: number;
-}
-
-interface Competitor {
-  name: string;
-  domain?: string;
-  canonicalId?: string;
-}
-
-export async function runFastBenchmark(
-  jobId: string,
-  vendorId: string,
-  category: string,
-  competitors: Competitor[],
-  pool: Pool,
-): Promise<FastBenchmarkResult> {
-  const overallStart = Date.now();
-
-  console.log(`[fast-bench] Generating ${PROMPT_COUNT} prompts for category "${category}"`);
-  const [prompts, taxonomy, packageResolver] = await Promise.all([
-    generateFastPrompts(category, pool),
-    getTaxonomy(pool),
-    getPackageResolver(pool),
-  ]);
-
-  // Fire all prompts in parallel
-  console.log(`[fast-bench] Firing ${prompts.length} API calls in parallel (model: ${FAST_MODEL})`);
-  const settled = await Promise.allSettled(
-    prompts.map(p => callApi(p, taxonomy, packageResolver)),
-  );
-
-  // Collect results
-  let successCount = 0;
-  let errorCount = 0;
-
-  for (const s of settled) {
-    if (s.status === "fulfilled") {
-      const result = s.value;
-      await storeResult(result, jobId, category, pool);
-      if (result.error) {
-        errorCount++;
-        console.warn(`[fast-bench] Prompt ${result.promptId} failed: ${result.error}`);
-      } else {
-        successCount++;
-      }
-    } else {
-      errorCount++;
-      console.warn(`[fast-bench] Unexpected rejection: ${s.reason}`);
+    const { BENCHMARK_PROMPTS } = await import("../packages/benchmark/src/prompts.js");
+    let benchCount = 0;
+    for (const p of BENCHMARK_PROMPTS) {
+      await upsert({
+        id: p.id,
+        kind: "benchmark",
+        category: p.category,
+        template: p.template,
+        text: p.text,
+        metadata: p.metadata as unknown as Record<string, unknown>,
+      });
+      benchCount++;
     }
+    console.log(`Seeded ${benchCount} benchmark prompts`);
+    count += benchCount;
+  } catch (err) {
+    console.warn("Could not import BENCHMARK_PROMPTS (build first?):", err);
+    console.warn("Skipping benchmark prompts — run 'pnpm -r build' first, then re-run this script.");
   }
 
-  const totalDurationMs = Date.now() - overallStart;
-  console.log(
-    `[fast-bench] Done in ${totalDurationMs}ms: ${successCount} ok, ${errorCount} errors`,
-  );
-
-  if (successCount === 0) {
-    throw new Error(
-      `All ${PROMPT_COUNT} fast benchmark prompts failed. First error: ${
-        settled[0].status === "fulfilled" ? settled[0].value.error : String(settled[0].reason)
-      }`,
-    );
+  // 4. System prompts
+  let sysCount = 0;
+  for (const sp of SYSTEM_PROMPTS) {
+    await upsert({
+      id: sp.id,
+      kind: "system",
+      category: sp.category,
+      text: sp.text,
+      metadata: sp.metadata ?? {},
+    });
+    sysCount++;
   }
+  console.log(`Seeded ${sysCount} system prompts`);
+  count += sysCount;
 
-  // Compute scores from stored results
-  const scores = await computeFastScores(jobId, vendorId, competitors, pool);
-
-  return { scores, totalDurationMs, successCount, errorCount };
+  console.log(`\nDone. Total: ${count} prompts seeded.`);
+  await pool.end();
 }
+
+main().catch((err) => {
+  console.error("Seed failed:", err);
+  process.exit(1);
+});

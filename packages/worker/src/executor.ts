@@ -1,7 +1,8 @@
 import { Pool } from "pg";
 import type { SourcePlatform } from "@obs/shared";
 import {
-  selectOnboardingPrompts,
+  selectOnboardingPromptsFromList,
+  loadBenchmarkPrompts,
   runParallelBatch,
   ClaudeCodeAdapter,
   CodexCliAdapter,
@@ -69,6 +70,9 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
 
   const competitors = parseCompetitors(job.competitors);
 
+  // Load prompts from DB (falls back to hardcoded)
+  const allBenchmarkPrompts = await loadBenchmarkPrompts(pool);
+
   // ── Fast benchmark (direct API probes, ~10-20s) ─────────────
   if (!job.fast_completed_at) {
     console.log(`[executor] Running fast benchmark for job ${job.id}`);
@@ -122,7 +126,7 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
   // ── Balanced benchmark ───────────────────────────────────────
   if (!job.balanced_completed_at) {
     console.log(`[executor] Running balanced benchmark for job ${job.id}`);
-    const prompts = selectOnboardingPrompts(job.detected_category, "balanced");
+    const prompts = selectOnboardingPromptsFromList(allBenchmarkPrompts, job.detected_category, "balanced");
     const adapters: AssistantAdapter[] = [new ClaudeCodeAdapter(), new CodexCliAdapter()];
     const availableAdapters = await filterAvailable(adapters);
 
@@ -194,7 +198,7 @@ export async function executeJob(job: JobRow, pool: Pool): Promise<void> {
   // ── Comprehensive benchmark ─────────────────────────────────────
   if (!job.comprehensive_completed_at) {
     console.log(`[executor] Running comprehensive benchmark for job ${job.id}`);
-    const prompts = selectOnboardingPrompts(job.detected_category, "comprehensive");
+    const prompts = selectOnboardingPromptsFromList(allBenchmarkPrompts, job.detected_category, "comprehensive");
     const adapters: AssistantAdapter[] = [
       new ClaudeCodeAdapter(),
       new CodexCliAdapter(),

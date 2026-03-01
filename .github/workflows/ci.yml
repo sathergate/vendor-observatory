@@ -43,5 +43,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared packages
+        run: pnpm --filter @obs/shared build
+
       - name: Run tests
         run: pnpm --filter web test

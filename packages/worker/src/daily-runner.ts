@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Pool } from "pg";
 import {
   BENCHMARK_PROMPTS,
+  loadBenchmarkPrompts,
   runParallelBatch,
   ClaudeCodeAdapter,
   CodexCliAdapter,
@@ -71,8 +72,8 @@ export async function runDailyBenchmark(runId: string, pool: Pool): Promise<void
     throw new Error("No assistants available for daily benchmark");
   }
 
-  // ── 2. Load and filter prompts ───────────────────────────────────
-  let prompts: BenchmarkPrompt[] = BENCHMARK_PROMPTS;
+  // ── 2. Load and filter prompts (DB first, hardcoded fallback) ────
+  let prompts: BenchmarkPrompt[] = await loadBenchmarkPrompts(pool);
   if (category) {
     prompts = prompts.filter(p => p.category === category);
   }

@@ -44,13 +44,16 @@ vi.mock("@obs/benchmark/lib", async (importOriginal) => {
     run = vi.fn();
   }
 
+  const mockPrompts: BenchmarkPrompt[] = [
+    { id: "db-01", category: "database", template: "node-api", text: "prompt 1", metadata: { contentTags: [], patternTags: [], constraints: [], existingStack: [], failureMode: null, vendorsNamedInPrompt: [] } },
+    { id: "db-02", category: "database", template: "node-api", text: "prompt 2", metadata: { contentTags: [], patternTags: [], constraints: [], existingStack: [], failureMode: null, vendorsNamedInPrompt: [] } },
+    { id: "auth-01", category: "auth", template: "next-app", text: "prompt 3", metadata: { contentTags: [], patternTags: [], constraints: [], existingStack: [], failureMode: null, vendorsNamedInPrompt: [] } },
+  ];
+
   return {
     ...actual,
-    BENCHMARK_PROMPTS: [
-      { id: "db-01", category: "database", template: "node-api", text: "prompt 1", metadata: { contentTags: [], patternTags: [], constraints: [], existingStack: [], failureMode: null, vendorsNamedInPrompt: [] } },
-      { id: "db-02", category: "database", template: "node-api", text: "prompt 2", metadata: { contentTags: [], patternTags: [], constraints: [], existingStack: [], failureMode: null, vendorsNamedInPrompt: [] } },
-      { id: "auth-01", category: "auth", template: "next-app", text: "prompt 3", metadata: { contentTags: [], patternTags: [], constraints: [], existingStack: [], failureMode: null, vendorsNamedInPrompt: [] } },
-    ] satisfies BenchmarkPrompt[],
+    BENCHMARK_PROMPTS: mockPrompts,
+    loadBenchmarkPrompts: vi.fn().mockResolvedValue(mockPrompts),
     ClaudeCodeAdapter: MockClaudeCodeAdapter,
     CodexCliAdapter: MockCodexCliAdapter,
     CursorAgentAdapter: MockCursorAgentAdapter,
