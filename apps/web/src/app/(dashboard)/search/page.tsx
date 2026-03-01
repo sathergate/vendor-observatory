@@ -22,10 +22,10 @@ interface AutocompleteData {
 }
 
 const SOURCE_TYPE_LABELS: Record<string, { label: string; color: string }> = {
-  rationale: { label: "Rationale", color: "bg-blue-600" },
-  trade_off: { label: "Trade-off", color: "bg-yellow-600" },
-  gotcha: { label: "Gotcha", color: "bg-red-600" },
-  context: { label: "Context", color: "bg-gray-600" },
+  rationale: { label: "Rationale", color: "bg-data-1" },
+  trade_off: { label: "Trade-off", color: "bg-data-3" },
+  gotcha: { label: "Gotcha", color: "bg-data-4" },
+  context: { label: "Context", color: "bg-data-muted" },
 };
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -95,14 +95,14 @@ export default function SearchPage() {
     search(query);
   }, [query, search]);
 
-  const selectClass = "rounded-md bg-gray-700 border-gray-600 text-white px-3 py-1.5 text-xs focus:ring-blue-500";
+  const selectClass = "rounded-[6px] bg-raised border-border text-primary px-3 py-1.5 text-[12px] focus:ring-accent focus:border-accent";
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Semantic Search</h1>
-        <p className="text-gray-400 mt-1">
+        <h1 className="text-[24px] font-bold text-primary">Semantic Search</h1>
+        <p className="text-secondary mt-1">
           Full-text search across rationale snippets, trade-offs, and gotchas
         </p>
       </div>
@@ -115,14 +115,14 @@ export default function SearchPage() {
             value={query}
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder="Search for serverless, connection pooling, HIPAA compliance..."
-            className="flex-1 rounded-md bg-gray-800 border-gray-700 text-white px-4 py-2.5 text-sm focus:ring-blue-500 focus:border-blue-500 placeholder-gray-500"
+            className="flex-1 rounded-[6px] bg-surface border border-border text-primary px-4 py-2.5 text-[14px] focus:ring-accent focus:border-accent placeholder-muted"
           />
           <button
             type="submit"
             disabled={loading || query.trim().length < 2}
-            className="px-5 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+            className="px-5 py-2.5 rounded-[6px] bg-accent hover:bg-accent/80 disabled:bg-raised disabled:text-muted disabled:cursor-not-allowed text-[14px] font-medium transition-colors text-primary"
           >
-            {loading ? "Searching…" : "Search"}
+            {loading ? "Searching\u2026" : "Search"}
           </button>
         </div>
 
@@ -173,7 +173,7 @@ export default function SearchPage() {
 
       {/* Error Banner */}
       {error && (
-        <div className="rounded-lg bg-red-900/50 border border-red-700 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-[6px] bg-data-4/10 border border-data-4/30 px-4 py-3 text-[14px] text-data-4">
           {error}
         </div>
       )}
@@ -181,10 +181,10 @@ export default function SearchPage() {
       {/* Results */}
       {searched && !error && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-400">
+          <p className="text-[14px] text-secondary">
             {results.length === 0
               ? "No results found"
-              : `${results.length} result${results.length === 1 ? "" : "s"} found`}
+              : `${results.length.toLocaleString()} result${results.length === 1 ? "" : "s"} found`}
           </p>
           {results.map((r) => (
             <ResultCard key={r.source_id} result={r} />
@@ -198,43 +198,39 @@ export default function SearchPage() {
 function ResultCard({ result }: { result: SearchResult }) {
   const typeInfo = SOURCE_TYPE_LABELS[result.source_type] || {
     label: result.source_type,
-    color: "bg-gray-600",
+    color: "bg-data-muted",
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700/80 transition-colors">
+    <div className="bg-surface rounded-[6px] p-4 border border-border hover:bg-raised transition-colors">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <span className={`px-2 py-0.5 rounded text-xs font-medium text-white ${typeInfo.color}`}>
+        <span className={`px-2 py-0.5 rounded-[6px] text-[12px] font-medium text-primary ${typeInfo.color}`}>
           {typeInfo.label}
         </span>
         {result.vendor && (
           <Link
             href={`/benchmarks/vendors/${result.vendor}`}
-            className="px-2 py-0.5 rounded text-xs font-medium bg-blue-900/50 text-blue-300 hover:bg-blue-800/50"
+            className="px-2 py-0.5 rounded-[6px] text-[12px] font-medium bg-accent/15 text-accent hover:bg-accent/25"
           >
             {result.vendor}
           </Link>
         )}
         {result.category && (
-          <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-900/50 text-purple-300">
+          <span className="px-2 py-0.5 rounded-[6px] text-[12px] font-medium bg-data-1/15 text-data-1">
             {result.category}
           </span>
         )}
         {result.platform && (
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-            result.platform === "claude_code" ? "bg-blue-900/50 text-blue-300"
-            : result.platform === "codex_cli" ? "bg-green-900/50 text-green-300"
-            : "bg-purple-900/50 text-purple-300"
-          }`}>
+          <span className="px-2 py-0.5 rounded-[6px] text-[12px] font-medium bg-raised text-secondary">
             {PLATFORM_LABELS[result.platform] ?? result.platform}
           </span>
         )}
       </div>
       <p
-        className="text-sm text-gray-300 leading-relaxed"
+        className="text-[14px] text-primary leading-relaxed"
         dangerouslySetInnerHTML={{ __html: result.snippet }}
       />
-      <p className="text-xs text-gray-500 mt-2">
+      <p className="text-[12px] text-muted mt-2">
         Prompt: {result.prompt_id}
       </p>
     </div>

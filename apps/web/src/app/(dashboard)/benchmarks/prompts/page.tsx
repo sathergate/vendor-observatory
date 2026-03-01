@@ -8,7 +8,7 @@ import { PROMPT_SUMMARIES } from "../prompt-summaries";
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function PromptIntelligencePage() {
@@ -28,57 +28,57 @@ export default async function PromptIntelligencePage() {
     <div className="space-y-8">
       <div>
         <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Prompt Intelligence" }]} />
-        <h1 className="text-2xl font-bold">Prompt Intelligence</h1>
-        <p className="text-gray-400 mt-1">
+        <h1 className="text-2xl font-bold text-primary">Prompt Intelligence</h1>
+        <p className="text-secondary mt-1">
           Analysis of benchmark prompts: competitiveness, vendor dominance, constraint demand, and implementation rates
         </p>
       </div>
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Total Prompts</p>
-          <p className="text-2xl font-bold mt-1">{prompts.length}</p>
+        <div className="bg-surface rounded-[6px] p-4 border border-border">
+          <p className="stat-label">Total Prompts</p>
+          <p className="stat-hero mt-1">{prompts.length.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Total Responses</p>
-          <p className="text-2xl font-bold mt-1">{totalResponses}</p>
+        <div className="bg-surface rounded-[6px] p-4 border border-border">
+          <p className="stat-label">Total Responses</p>
+          <p className="stat-hero mt-1">{totalResponses.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Contested</p>
-          <p className="text-2xl font-bold mt-1 text-yellow-400">{contested.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">No vendor &gt;50%</p>
+        <div className="bg-surface rounded-[6px] p-4 border border-border">
+          <p className="stat-label">Contested</p>
+          <p className="stat-hero mt-1 !text-data-3">{contested.length.toLocaleString()}</p>
+          <p className="stat-context mt-0.5">No vendor &gt;50%</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Dominated</p>
-          <p className="text-2xl font-bold mt-1 text-red-400">{dominated.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">One vendor = 100%</p>
+        <div className="bg-surface rounded-[6px] p-4 border border-border">
+          <p className="stat-label">Dominated</p>
+          <p className="stat-hero mt-1 !text-data-4">{dominated.length.toLocaleString()}</p>
+          <p className="stat-context mt-0.5">One vendor = 100%</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Avg Implementation</p>
-          <p className="text-2xl font-bold mt-1">{pct(avgImplRate)}</p>
+        <div className="bg-surface rounded-[6px] p-4 border border-border">
+          <p className="stat-label">Avg Implementation</p>
+          <p className="stat-hero mt-1">{pct(avgImplRate)}</p>
         </div>
       </div>
 
       {/* Most Contested */}
       {contested.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-1">
+          <h2 className="section-header mb-1">
             Most Contested Prompts
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
+          <p className="text-[13px] text-muted mb-3">
             No single vendor wins more than 50% — highest competitive intensity
           </p>
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="text-left px-4 py-3">Prompt</th>
-                  <th className="text-left px-4 py-3">Category</th>
-                  <th className="text-right px-4 py-3">Responses</th>
-                  <th className="text-right px-4 py-3">Vendors</th>
-                  <th className="text-left px-4 py-3">Top Vendor</th>
-                  <th className="text-right px-4 py-3">Top %</th>
+                <tr className="border-b border-border">
+                  <th className="th-label text-left px-4 py-3">Prompt</th>
+                  <th className="th-label text-left px-4 py-3">Category</th>
+                  <th className="th-label text-right px-4 py-3">Responses</th>
+                  <th className="th-label text-right px-4 py-3">Vendors</th>
+                  <th className="th-label text-left px-4 py-3">Top Vendor</th>
+                  <th className="th-label text-right px-4 py-3">Top %</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,28 +87,28 @@ export default async function PromptIntelligencePage() {
                   const catMeta = CATEGORY_META[p.category];
                   const topPct = p.response_count > 0 ? p.top_vendor_count / p.response_count : 0;
                   return (
-                    <tr key={p.prompt_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                      <td className="px-4 py-2">
-                        <Link href={`/benchmarks/${p.category}`} className="text-gray-200 hover:text-blue-400">
+                    <tr key={p.prompt_id} className="border-b border-border-subtle hover:bg-raised h-12">
+                      <td className="px-4">
+                        <Link href={`/benchmarks/${p.category}`} className="text-primary hover:text-accent">
                           {prompt?.title || p.prompt_id}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-gray-400 text-xs">
+                      <td className="px-4 text-secondary text-[12px]">
                         {catMeta ? `${catMeta.icon} ${catMeta.label}` : p.category}
                       </td>
-                      <td className="px-4 py-2 text-right">{p.response_count}</td>
-                      <td className="px-4 py-2 text-right text-yellow-400">{p.unique_vendors}</td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 text-right font-data">{p.response_count.toLocaleString()}</td>
+                      <td className="px-4 text-right text-data-3 font-data">{p.unique_vendors.toLocaleString()}</td>
+                      <td className="px-4">
                         {p.top_vendor ? (
                           <Link
                             href={`/benchmarks/vendors/${encodeURIComponent(p.top_vendor)}`}
-                            className="text-blue-400 hover:text-blue-300"
+                            className="text-accent hover:text-accent/80"
                           >
                             {vendorDisplayName(p.top_vendor)}
                           </Link>
                         ) : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right text-yellow-400">{pct(topPct)}</td>
+                      <td className="px-4 text-right text-data-3 font-data">{pct(topPct)}</td>
                     </tr>
                   );
                 })}
@@ -121,10 +121,10 @@ export default async function PromptIntelligencePage() {
       {/* One-Vendor Dominated */}
       {dominated.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-1">
+          <h2 className="section-header mb-1">
             Single-Vendor Dominated
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
+          <p className="text-[13px] text-muted mb-3">
             One vendor wins 100% of responses — monopoly scenarios
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -132,23 +132,23 @@ export default async function PromptIntelligencePage() {
               const prompt = PROMPT_SUMMARIES[p.prompt_id];
               const catMeta = CATEGORY_META[p.category];
               return (
-                <div key={p.prompt_id} className="bg-gray-800 rounded-lg p-4 border-l-4 border-red-500">
-                  <Link href={`/benchmarks/${p.category}`} className="text-sm font-medium text-gray-200 hover:text-blue-400">
+                <div key={p.prompt_id} className="bg-surface rounded-[6px] p-4 border border-border border-l-4 border-l-data-4">
+                  <Link href={`/benchmarks/${p.category}`} className="text-[13px] font-medium text-primary hover:text-accent">
                     {prompt?.title || p.prompt_id}
                   </Link>
                   {catMeta && (
-                    <p className="text-xs text-gray-500 mt-1">{catMeta.icon} {catMeta.label}</p>
+                    <p className="text-[12px] text-muted mt-1">{catMeta.icon} {catMeta.label}</p>
                   )}
                   <div className="flex items-center justify-between mt-2">
                     {p.top_vendor && (
                       <Link
                         href={`/benchmarks/vendors/${encodeURIComponent(p.top_vendor)}`}
-                        className="text-sm text-blue-400 hover:text-blue-300 font-medium"
+                        className="text-[13px] text-accent hover:text-accent/80 font-medium"
                       >
                         {vendorDisplayName(p.top_vendor)}
                       </Link>
                     )}
-                    <span className="text-xs text-gray-500">{p.response_count} response{p.response_count !== 1 ? "s" : ""}</span>
+                    <span className="text-[12px] text-muted">{p.response_count.toLocaleString()} response{p.response_count !== 1 ? "s" : ""}</span>
                   </div>
                 </div>
               );
@@ -160,58 +160,58 @@ export default async function PromptIntelligencePage() {
       {/* Constraint Demand */}
       {constraintDemand.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-1">
+          <h2 className="section-header mb-1">
             Constraint Demand
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
+          <p className="text-[13px] text-muted mb-3">
             Which technical constraints appear most frequently in prompts, and how often AI addresses them
           </p>
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="text-left px-4 py-3">Constraint</th>
-                  <th className="text-right px-4 py-3">Prompts</th>
-                  <th className="text-right px-4 py-3">Responses</th>
-                  <th className="text-right px-4 py-3">Coverage</th>
-                  <th className="text-left px-4 py-3">Top Vendor</th>
-                  <th className="px-4 py-3 w-32"></th>
+                <tr className="border-b border-border">
+                  <th className="th-label text-left px-4 py-3">Constraint</th>
+                  <th className="th-label text-right px-4 py-3">Prompts</th>
+                  <th className="th-label text-right px-4 py-3">Responses</th>
+                  <th className="th-label text-right px-4 py-3">Coverage</th>
+                  <th className="th-label text-left px-4 py-3">Top Vendor</th>
+                  <th className="th-label px-4 py-3 w-32"></th>
                 </tr>
               </thead>
               <tbody>
                 {constraintDemand.map((c) => (
-                  <tr key={c.constraint} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                    <td className="px-4 py-2 font-medium text-gray-200">
+                  <tr key={c.constraint} className="border-b border-border-subtle hover:bg-raised h-12">
+                    <td className="px-4 font-medium text-primary">
                       {c.constraint.replace(/_/g, " ")}
                     </td>
-                    <td className="px-4 py-2 text-right">{c.prompt_count}</td>
-                    <td className="px-4 py-2 text-right text-gray-400">{c.response_count}</td>
-                    <td className="px-4 py-2 text-right">
-                      <span className={
-                        c.coverage_rate > 0.7 ? "text-green-400" :
-                        c.coverage_rate > 0.4 ? "text-yellow-400" :
-                        "text-red-400"
-                      }>
+                    <td className="px-4 text-right font-data">{c.prompt_count.toLocaleString()}</td>
+                    <td className="px-4 text-right text-secondary font-data">{c.response_count.toLocaleString()}</td>
+                    <td className="px-4 text-right">
+                      <span className={`font-data ${
+                        c.coverage_rate > 0.7 ? "text-signal-strong" :
+                        c.coverage_rate > 0.4 ? "text-data-3" :
+                        "text-data-4"
+                      }`}>
                         {pct(c.coverage_rate)}
                       </span>
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-4">
                       {c.top_vendor ? (
                         <Link
                           href={`/benchmarks/vendors/${encodeURIComponent(c.top_vendor)}`}
-                          className="text-blue-400 hover:text-blue-300 text-xs"
+                          className="text-accent hover:text-accent/80 text-[12px]"
                         >
-                          {vendorDisplayName(c.top_vendor)} ({c.top_vendor_count})
+                          {vendorDisplayName(c.top_vendor)} ({c.top_vendor_count.toLocaleString()})
                         </Link>
                       ) : "—"}
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <td className="px-4">
+                      <div className="w-full bg-raised rounded-[6px] h-1.5">
                         <div
-                          className={`h-1.5 rounded-full ${
-                            c.coverage_rate > 0.7 ? "bg-green-500" :
-                            c.coverage_rate > 0.4 ? "bg-yellow-500" :
-                            "bg-red-500"
+                          className={`h-1.5 rounded-[6px] ${
+                            c.coverage_rate > 0.7 ? "bg-signal-strong" :
+                            c.coverage_rate > 0.4 ? "bg-data-3" :
+                            "bg-data-4"
                           }`}
                           style={{ width: `${Math.max(4, Math.round(c.coverage_rate * 100))}%` }}
                         />
@@ -228,24 +228,24 @@ export default async function PromptIntelligencePage() {
       {/* All Prompts Table */}
       {prompts.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-1">
+          <h2 className="section-header mb-1">
             All Benchmark Prompts
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
+          <p className="text-[13px] text-muted mb-3">
             Complete prompt leaderboard sorted by response count
           </p>
-          <div className="bg-gray-800 rounded-lg overflow-hidden overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="bg-surface rounded-[6px] overflow-hidden overflow-x-auto border border-border">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="text-left px-4 py-3 whitespace-nowrap">Prompt</th>
-                  <th className="text-left px-4 py-3 whitespace-nowrap">Category</th>
-                  <th className="text-right px-4 py-3 whitespace-nowrap">Responses</th>
-                  <th className="text-left px-4 py-3 whitespace-nowrap">Top Vendor</th>
-                  <th className="text-right px-4 py-3 whitespace-nowrap">Impl %</th>
-                  <th className="text-right px-4 py-3 whitespace-nowrap">Constraints</th>
-                  <th className="text-right px-4 py-3 whitespace-nowrap">Coverage</th>
-                  <th className="text-center px-4 py-3 whitespace-nowrap">Status</th>
+                <tr className="border-b border-border">
+                  <th className="th-label text-left px-4 py-3 whitespace-nowrap">Prompt</th>
+                  <th className="th-label text-left px-4 py-3 whitespace-nowrap">Category</th>
+                  <th className="th-label text-right px-4 py-3 whitespace-nowrap">Responses</th>
+                  <th className="th-label text-left px-4 py-3 whitespace-nowrap">Top Vendor</th>
+                  <th className="th-label text-right px-4 py-3 whitespace-nowrap">Impl %</th>
+                  <th className="th-label text-right px-4 py-3 whitespace-nowrap">Constraints</th>
+                  <th className="th-label text-right px-4 py-3 whitespace-nowrap">Coverage</th>
+                  <th className="th-label text-center px-4 py-3 whitespace-nowrap">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,52 +253,52 @@ export default async function PromptIntelligencePage() {
                   const prompt = PROMPT_SUMMARIES[p.prompt_id];
                   const catMeta = CATEGORY_META[p.category];
                   return (
-                    <tr key={p.prompt_id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                      <td className="px-4 py-2">
-                        <Link href={`/benchmarks/${p.category}`} className="text-gray-200 hover:text-blue-400">
+                    <tr key={p.prompt_id} className="border-b border-border-subtle hover:bg-raised h-12">
+                      <td className="px-4">
+                        <Link href={`/benchmarks/${p.category}`} className="text-primary hover:text-accent">
                           {prompt?.title || p.prompt_id}
                         </Link>
                       </td>
-                      <td className="px-4 py-2 text-xs text-gray-400 whitespace-nowrap">
+                      <td className="px-4 text-[12px] text-secondary whitespace-nowrap">
                         {catMeta ? `${catMeta.icon} ${catMeta.label}` : p.category}
                       </td>
-                      <td className="px-4 py-2 text-right">{p.response_count}</td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 text-right font-data">{p.response_count.toLocaleString()}</td>
+                      <td className="px-4">
                         {p.top_vendor ? (
                           <Link
                             href={`/benchmarks/vendors/${encodeURIComponent(p.top_vendor)}`}
-                            className="text-blue-400 hover:text-blue-300 text-xs"
+                            className="text-accent hover:text-accent/80 text-[12px]"
                           >
-                            {vendorDisplayName(p.top_vendor)} ({p.top_vendor_count})
+                            {vendorDisplayName(p.top_vendor)} ({p.top_vendor_count.toLocaleString()})
                           </Link>
-                        ) : <span className="text-gray-600">—</span>}
+                        ) : <span className="text-muted">—</span>}
                       </td>
-                      <td className="px-4 py-2 text-right">
-                        <span className={
-                          p.implementation_rate > 0.6 ? "text-green-400" :
-                          p.implementation_rate > 0.3 ? "text-yellow-400" :
-                          "text-red-400"
-                        }>
+                      <td className="px-4 text-right">
+                        <span className={`font-data ${
+                          p.implementation_rate > 0.6 ? "text-signal-strong" :
+                          p.implementation_rate > 0.3 ? "text-data-3" :
+                          "text-data-4"
+                        }`}>
                           {pct(p.implementation_rate)}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-400">{p.total_constraints}</td>
-                      <td className="px-4 py-2 text-right">
-                        <span className={
-                          p.avg_constraints_covered > 0.7 ? "text-green-400" :
-                          p.avg_constraints_covered > 0.4 ? "text-yellow-400" :
-                          "text-red-400"
-                        }>
+                      <td className="px-4 text-right text-secondary font-data">{p.total_constraints.toLocaleString()}</td>
+                      <td className="px-4 text-right">
+                        <span className={`font-data ${
+                          p.avg_constraints_covered > 0.7 ? "text-signal-strong" :
+                          p.avg_constraints_covered > 0.4 ? "text-data-3" :
+                          "text-data-4"
+                        }`}>
                           {pct(p.avg_constraints_covered)}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-4 text-center">
                         {p.is_contested ? (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-900/50 text-yellow-300">Contested</span>
+                          <span className="text-[12px] px-1.5 py-0.5 rounded-[6px] bg-data-3/15 text-data-3">Contested</span>
                         ) : p.is_dominated ? (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/50 text-red-300">Monopoly</span>
+                          <span className="text-[12px] px-1.5 py-0.5 rounded-[6px] bg-data-4/15 text-data-4">Monopoly</span>
                         ) : (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">Normal</span>
+                          <span className="text-[12px] px-1.5 py-0.5 rounded-[6px] bg-raised text-secondary">Normal</span>
                         )}
                       </td>
                     </tr>
@@ -311,9 +311,9 @@ export default async function PromptIntelligencePage() {
       )}
 
       {prompts.length === 0 && (
-        <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-          <p className="text-lg">No prompt data yet</p>
-          <p className="text-sm mt-2">
+        <div className="quiet-signal">
+          <p className="text-[18px] text-secondary">No prompt data yet</p>
+          <p className="text-[13px] mt-2 text-muted">
             Run benchmark sessions to generate prompt intelligence data
           </p>
         </div>

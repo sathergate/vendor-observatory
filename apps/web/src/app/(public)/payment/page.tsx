@@ -65,12 +65,12 @@ export default async function PaymentPage({
 
   return (
     <div className="max-w-md mx-auto px-6 py-16">
-      <h1 className="text-2xl font-bold mb-6 text-center">
+      <h1 className="text-2xl font-bold mb-6 text-center text-primary">
         Complete your setup
       </h1>
       <Suspense
         fallback={
-          <div className="text-center text-gray-400 py-8">Loading...</div>
+          <div className="text-center text-secondary py-8 text-[14px]">Loading...</div>
         }
       >
         <PaymentForm

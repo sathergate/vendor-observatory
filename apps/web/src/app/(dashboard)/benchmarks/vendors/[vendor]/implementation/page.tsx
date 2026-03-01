@@ -9,7 +9,7 @@ import { PROMPT_SUMMARIES } from "../../../prompt-summaries";
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function ImplementationPage({ params }: { params: Promise<{ vendor: string }> }) {
@@ -29,11 +29,11 @@ export default async function ImplementationPage({ params }: { params: Promise<{
       ]} />
 
       <VendorGuard vendorId={vendorId}>
-        <h1 className="text-2xl font-bold">Implementation Rate</h1>
+        <h1 className="text-2xl font-bold text-primary">Implementation Rate</h1>
 
         {!scorecard ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-            <p>No data available yet.</p>
+          <div className="quiet-signal">
+            <p className="text-secondary">No data available yet.</p>
           </div>
         ) : (
           <>
@@ -46,31 +46,31 @@ export default async function ImplementationPage({ params }: { params: Promise<{
 
             {/* KPIs */}
             <div id="kpis">
-              <h2 className="text-lg font-semibold mb-3">Key Metrics</h2>
+              <h2 className="section-header mb-3">Key Metrics</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Implementation Rate</p>
-                  <p className={`text-2xl font-bold mt-1 ${
-                    scorecard.implementationRate > 0.6 ? "text-green-400" :
-                    scorecard.implementationRate > 0.3 ? "text-yellow-400" : "text-red-400"
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Implementation Rate</p>
+                  <p className={`stat-hero mt-1 ${
+                    scorecard.implementationRate > 0.6 ? "!text-signal-strong" :
+                    scorecard.implementationRate > 0.3 ? "!text-data-3" : "!text-data-4"
                   }`}>
                     {pct(scorecard.implementationRate)}
                   </p>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Total Recommended</p>
-                  <p className="text-2xl font-bold mt-1 text-blue-400">{scorecard.totalRecommendations}</p>
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Total Recommended</p>
+                  <p className="stat-hero mt-1 !text-accent">{scorecard.totalRecommendations.toLocaleString()}</p>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Installed / Configured</p>
-                  <p className="text-2xl font-bold mt-1 text-green-400">
-                    {scorecard.implementationContext.filter(c => c.isImplemented).length}
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Installed / Configured</p>
+                  <p className="stat-hero mt-1 !text-signal-strong">
+                    {scorecard.implementationContext.filter(c => c.isImplemented).length.toLocaleString()}
                   </p>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Not Implemented</p>
-                  <p className="text-2xl font-bold mt-1 text-gray-400">
-                    {scorecard.implementationContext.filter(c => !c.isImplemented).length}
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Not Implemented</p>
+                  <p className="stat-hero mt-1 !text-secondary">
+                    {scorecard.implementationContext.filter(c => !c.isImplemented).length.toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -79,15 +79,15 @@ export default async function ImplementationPage({ params }: { params: Promise<{
             {/* Category Breakdown */}
             {scorecard.categoryBreakdown.length > 0 && (
               <div id="category-breakdown">
-                <h2 className="text-lg font-semibold mb-3">Implementation by Category</h2>
-                <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
+                <h2 className="section-header mb-3">Implementation by Category</h2>
+                <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+                  <table className="w-full text-[13px]">
                     <thead>
-                      <tr className="border-b border-gray-700 text-gray-400">
-                        <th className="text-left px-4 py-3">Category</th>
-                        <th className="text-right px-4 py-3">Recommended</th>
-                        <th className="text-right px-4 py-3">Implemented</th>
-                        <th className="text-right px-4 py-3">Impl. Rate</th>
+                      <tr className="border-b border-border">
+                        <th className="th-label text-left px-4 py-3">Category</th>
+                        <th className="th-label text-right px-4 py-3">Recommended</th>
+                        <th className="th-label text-right px-4 py-3">Implemented</th>
+                        <th className="th-label text-right px-4 py-3">Impl. Rate</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -101,15 +101,15 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                         ).length;
                         const rate = recInCat > 0 ? implInCat / recInCat : 0;
                         return (
-                          <tr key={cat.category} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                            <td className="px-4 py-2">
+                          <tr key={cat.category} className="border-b border-border-subtle hover:bg-raised h-12">
+                            <td className="px-4">
                               {catMeta ? `${catMeta.icon} ${catMeta.label}` : cat.category}
                             </td>
-                            <td className="px-4 py-2 text-right text-blue-400">{recInCat}</td>
-                            <td className="px-4 py-2 text-right text-green-400">{implInCat}</td>
-                            <td className="px-4 py-2 text-right">
-                              <span className={`font-medium ${
-                                rate > 0.6 ? "text-green-400" : rate > 0.3 ? "text-yellow-400" : "text-red-400"
+                            <td className="px-4 text-right text-accent font-data">{recInCat.toLocaleString()}</td>
+                            <td className="px-4 text-right text-signal-strong font-data">{implInCat.toLocaleString()}</td>
+                            <td className="px-4 text-right">
+                              <span className={`font-data font-medium ${
+                                rate > 0.6 ? "text-signal-strong" : rate > 0.3 ? "text-data-3" : "text-data-4"
                               }`}>
                                 {pct(rate)}
                               </span>
@@ -126,7 +126,7 @@ export default async function ImplementationPage({ params }: { params: Promise<{
             {/* Platform Split */}
             {Object.keys(scorecard.platformSplit).length > 0 && (
               <div id="platform-split">
-                <h2 className="text-lg font-semibold mb-3">Implementation by Platform</h2>
+                <h2 className="section-header mb-3">Implementation by Platform</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {Object.entries(scorecard.platformSplit).map(([platform, count]) => {
                     const platformImpl = scorecard.implementationContext.filter(
@@ -135,26 +135,26 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                     const implCount = platformImpl.filter(c => c.isImplemented).length;
                     const rate = platformImpl.length > 0 ? implCount / platformImpl.length : 0;
                     return (
-                      <div key={platform} className="bg-gray-800 rounded-lg p-4">
+                      <div key={platform} className="bg-surface rounded-[6px] p-4 border border-border">
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-medium ${
-                            platform === "claude_code" ? "text-blue-300" :
-                            platform === "codex_cli" ? "text-green-300" : "text-purple-300"
+                          <span className={`text-[13px] font-medium ${
+                            platform === "claude_code" ? "text-data-1" :
+                            platform === "codex_cli" ? "text-data-2" : "text-data-3"
                           }`}>
                             {platform}
                           </span>
-                          <span className="text-sm text-gray-400">{count} recommendations</span>
+                          <span className="text-[13px] text-secondary">{count.toLocaleString()} recommendations</span>
                         </div>
                         <div className="flex items-baseline gap-2">
-                          <span className={`text-xl font-bold ${
-                            rate > 0.6 ? "text-green-400" : rate > 0.3 ? "text-yellow-400" : "text-red-400"
+                          <span className={`text-[20px] font-bold font-data ${
+                            rate > 0.6 ? "text-signal-strong" : rate > 0.3 ? "text-data-3" : "text-data-4"
                           }`}>
                             {pct(rate)}
                           </span>
-                          <span className="text-sm text-gray-500">implementation rate</span>
+                          <span className="text-[13px] text-muted">implementation rate</span>
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {implCount} of {platformImpl.length} implemented
+                        <div className="stat-context mt-1">
+                          {implCount.toLocaleString()} of {platformImpl.length.toLocaleString()} implemented
                         </div>
                       </div>
                     );
@@ -165,20 +165,20 @@ export default async function ImplementationPage({ params }: { params: Promise<{
 
             {/* Implementation Context */}
             <div id="context">
-              <h2 className="text-lg font-semibold mb-3">Implementation Context</h2>
+              <h2 className="section-header mb-3">Implementation Context</h2>
               {scorecard.implementationContext.length === 0 ? (
-                <div className="bg-gray-800 rounded-lg p-6 text-center text-gray-400 text-sm">
-                  No implementation context available.
+                <div className="quiet-signal">
+                  <p className="text-secondary text-[13px]">No implementation context available.</p>
                 </div>
               ) : (
-                <div className="bg-gray-800 rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
+                <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+                  <table className="w-full text-[13px]">
                     <thead>
-                      <tr className="border-b border-gray-700 text-gray-400">
-                        <th className="text-left px-4 py-3">Status</th>
-                        <th className="text-left px-4 py-3">Prompt</th>
-                        <th className="text-left px-4 py-3">Category</th>
-                        <th className="text-left px-4 py-3">Platform</th>
+                      <tr className="border-b border-border">
+                        <th className="th-label text-left px-4 py-3">Status</th>
+                        <th className="th-label text-left px-4 py-3">Prompt</th>
+                        <th className="th-label text-left px-4 py-3">Category</th>
+                        <th className="th-label text-left px-4 py-3">Platform</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -186,25 +186,25 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                         const prompt = PROMPT_SUMMARIES[ctx.prompt_id];
                         const catMeta = CATEGORY_META[ctx.category];
                         return (
-                          <tr key={i} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                            <td className="px-4 py-2">
+                          <tr key={i} className="border-b border-border-subtle hover:bg-raised h-12">
+                            <td className="px-4">
                               {ctx.isImplemented ? (
-                                <span className="text-green-400 font-medium">Implemented</span>
+                                <span className="text-signal-strong font-medium">Implemented</span>
                               ) : (
-                                <span className="text-gray-500">Not implemented</span>
+                                <span className="text-muted">Not implemented</span>
                               )}
                             </td>
-                            <td className="px-4 py-2 text-gray-300">
+                            <td className="px-4 text-primary">
                               {prompt?.title || ctx.prompt_id}
                             </td>
-                            <td className="px-4 py-2 text-gray-400">
+                            <td className="px-4 text-secondary">
                               {catMeta ? `${catMeta.icon} ${catMeta.label}` : ctx.category}
                             </td>
-                            <td className="px-4 py-2">
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                ctx.platform === "claude_code" ? "bg-blue-900/50 text-blue-300" :
-                                ctx.platform === "codex_cli" ? "bg-green-900/50 text-green-300" :
-                                "bg-purple-900/50 text-purple-300"
+                            <td className="px-4">
+                              <span className={`text-[12px] px-2 py-0.5 rounded-[6px] ${
+                                ctx.platform === "claude_code" ? "bg-data-1/15 text-data-1" :
+                                ctx.platform === "codex_cli" ? "bg-data-2/15 text-data-2" :
+                                "bg-data-3/15 text-data-3"
                               }`}>
                                 {ctx.platform}
                               </span>

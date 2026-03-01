@@ -36,12 +36,12 @@ export default function AnalyzePage() {
 
   return (
     <div className="max-w-md mx-auto px-6 py-24">
-      <h1 className="text-2xl font-bold mb-2 text-center">
+      <h1 className="text-2xl font-bold mb-2 text-center text-primary">
         What&apos;s your home page?
       </h1>
-      <p className="text-gray-400 text-center mb-8">
+      <p className="text-[14px] text-secondary text-center mb-8">
         Enter your product&apos;s domain and we&apos;ll analyze how AI coding
-        assistants talk about it.
+        assistants mention it.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -53,17 +53,17 @@ export default function AnalyzePage() {
             placeholder="yourproduct.com"
             required
             disabled={loading}
-            className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100
-                       placeholder-gray-500 focus:outline-none focus:border-blue-500
+            className="w-full px-4 py-3 bg-surface border border-border rounded-[6px] text-primary text-[14px]
+                       placeholder-muted focus:outline-none focus:border-accent
                        disabled:opacity-50"
           />
         </div>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-red-400 text-[12px]">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50
-                     rounded-lg font-medium transition-colors"
+          className="w-full py-3 bg-accent hover:bg-accent/90 disabled:opacity-50
+                     rounded-[6px] font-medium text-[14px] transition-colors"
         >
           {loading ? "Analyzing..." : "Start analysis"}
         </button>

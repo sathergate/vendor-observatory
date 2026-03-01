@@ -7,7 +7,7 @@ import {
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function InsightsPage() {
@@ -23,18 +23,17 @@ export default async function InsightsPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Cross-Session Insights</h1>
-        <p className="text-gray-400 mt-1">
+        <h2 className="section-header">Cross-Session Insights</h2>
+        <p className="text-secondary text-[13px] mt-1">
           Platform divergence, constraint influence, and temporal drift analysis
         </p>
       </div>
 
       {!hasData && (
-        <div className="bg-gray-800 rounded-lg p-8 text-center">
-          <p className="text-gray-400">
-            No insight data available yet. Run{" "}
-            <code className="text-blue-400 bg-gray-700 px-2 py-0.5 rounded">obs analyze --type all</code>{" "}
-            to generate cross-session analysis.
+        <div className="quiet-signal">
+          <p className="text-secondary text-[14px]">No organic signal detected in this period.</p>
+          <p className="text-muted text-[13px] italic mt-2">
+            Run <code className="bg-raised px-2 py-0.5 rounded-[6px] text-[12px] font-mono text-accent">obs analyze --type all</code> to generate cross-session analysis.
           </p>
         </div>
       )}
@@ -42,21 +41,21 @@ export default async function InsightsPage() {
       {/* Summary Stats */}
       {hasData && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Prompts Analyzed</p>
-            <p className="text-2xl font-bold mt-1">{totalDivergences}</p>
+          <div className="bg-surface rounded-[6px] p-6 border border-border">
+            <p className="stat-label">Prompts Analyzed</p>
+            <p className="stat-hero mt-1">{totalDivergences.toLocaleString()}</p>
           </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Platform Divergent</p>
-            <p className="text-2xl font-bold mt-1 text-red-400">{divergentCount}</p>
+          <div className="bg-surface rounded-[6px] p-6 border border-border">
+            <p className="stat-label">Platform Divergent</p>
+            <p className="stat-hero mt-1 text-data-4">{divergentCount.toLocaleString()}</p>
           </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Constraints Analyzed</p>
-            <p className="text-2xl font-bold mt-1">{constraintInfluence.length}</p>
+          <div className="bg-surface rounded-[6px] p-6 border border-border">
+            <p className="stat-label">Constraints Analyzed</p>
+            <p className="stat-hero mt-1">{constraintInfluence.length.toLocaleString()}</p>
           </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <p className="text-sm text-gray-400">Drifting Vendors</p>
-            <p className="text-2xl font-bold mt-1 text-yellow-400">{drift.length}</p>
+          <div className="bg-surface rounded-[6px] p-6 border border-border">
+            <p className="stat-label">Drifting Vendors</p>
+            <p className="stat-hero mt-1 text-data-3">{drift.length.toLocaleString()}</p>
           </div>
         </div>
       )}
@@ -64,22 +63,22 @@ export default async function InsightsPage() {
       {/* Section 1: Divergence Matrix */}
       {divergences.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Platform Divergence Matrix</h2>
-          <p className="text-sm text-gray-400">
-            Prompts where different platforms recommend different vendors.
+          <h3 className="section-header">Platform Divergence Matrix</h3>
+          <p className="text-[13px] text-secondary">
+            Prompts where different platforms detect different vendors.
             Higher divergence score = more disagreement.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="bg-surface rounded-[6px] border border-border overflow-x-auto">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="text-left py-2 px-3 text-gray-400 font-medium">Prompt</th>
+                <tr className="border-b border-border">
+                  <th className="th-label text-left py-2 px-3 h-12">Prompt</th>
                   {getAllPlatforms(divergences).map((p) => (
-                    <th key={p} className="text-left py-2 px-3 text-gray-400 font-medium">
+                    <th key={p} className="th-label text-left py-2 px-3 h-12">
                       {p}
                     </th>
                   ))}
-                  <th className="text-left py-2 px-3 text-gray-400 font-medium">Score</th>
+                  <th className="th-label text-left py-2 px-3 h-12">Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -91,9 +90,9 @@ export default async function InsightsPage() {
                     return (
                       <tr
                         key={d.promptId}
-                        className={`border-b border-gray-700/50 ${d.isDivergent ? "bg-red-900/10" : ""}`}
+                        className={`border-b border-border-subtle hover:bg-raised h-12 ${d.isDivergent ? "bg-data-4/5" : ""}`}
                       >
-                        <td className="py-2 px-3 text-gray-300 font-mono text-xs">
+                        <td className="py-2 px-3 text-secondary font-mono text-[12px]">
                           {d.promptId}
                         </td>
                         {platforms.map((platform) => {
@@ -101,21 +100,21 @@ export default async function InsightsPage() {
                           return (
                             <td key={platform} className="py-2 px-3">
                               {vendor ? (
-                                <span className="text-blue-300 text-xs">{vendor}</span>
+                                <span className="text-data-1 text-[12px]">{vendor}</span>
                               ) : (
-                                <span className="text-gray-600 text-xs">—</span>
+                                <span className="text-muted text-[12px]">{"\u2014"}</span>
                               )}
                             </td>
                           );
                         })}
                         <td className="py-2 px-3">
                           <span
-                            className={`text-xs font-medium ${
+                            className={`font-data text-[12px] ${
                               d.divergenceScore > 0.5
-                                ? "text-red-400"
+                                ? "text-data-4"
                                 : d.divergenceScore > 0
-                                  ? "text-yellow-400"
-                                  : "text-green-400"
+                                  ? "text-data-3"
+                                  : "text-data-5"
                             }`}
                           >
                             {d.divergenceScore.toFixed(2)}
@@ -133,33 +132,33 @@ export default async function InsightsPage() {
       {/* Section 2: Constraint Influence */}
       {constraintInfluence.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Constraint Influence Ranking</h2>
-          <p className="text-sm text-gray-400">
+          <h3 className="section-header">Constraint Influence Ranking</h3>
+          <p className="text-[13px] text-secondary">
             Constraints ranked by how much they shift vendor preference.
-            Higher influence = stronger effect on which vendor wins.
+            Higher influence = stronger effect on which vendor is selected.
           </p>
           <div className="space-y-3">
             {constraintInfluence.slice(0, 15).map((ci) => (
-              <div key={ci.constraint} className="bg-gray-800 rounded-lg p-4">
+              <div key={ci.constraint} className="bg-surface rounded-[6px] p-6 border border-border">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-sm text-blue-400">{ci.constraint}</span>
-                  <span className="text-xs text-gray-400">
-                    Influence: {ci.influenceScore.toFixed(2)}
+                  <span className="font-mono text-[13px] text-accent">{ci.constraint}</span>
+                  <span className="text-[12px] text-secondary">
+                    Influence: <span className="font-data">{ci.influenceScore.toFixed(2)}</span>
                   </span>
                 </div>
-                <div className="flex-1 bg-gray-700 rounded-full h-2 mb-3">
+                <div className="flex-1 bg-raised rounded-[6px] h-2 mb-3">
                   <div
-                    className="bg-blue-500 h-full rounded-full transition-all"
+                    className="bg-accent h-full rounded-[6px] transition-all"
                     style={{ width: `${Math.min(100, ci.influenceScore * 100)}%` }}
                   />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {ci.vendorShifts.slice(0, 4).map((vs) => (
-                    <div key={vs.vendor} className="text-xs">
-                      <span className="text-gray-300">{vs.vendor}</span>
+                    <div key={vs.vendor} className="text-[12px]">
+                      <span className="text-secondary">{vs.vendor}</span>
                       <span
-                        className={`ml-1 font-medium ${
-                          vs.delta > 0 ? "text-green-400" : vs.delta < 0 ? "text-red-400" : "text-gray-500"
+                        className={`ml-1 font-data ${
+                          vs.delta > 0 ? "text-data-5" : vs.delta < 0 ? "text-data-4" : "text-muted"
                         }`}
                       >
                         {vs.delta > 0 ? "+" : ""}{pct(vs.delta)}
@@ -176,36 +175,32 @@ export default async function InsightsPage() {
       {/* Section 3: Temporal Drift */}
       {drift.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Temporal Drift</h2>
-          <p className="text-sm text-gray-400">
-            Vendors with significant win rate changes over time (&gt;15% shift).
+          <h3 className="section-header">Temporal Drift</h3>
+          <p className="text-[13px] text-secondary">
+            Vendors with significant detection rate changes over time (&gt;15% shift).
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {drift.map((d) => (
               <div
                 key={d.vendor}
-                className={`rounded-lg p-4 border ${
-                  d.delta > 0
-                    ? "bg-green-900/20 border-green-800"
-                    : "bg-red-900/20 border-red-800"
-                }`}
+                className="bg-surface rounded-[6px] p-6 border border-border"
               >
-                <p className="font-medium text-gray-200">{d.vendor}</p>
-                <div className="flex items-center gap-3 mt-2">
+                <p className="text-primary font-medium text-[14px]">{d.vendor}</p>
+                <div className="flex items-center gap-3 mt-3">
                   <div className="text-center">
-                    <p className="text-xs text-gray-400">Early</p>
-                    <p className="text-sm font-medium">{pct(d.earlyWinRate)}</p>
+                    <p className="text-[11px] text-muted uppercase">Early</p>
+                    <p className="font-data text-[14px] text-secondary">{pct(d.earlyWinRate)}</p>
                   </div>
-                  <span className="text-gray-500">→</span>
+                  <span className="text-muted">{"\u2192"}</span>
                   <div className="text-center">
-                    <p className="text-xs text-gray-400">Late</p>
-                    <p className="text-sm font-medium">{pct(d.lateWinRate)}</p>
+                    <p className="text-[11px] text-muted uppercase">Late</p>
+                    <p className="font-data text-[14px] text-secondary">{pct(d.lateWinRate)}</p>
                   </div>
                   <div className="text-center ml-auto">
-                    <p className="text-xs text-gray-400">Delta</p>
+                    <p className="text-[11px] text-muted uppercase">Delta</p>
                     <p
-                      className={`text-sm font-bold ${
-                        d.delta > 0 ? "text-green-400" : "text-red-400"
+                      className={`font-data text-[14px] font-medium ${
+                        d.delta > 0 ? "text-data-5" : "text-data-4"
                       }`}
                     >
                       {d.delta > 0 ? "+" : ""}{pct(d.delta)}

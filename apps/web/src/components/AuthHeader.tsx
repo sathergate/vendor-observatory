@@ -11,7 +11,6 @@ interface User {
   email: string;
 }
 
-/** Group vendors by category for the dropdown */
 function useVendorsByCategory() {
   return useMemo(() => {
     const groups: Record<string, { id: string; name: string }[]> = {};
@@ -20,7 +19,6 @@ function useVendorsByCategory() {
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push({ id, name: meta.name });
     }
-    // Sort vendors within each category alphabetically
     for (const cat of Object.keys(groups)) {
       groups[cat].sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -28,7 +26,6 @@ function useVendorsByCategory() {
   }, []);
 }
 
-/** Format category ID for display */
 function categoryLabel(cat: string): string {
   return cat.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -57,7 +54,6 @@ export function AuthHeader() {
     return () => window.removeEventListener("auth-change", fetchUser);
   }, []);
 
-  // Close popover on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -83,13 +79,13 @@ export function AuthHeader() {
       <div className="flex items-center gap-2">
         <Link
           href="/login"
-          className="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors"
+          className="px-3 py-1.5 text-[14px] text-secondary hover:text-primary transition-colors"
         >
           Log in
         </Link>
         <Link
           href="/signup"
-          className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded-md font-medium transition-colors"
+          className="px-3 py-1.5 text-[14px] bg-accent hover:bg-accent/90 text-primary rounded-[6px] font-medium transition-colors"
         >
           Sign up
         </Link>
@@ -101,24 +97,23 @@ export function AuthHeader() {
     <div className="relative" ref={popoverRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-medium hover:bg-blue-500 transition-colors"
+        className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-[14px] font-medium hover:bg-accent/90 transition-colors"
         aria-label="Account menu"
       >
         {user.email[0].toUpperCase()}
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
-          <div className="px-4 py-3 border-b border-gray-700">
-            <p className="text-sm text-gray-400">Signed in as</p>
-            <p className="text-sm font-medium text-gray-100 truncate">{user.email}</p>
+        <div className="absolute right-0 mt-2 w-72 bg-surface border border-border rounded-[6px] shadow-xl z-50">
+          <div className="px-4 py-3 border-b border-border-subtle">
+            <p className="text-[12px] text-secondary">Signed in as</p>
+            <p className="text-[14px] font-medium text-primary truncate">{user.email}</p>
           </div>
 
-          {/* Vendor selection */}
-          <div className="px-4 py-3 border-b border-gray-700">
+          <div className="px-4 py-3 border-b border-border-subtle">
             <label
               htmlFor="vendor-select"
-              className="block text-xs font-medium text-gray-400 mb-1.5"
+              className="block text-[12px] font-medium text-secondary mb-1.5"
             >
               Your vendor
             </label>
@@ -126,7 +121,7 @@ export function AuthHeader() {
               id="vendor-select"
               value={selectedVendor ?? ""}
               onChange={(e) => setSelectedVendor(e.target.value || null)}
-              className="w-full bg-gray-900 border border-gray-600 rounded-md px-2.5 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full bg-base border border-border rounded-[6px] px-2.5 py-1.5 text-[14px] text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             >
               <option value="">Select a vendor...</option>
               {Object.entries(vendorsByCategory)
@@ -142,7 +137,7 @@ export function AuthHeader() {
                 ))}
             </select>
             {selectedVendor && (
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-[11px] text-muted mt-1">
                 Viewing profile for {vendorDisplayName(selectedVendor)}
               </p>
             )}
@@ -151,7 +146,7 @@ export function AuthHeader() {
           <div className="p-2">
             <button
               onClick={handleLogout}
-              className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-md transition-colors"
+              className="w-full text-left px-3 py-2 text-[14px] text-secondary hover:bg-raised rounded-[6px] transition-colors"
             >
               Log out
             </button>

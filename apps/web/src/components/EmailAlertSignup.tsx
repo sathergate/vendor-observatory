@@ -26,7 +26,7 @@ export function EmailAlertSignup({ defaultEmail }: { defaultEmail: string }) {
 
   if (submitted) {
     return (
-      <p className="text-green-400 text-sm text-center py-4">
+      <p className="text-signal-strong text-[14px] text-center py-4">
         We&apos;ll notify you of significant changes.
       </p>
     );
@@ -41,13 +41,13 @@ export function EmailAlertSignup({ defaultEmail }: { defaultEmail: string }) {
         placeholder="you@company.com"
         required
         disabled={loading}
-        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100
-                   focus:outline-none focus:border-blue-500 disabled:opacity-50"
+        className="flex-1 px-3 py-2 bg-surface border border-border rounded-[6px] text-primary text-[14px]
+                   focus:outline-none focus:border-accent disabled:opacity-50"
       />
       <button
         type="submit"
         disabled={loading}
-        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 rounded font-medium text-sm transition-colors"
+        className="px-4 py-2 bg-raised hover:bg-border-subtle disabled:opacity-50 rounded-[6px] font-medium text-[14px] text-secondary transition-colors"
       >
         {loading ? "..." : "Get alerts"}
       </button>

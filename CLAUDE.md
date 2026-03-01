@@ -70,5 +70,8 @@ pnpm --filter web dev           # Start dev server at http://localhost:3000
 - commander for CLI
 - chalk for CLI output
 
+## Style Guide
+See `style-guide.md` for the complete visual design system ("Annotated Instrument"). All UI work in `apps/web/` must follow this guide — typography (JetBrains Mono for data, Geist Sans for chrome), color palette (dark-first with CSS custom properties), spacing (4px base unit), chart conventions, component patterns, voice/language rules, and interaction principles.
+
 ## Environment Variables
 - `DATABASE_URL` — PostgreSQL connection string (e.g. `postgresql://user:password@host:5432/observatory`)

@@ -9,7 +9,7 @@ import { loadCategoryMeta } from "../../../categories";
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function UseCasesPage({ params }: { params: Promise<{ vendor: string }> }) {
@@ -29,11 +29,11 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
       ]} />
 
       <VendorGuard vendorId={vendorId}>
-        <h1 className="text-2xl font-bold">Use Cases</h1>
+        <h1 className="text-2xl font-bold text-primary">Use Cases</h1>
 
         {!scorecard || scorecard.categoryBreakdown.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-            <p>No category data available yet.</p>
+          <div className="quiet-signal">
+            <p className="text-secondary">No category data available yet.</p>
           </div>
         ) : (
           <>
@@ -45,7 +45,7 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
 
             {/* Dominant Category Highlight */}
             <div id="dominant">
-              <h2 className="text-lg font-semibold mb-3">Dominant Category</h2>
+              <h2 className="section-header mb-3">Dominant Category</h2>
               {(() => {
                 const sorted = [...scorecard.categoryBreakdown].sort(
                   (a, b) => b.totalInCategory - a.totalInCategory
@@ -54,17 +54,17 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                 const topMeta = CATEGORY_META[top.category];
                 const maxMentions = top.totalInCategory;
                 return (
-                  <div className="bg-gray-800 rounded-lg p-4">
+                  <div className="bg-surface rounded-[6px] p-4 border border-border">
                     <div className="flex items-center gap-3 mb-4">
                       <span className="text-2xl">{topMeta?.icon ?? ""}</span>
                       <div>
                         <Link
                           href={`/benchmarks/${top.category}`}
-                          className="text-lg font-semibold text-gray-100 hover:text-blue-400 transition-colors"
+                          className="text-[18px] font-semibold text-primary hover:text-accent transition-colors"
                         >
                           {topMeta?.label ?? top.category}
                         </Link>
-                        <p className="text-sm text-gray-500">{top.totalInCategory} total mentions</p>
+                        <p className="text-[13px] text-muted">{top.totalInCategory.toLocaleString()} total mentions</p>
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -73,16 +73,16 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                         const width = maxMentions > 0 ? (cat.totalInCategory / maxMentions) * 100 : 0;
                         return (
                           <div key={cat.category} className="flex items-center gap-3">
-                            <span className="w-24 text-sm text-gray-400 truncate">
+                            <span className="w-24 text-[13px] text-secondary truncate">
                               {meta?.icon ?? ""} {meta?.label ?? cat.category}
                             </span>
-                            <div className="flex-1 bg-gray-700 rounded-full h-3">
+                            <div className="flex-1 bg-raised rounded-[6px] h-3">
                               <div
-                                className="bg-blue-500/70 h-3 rounded-full transition-all"
+                                className="bg-accent/70 h-3 rounded-[6px] transition-all"
                                 style={{ width: `${Math.max(2, width)}%` }}
                               />
                             </div>
-                            <span className="text-sm text-gray-400 w-8 text-right">{cat.totalInCategory}</span>
+                            <span className="text-[13px] text-secondary w-8 text-right font-data">{cat.totalInCategory.toLocaleString()}</span>
                           </div>
                         );
                       })}
@@ -94,17 +94,17 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
 
             {/* Category Table */}
             <div id="category-table">
-              <h2 className="text-lg font-semibold mb-3">Category Breakdown</h2>
-              <div className="bg-gray-800 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              <h2 className="section-header mb-3">Category Breakdown</h2>
+              <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+                <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="border-b border-gray-700 text-gray-400">
-                      <th className="text-left px-4 py-3">Category</th>
-                      <th className="text-right px-4 py-3">Recommended</th>
-                      <th className="text-right px-4 py-3">Compared</th>
-                      <th className="text-right px-4 py-3">Rejected</th>
-                      <th className="text-right px-4 py-3">Total</th>
-                      <th className="text-right px-4 py-3">Win Rate</th>
+                    <tr className="border-b border-border">
+                      <th className="th-label text-left px-4 py-3">Category</th>
+                      <th className="th-label text-right px-4 py-3">Recommended</th>
+                      <th className="th-label text-right px-4 py-3">Compared</th>
+                      <th className="th-label text-right px-4 py-3">Rejected</th>
+                      <th className="th-label text-right px-4 py-3">Total</th>
+                      <th className="th-label text-right px-4 py-3">Win Rate</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -112,25 +112,25 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                       const catMeta = CATEGORY_META[cat.category];
                       const wr = cat.totalInCategory > 0 ? cat.recommendations / cat.totalInCategory : 0;
                       return (
-                        <tr key={cat.category} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                          <td className="px-4 py-2">
-                            <Link href={`/benchmarks/${cat.category}`} className="hover:text-blue-400 transition-colors">
+                        <tr key={cat.category} className="border-b border-border-subtle hover:bg-raised h-12">
+                          <td className="px-4">
+                            <Link href={`/benchmarks/${cat.category}`} className="hover:text-accent transition-colors">
                               {catMeta ? `${catMeta.icon} ${catMeta.label}` : cat.category}
                             </Link>
                           </td>
-                          <td className="px-4 py-2 text-right text-blue-400 font-medium">
-                            {cat.recommendations > 0 ? cat.recommendations : <span className="text-gray-600">-</span>}
+                          <td className="px-4 text-right text-accent font-data font-medium">
+                            {cat.recommendations > 0 ? cat.recommendations.toLocaleString() : <span className="text-muted">-</span>}
                           </td>
-                          <td className="px-4 py-2 text-right text-yellow-400">
-                            {cat.comparisons > 0 ? cat.comparisons : <span className="text-gray-600">-</span>}
+                          <td className="px-4 text-right text-data-3 font-data">
+                            {cat.comparisons > 0 ? cat.comparisons.toLocaleString() : <span className="text-muted">-</span>}
                           </td>
-                          <td className="px-4 py-2 text-right text-red-400">
-                            {cat.rejections > 0 ? cat.rejections : <span className="text-gray-600">-</span>}
+                          <td className="px-4 text-right text-data-4 font-data">
+                            {cat.rejections > 0 ? cat.rejections.toLocaleString() : <span className="text-muted">-</span>}
                           </td>
-                          <td className="px-4 py-2 text-right text-gray-400">{cat.totalInCategory}</td>
-                          <td className="px-4 py-2 text-right">
-                            <span className={`font-medium ${
-                              wr > 0.6 ? "text-green-400" : wr > 0.3 ? "text-yellow-400" : "text-red-400"
+                          <td className="px-4 text-right text-secondary font-data">{cat.totalInCategory.toLocaleString()}</td>
+                          <td className="px-4 text-right">
+                            <span className={`font-data font-medium ${
+                              wr > 0.6 ? "text-signal-strong" : wr > 0.3 ? "text-data-3" : "text-data-4"
                             }`}>
                               {pct(wr)}
                             </span>
@@ -145,7 +145,7 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
 
             {/* Platform Split per Category */}
             <div id="platform-categories">
-              <h2 className="text-lg font-semibold mb-3">Platform Split by Category</h2>
+              <h2 className="section-header mb-3">Platform Split by Category</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {scorecard.categoryBreakdown.map((cat) => {
                   const catMeta = CATEGORY_META[cat.category];
@@ -157,21 +157,21 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                   }
                   if (Object.keys(platformCounts).length === 0) return null;
                   return (
-                    <div key={cat.category} className="bg-gray-800 rounded-lg p-4">
-                      <h3 className="text-sm font-medium text-gray-300 mb-2">
+                    <div key={cat.category} className="bg-surface rounded-[6px] p-4 border border-border">
+                      <h3 className="text-[13px] font-medium text-primary mb-2">
                         {catMeta ? `${catMeta.icon} ${catMeta.label}` : cat.category}
                       </h3>
                       <div className="flex gap-2">
                         {Object.entries(platformCounts).map(([platform, count]) => (
                           <span
                             key={platform}
-                            className={`text-xs px-2 py-1 rounded ${
-                              platform === "claude_code" ? "bg-blue-900/50 text-blue-300" :
-                              platform === "codex_cli" ? "bg-green-900/50 text-green-300" :
-                              "bg-purple-900/50 text-purple-300"
+                            className={`text-[12px] px-2 py-1 rounded-[6px] ${
+                              platform === "claude_code" ? "bg-data-1/15 text-data-1" :
+                              platform === "codex_cli" ? "bg-data-2/15 text-data-2" :
+                              "bg-data-3/15 text-data-3"
                             }`}
                           >
-                            {platform}: {count}
+                            {platform}: <span className="font-data">{count.toLocaleString()}</span>
                           </span>
                         ))}
                       </div>

@@ -7,7 +7,7 @@ import { VendorGuard } from "@/components/VendorGuard";
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function TrendsPage({ params }: { params: Promise<{ vendor: string }> }) {
@@ -24,11 +24,11 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
       ]} />
 
       <VendorGuard vendorId={vendorId}>
-        <h1 className="text-2xl font-bold">Confidence Trends</h1>
+        <h1 className="text-2xl font-bold text-primary">Confidence Trends</h1>
 
         {!trend || trend.dataPoints.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-            <p>No trend data available yet.</p>
+          <div className="quiet-signal">
+            <p className="text-secondary">No trend data available yet.</p>
           </div>
         ) : (
           <>
@@ -40,48 +40,48 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
 
             {/* Trend KPIs */}
             <div id="trend-kpis">
-              <h2 className="text-lg font-semibold mb-3">Trend Overview</h2>
+              <h2 className="section-header mb-3">Trend Overview</h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Win Rate Trend</p>
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Win Rate Trend</p>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-bold">
+                    <span className="text-[32px] font-bold">
                       {trend.trend === "rising" ? "\u2191" : trend.trend === "falling" ? "\u2193" : "\u2192"}
                     </span>
-                    <span className={`text-xl font-bold ${
-                      trend.trend === "rising" ? "text-green-400" :
-                      trend.trend === "falling" ? "text-red-400" :
-                      "text-gray-400"
+                    <span className={`text-[20px] font-bold font-data ${
+                      trend.trend === "rising" ? "text-signal-strong" :
+                      trend.trend === "falling" ? "text-data-4" :
+                      "text-secondary"
                     }`}>
                       {trend.winRateDelta >= 0 ? "+" : ""}{pct(trend.winRateDelta)}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="stat-context mt-1">
                     {pct(trend.previousWinRate)} → {pct(trend.currentWinRate)}
                   </p>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Current Win Rate</p>
-                  <p className={`text-2xl font-bold mt-1 ${
-                    trend.currentWinRate > 0.6 ? "text-green-400" :
-                    trend.currentWinRate > 0.3 ? "text-yellow-400" : "text-red-400"
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Current Win Rate</p>
+                  <p className={`stat-hero mt-1 ${
+                    trend.currentWinRate > 0.6 ? "!text-signal-strong" :
+                    trend.currentWinRate > 0.3 ? "!text-data-3" : "!text-data-4"
                   }`}>
                     {pct(trend.currentWinRate)}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">vs prior: {pct(trend.previousWinRate)}</p>
+                  <p className="stat-context mt-1">vs prior: {pct(trend.previousWinRate)}</p>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-400">Mention Volume</p>
+                <div className="bg-surface rounded-[6px] p-4 border border-border">
+                  <p className="stat-label">Mention Volume</p>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className={`text-2xl font-bold ${
-                      trend.mentionDelta > 0 ? "text-green-400" :
-                      trend.mentionDelta < 0 ? "text-red-400" :
-                      "text-gray-400"
+                    <span className={`stat-hero ${
+                      trend.mentionDelta > 0 ? "!text-signal-strong" :
+                      trend.mentionDelta < 0 ? "!text-data-4" :
+                      "!text-secondary"
                     }`}>
-                      {trend.currentMentions}
+                      {trend.currentMentions.toLocaleString()}
                     </span>
-                    <span className="text-sm text-gray-500">
-                      ({trend.mentionDelta >= 0 ? "+" : ""}{trend.mentionDelta} vs prior)
+                    <span className="text-[13px] text-muted">
+                      ({trend.mentionDelta >= 0 ? "+" : ""}{trend.mentionDelta.toLocaleString()} vs prior)
                     </span>
                   </div>
                 </div>
@@ -90,8 +90,8 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
 
             {/* Sparkline */}
             <div id="activity">
-              <h2 className="text-lg font-semibold mb-3">Weekly Activity</h2>
-              <div className="bg-gray-800 rounded-lg p-4">
+              <h2 className="section-header mb-3">Weekly Activity</h2>
+              <div className="bg-surface rounded-[6px] p-4 border border-border">
                 <div className="flex items-end gap-1 h-24">
                   {trend.dataPoints.map((dp, i) => {
                     const maxMentions = Math.max(...trend.dataPoints.map(p => p.mentions), 1);
@@ -100,9 +100,9 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
                       <div
                         key={i}
                         className={`flex-1 rounded-sm ${
-                          dp.winRate > 0.5 ? "bg-green-500/70" :
-                          dp.winRate > 0 ? "bg-yellow-500/70" :
-                          "bg-gray-600"
+                          dp.winRate > 0.5 ? "bg-signal-strong/70" :
+                          dp.winRate > 0 ? "bg-data-3/70" :
+                          "bg-data-muted"
                         }`}
                         style={{ height: `${height}px` }}
                         title={`${dp.weekStart}: ${dp.mentions} mentions, ${pct(dp.winRate)} win rate`}
@@ -110,19 +110,19 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
                     );
                   })}
                 </div>
-                <div className="flex justify-between text-xs text-gray-600 mt-2">
+                <div className="flex justify-between text-[12px] text-muted mt-2">
                   <span>{trend.dataPoints[0]?.weekStart}</span>
                   <span>{trend.dataPoints[trend.dataPoints.length - 1]?.weekStart}</span>
                 </div>
-                <div className="flex gap-3 mt-3 text-xs text-gray-500">
+                <div className="flex gap-3 mt-3 text-[12px] text-muted">
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-green-500/70" /> Win rate &gt; 50%
+                    <span className="w-2 h-2 rounded-sm bg-signal-strong/70" /> Win rate &gt; 50%
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-yellow-500/70" /> Win rate &gt; 0%
+                    <span className="w-2 h-2 rounded-sm bg-data-3/70" /> Win rate &gt; 0%
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-gray-600" /> No wins
+                    <span className="w-2 h-2 rounded-sm bg-data-muted" /> No wins
                   </span>
                 </div>
               </div>
@@ -130,26 +130,26 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
 
             {/* Raw Data Table */}
             <div id="weekly-data">
-              <h2 className="text-lg font-semibold mb-3">Weekly Breakdown</h2>
-              <div className="bg-gray-800 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              <h2 className="section-header mb-3">Weekly Breakdown</h2>
+              <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+                <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="border-b border-gray-700 text-gray-400">
-                      <th className="text-left px-4 py-3">Week Starting</th>
-                      <th className="text-right px-4 py-3">Mentions</th>
-                      <th className="text-right px-4 py-3">Win Rate</th>
+                    <tr className="border-b border-border">
+                      <th className="th-label text-left px-4 py-3">Week Starting</th>
+                      <th className="th-label text-right px-4 py-3">Mentions</th>
+                      <th className="th-label text-right px-4 py-3">Win Rate</th>
                     </tr>
                   </thead>
                   <tbody>
                     {trend.dataPoints.map((dp, i) => (
-                      <tr key={i} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                        <td className="px-4 py-2 text-gray-300">{dp.weekStart}</td>
-                        <td className="px-4 py-2 text-right text-gray-300">{dp.mentions}</td>
-                        <td className="px-4 py-2 text-right">
-                          <span className={`font-medium ${
-                            dp.winRate > 0.5 ? "text-green-400" :
-                            dp.winRate > 0 ? "text-yellow-400" :
-                            "text-gray-500"
+                      <tr key={i} className="border-b border-border-subtle hover:bg-raised h-12">
+                        <td className="px-4 text-primary">{dp.weekStart}</td>
+                        <td className="px-4 text-right text-primary font-data">{dp.mentions.toLocaleString()}</td>
+                        <td className="px-4 text-right">
+                          <span className={`font-data font-medium ${
+                            dp.winRate > 0.5 ? "text-signal-strong" :
+                            dp.winRate > 0 ? "text-data-3" :
+                            "text-muted"
                           }`}>
                             {pct(dp.winRate)}
                           </span>

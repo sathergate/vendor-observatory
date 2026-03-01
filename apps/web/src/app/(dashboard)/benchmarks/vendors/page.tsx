@@ -9,7 +9,7 @@ import { loadCategoryMeta } from "../categories";
 export const dynamic = "force-dynamic";
 
 function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 export default async function VendorIndexPage() {
@@ -57,43 +57,41 @@ export default async function VendorIndexPage() {
     <div className="space-y-8">
       <div>
         <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Vendor Intel" }]} />
-        <h1 className="text-2xl font-bold">Vendor Intelligence</h1>
-        <p className="text-gray-400 mt-1">
-          Per-vendor scorecards showing recommendation rates, constraint coverage,
-          competitive dynamics, and actionable improvement recommendations
+        <h1 className="text-[24px] font-bold text-primary">Vendor Intelligence</h1>
+        <p className="text-secondary mt-1">
+          Per-vendor scorecards showing detection rates, constraint coverage,
+          competitive dynamics, and improvement signals
         </p>
       </div>
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Vendors Tracked</p>
-          <p className="text-2xl font-bold mt-1">{vendors.length}</p>
+        <div className="bg-surface rounded-[6px] p-6 border border-border">
+          <p className="stat-label">Vendors Tracked</p>
+          <p className="stat-hero mt-1">{vendors.length.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Primary Recommendations</p>
-          <p className="text-2xl font-bold mt-1">{recommended.length}</p>
+        <div className="bg-surface rounded-[6px] p-6 border border-border">
+          <p className="stat-label">Primary Detections</p>
+          <p className="stat-hero mt-1">{recommended.length.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Mentioned Only</p>
-          <p className="text-2xl font-bold mt-1">{mentionedOnly.length}</p>
+        <div className="bg-surface rounded-[6px] p-6 border border-border">
+          <p className="stat-label">Mentioned Only</p>
+          <p className="stat-hero mt-1">{mentionedOnly.length.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Avg Win Rate</p>
-          <p className="text-2xl font-bold mt-1">
+        <div className="bg-surface rounded-[6px] p-6 border border-border">
+          <p className="stat-label">Avg Win Rate</p>
+          <p className="stat-hero mt-1">
             {recommended.length > 0
-              ? `${Math.round(
-                  (recommended.reduce((sum, v) => sum + v.winRate, 0) / recommended.length) * 100
-                )}%`
-              : "—"}
+              ? `${((recommended.reduce((sum, v) => sum + v.winRate, 0) / recommended.length) * 100).toFixed(1)}%`
+              : "\u2014"}
           </p>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-400">Top AI-Readiness</p>
-          <p className="text-2xl font-bold mt-1">
+        <div className="bg-surface rounded-[6px] p-6 border border-border">
+          <p className="stat-label">Top AI-Readiness</p>
+          <p className="stat-hero mt-1">
             {aiReadinessScores.length > 0 ? (
-              <span className={aiReadinessScores[0].gradeColor}>{aiReadinessScores[0].score}</span>
-            ) : "—"}
+              <span className="text-accent">{aiReadinessScores[0].score}</span>
+            ) : "\u2014"}
           </p>
         </div>
       </div>
@@ -101,30 +99,30 @@ export default async function VendorIndexPage() {
       {/* Movers section */}
       {(gainers.length > 0 || losers.length > 0) && (
         <div>
-          <h2 className="text-lg font-semibold mb-3">
+          <h2 className="section-header mb-1">
             Movers
-            <span className="text-sm font-normal text-gray-500 ml-2">
-              Vendors gaining or losing AI recommendation share
-            </span>
           </h2>
+          <p className="text-[14px] text-muted mb-3">
+            Vendors gaining or losing AI signal share
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {gainers.length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-green-400 mb-3">↑ Gaining Share</h3>
+              <div className="bg-surface rounded-[6px] p-6 border border-border">
+                <h3 className="text-[13px] font-medium text-data-5 mb-3">Gaining Share</h3>
                 <div className="space-y-3">
                   {gainers.map((t) => (
                     <div key={t.vendor} className="flex items-center justify-between">
                       <Link
                         href={`/benchmarks/vendors/${encodeURIComponent(t.vendor)}`}
-                        className="text-sm text-gray-200 hover:text-blue-400"
+                        className="text-[14px] text-primary hover:text-accent"
                       >
                         {vendorDisplayName(t.vendor)}
                       </Link>
                       <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500">
-                          {pct(t.previousWinRate)} → {pct(t.currentWinRate)}
+                        <span className="text-[12px] text-muted font-data">
+                          {pct(t.previousWinRate)} &rarr; {pct(t.currentWinRate)}
                         </span>
-                        <span className="text-sm font-medium text-green-400">
+                        <span className="text-[14px] font-data text-data-5">
                           +{pct(t.winRateDelta)}
                         </span>
                       </div>
@@ -134,22 +132,22 @@ export default async function VendorIndexPage() {
               </div>
             )}
             {losers.length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-red-400 mb-3">↓ Losing Share</h3>
+              <div className="bg-surface rounded-[6px] p-6 border border-border">
+                <h3 className="text-[13px] font-medium text-data-4 mb-3">Losing Share</h3>
                 <div className="space-y-3">
                   {losers.map((t) => (
                     <div key={t.vendor} className="flex items-center justify-between">
                       <Link
                         href={`/benchmarks/vendors/${encodeURIComponent(t.vendor)}`}
-                        className="text-sm text-gray-200 hover:text-blue-400"
+                        className="text-[14px] text-primary hover:text-accent"
                       >
                         {vendorDisplayName(t.vendor)}
                       </Link>
                       <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500">
-                          {pct(t.previousWinRate)} → {pct(t.currentWinRate)}
+                        <span className="text-[12px] text-muted font-data">
+                          {pct(t.previousWinRate)} &rarr; {pct(t.currentWinRate)}
                         </span>
-                        <span className="text-sm font-medium text-red-400">
+                        <span className="text-[14px] font-data text-data-4">
                           {pct(t.winRateDelta)}
                         </span>
                       </div>
@@ -165,48 +163,48 @@ export default async function VendorIndexPage() {
       {/* AI-Readiness Leaderboard */}
       {aiReadinessScores.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-1">
+          <h2 className="section-header mb-1">
             AI-Readiness Leaderboard
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
-            How well each vendor&apos;s documentation and SDK helps AI assistants recommend and implement it
+          <p className="text-[14px] text-muted mb-3">
+            How well each vendor&apos;s documentation and SDK helps AI assistants detect and implement it
           </p>
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+            <table className="w-full text-[14px]">
               <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="text-left px-4 py-3 w-8">#</th>
-                  <th className="text-left px-4 py-3">Vendor</th>
-                  <th className="text-right px-4 py-3">Score</th>
-                  <th className="text-center px-4 py-3">Grade</th>
+                <tr className="border-b border-border">
+                  <th className="th-label text-left px-4 py-3 w-8">#</th>
+                  <th className="th-label text-left px-4 py-3">Vendor</th>
+                  <th className="th-label text-right px-4 py-3">Score</th>
+                  <th className="th-label text-center px-4 py-3">Grade</th>
                   <th className="px-4 py-3 w-40"></th>
                 </tr>
               </thead>
               <tbody>
                 {aiReadinessScores.slice(0, 15).map((entry, i) => (
-                  <tr key={entry.vendor} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                    <td className="px-4 py-2 text-gray-500">{i + 1}</td>
+                  <tr key={entry.vendor} className="border-b border-border-subtle hover:bg-raised">
+                    <td className="px-4 py-2 text-muted font-data">{i + 1}</td>
                     <td className="px-4 py-2">
                       <Link
                         href={`/benchmarks/vendors/${encodeURIComponent(entry.vendor)}`}
-                        className="text-gray-200 hover:text-blue-400"
+                        className="text-primary hover:text-accent"
                       >
                         {vendorDisplayName(entry.vendor)}
                       </Link>
                     </td>
-                    <td className="px-4 py-2 text-right font-bold">
-                      <span className={entry.gradeColor}>{entry.score}</span>
+                    <td className="px-4 py-2 text-right font-data font-bold">
+                      <span className="text-accent">{entry.score}</span>
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <span className={`font-bold ${entry.gradeColor}`}>{entry.grade}</span>
+                      <span className="font-data font-bold text-accent">{entry.grade}</span>
                     </td>
                     <td className="px-4 py-2">
-                      <div className="w-full bg-gray-700 rounded-full h-2">
+                      <div className="w-full bg-data-muted rounded-[6px] h-2">
                         <div
-                          className={`h-2 rounded-full ${
-                            entry.score >= 70 ? "bg-green-500" :
-                            entry.score >= 40 ? "bg-yellow-500" :
-                            "bg-red-500"
+                          className={`h-2 rounded-[6px] ${
+                            entry.score >= 70 ? "bg-data-5" :
+                            entry.score >= 40 ? "bg-data-3" :
+                            "bg-data-4"
                           }`}
                           style={{ width: `${Math.max(2, entry.score)}%` }}
                         />
@@ -223,12 +221,12 @@ export default async function VendorIndexPage() {
       {/* Recommended vendors */}
       {recommended.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-3">
-            Primary Recommendations
-            <span className="text-sm font-normal text-gray-500 ml-2">
-              Vendors chosen as the top recommendation in at least one scenario
-            </span>
+          <h2 className="section-header mb-1">
+            Primary Detections
           </h2>
+          <p className="text-[14px] text-muted mb-3">
+            Vendors chosen as the top signal in at least one scenario
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {recommended.map((v) => {
               const catMeta = v.topCategory ? CATEGORY_META[v.topCategory] : null;
@@ -236,57 +234,57 @@ export default async function VendorIndexPage() {
                 <Link
                   key={v.vendor}
                   href={`/benchmarks/vendors/${encodeURIComponent(v.vendor)}`}
-                  className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700/80 hover:ring-1 hover:ring-gray-600 transition-all group"
+                  className="bg-surface rounded-[6px] p-4 border border-border hover:bg-raised hover:border-border transition-all group"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h3 className="font-semibold text-gray-100 group-hover:text-blue-400 transition-colors">
+                      <h3 className="font-semibold text-primary group-hover:text-accent transition-colors">
                         {vendorDisplayName(v.vendor)}
                       </h3>
                       {VENDOR_META[v.vendor]?.website && (
-                        <p className="text-xs text-gray-500">{VENDOR_META[v.vendor].website}</p>
+                        <p className="text-[12px] text-muted">{VENDOR_META[v.vendor].website}</p>
                       )}
                     </div>
-                    <span className="text-2xl font-bold text-blue-400">
-                      {v.totalRecommendations}
+                    <span className="font-data text-[24px] text-accent">
+                      {v.totalRecommendations.toLocaleString()}
                     </span>
                   </div>
 
                   {catMeta && (
                     <div className="flex items-center gap-1 mb-2">
-                      <span className="text-xs">{catMeta.icon}</span>
-                      <span className="text-xs text-gray-400">{catMeta.label}</span>
+                      <span className="text-[12px]">{catMeta.icon}</span>
+                      <span className="text-[12px] text-secondary">{catMeta.label}</span>
                     </div>
                   )}
 
                   <div className="space-y-1.5 mt-3">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Win rate</span>
-                      <span className="text-gray-300">{Math.round(v.winRate * 100)}%</span>
+                    <div className="flex justify-between text-[12px]">
+                      <span className="text-muted">Win rate</span>
+                      <span className="font-data text-primary">{(v.winRate * 100).toFixed(1)}%</span>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <div className="w-full bg-data-muted rounded-[6px] h-1.5">
                       <div
-                        className="bg-blue-500 h-1.5 rounded-full"
+                        className="bg-accent h-1.5 rounded-[6px]"
                         style={{ width: `${Math.round(v.winRate * 100)}%` }}
                       />
                     </div>
 
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Implementation rate</span>
-                      <span className="text-gray-300">{Math.round(v.implementationRate * 100)}%</span>
+                    <div className="flex justify-between text-[12px]">
+                      <span className="text-muted">Implementation rate</span>
+                      <span className="font-data text-primary">{(v.implementationRate * 100).toFixed(1)}%</span>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-1.5">
+                    <div className="w-full bg-data-muted rounded-[6px] h-1.5">
                       <div
-                        className={`h-1.5 rounded-full ${
-                          v.implementationRate > 0.5 ? "bg-green-500" : v.implementationRate > 0.2 ? "bg-yellow-500" : "bg-red-500"
+                        className={`h-1.5 rounded-[6px] ${
+                          v.implementationRate > 0.5 ? "bg-data-5" : v.implementationRate > 0.2 ? "bg-data-3" : "bg-data-4"
                         }`}
                         style={{ width: `${Math.max(4, Math.round(v.implementationRate * 100))}%` }}
                       />
                     </div>
 
-                    <div className="flex justify-between text-xs">
-                      <span className="text-gray-500">Total mentions</span>
-                      <span className="text-gray-400">{v.totalMentions}</span>
+                    <div className="flex justify-between text-[12px]">
+                      <span className="text-muted">Total mentions</span>
+                      <span className="font-data text-secondary">{v.totalMentions.toLocaleString()}</span>
                     </div>
 
                     {v.platforms.length > 0 && (
@@ -307,12 +305,12 @@ export default async function VendorIndexPage() {
       {/* Mentioned-only vendors */}
       {mentionedOnly.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-3">
-            Mentioned but Not Recommended
-            <span className="text-sm font-normal text-gray-500 ml-2">
-              Vendors appearing in responses but never selected as the primary recommendation
-            </span>
+          <h2 className="section-header mb-1">
+            Mentioned but Not Detected as Primary
           </h2>
+          <p className="text-[14px] text-muted mb-3">
+            Vendors appearing in responses but never selected as the primary signal
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {mentionedOnly.map((v) => {
               const catMeta = v.topCategory ? CATEGORY_META[v.topCategory] : null;
@@ -320,20 +318,20 @@ export default async function VendorIndexPage() {
                 <Link
                   key={v.vendor}
                   href={`/benchmarks/vendors/${encodeURIComponent(v.vendor)}`}
-                  className="bg-gray-800/50 border border-dashed border-gray-700 rounded-lg p-4 hover:border-gray-500 hover:bg-gray-800/70 transition-all group"
+                  className="bg-surface/50 border border-dashed border-border-subtle rounded-[6px] p-4 hover:border-border hover:bg-surface/70 transition-all group"
                 >
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-semibold text-gray-300 group-hover:text-blue-400 transition-colors">
+                    <h3 className="font-semibold text-secondary group-hover:text-accent transition-colors">
                       {vendorDisplayName(v.vendor)}
                     </h3>
-                    <span className="text-sm text-gray-500">
-                      {v.totalMentions} mention{v.totalMentions !== 1 ? "s" : ""}
+                    <span className="text-[14px] text-muted font-data">
+                      {v.totalMentions.toLocaleString()} mention{v.totalMentions !== 1 ? "s" : ""}
                     </span>
                   </div>
                   {catMeta && (
                     <div className="flex items-center gap-1">
-                      <span className="text-xs">{catMeta.icon}</span>
-                      <span className="text-xs text-gray-500">{catMeta.label}</span>
+                      <span className="text-[12px]">{catMeta.icon}</span>
+                      <span className="text-[12px] text-muted">{catMeta.label}</span>
                     </div>
                   )}
                 </Link>
@@ -344,9 +342,9 @@ export default async function VendorIndexPage() {
       )}
 
       {vendors.length === 0 && (
-        <div className="bg-gray-800 rounded-lg p-8 text-center text-gray-400">
-          <p className="text-lg">No vendor data yet</p>
-          <p className="text-sm mt-2">
+        <div className="quiet-signal">
+          <p className="text-[16px] text-secondary">No vendor data yet</p>
+          <p className="text-[14px] mt-2 text-muted">
             Run benchmark sessions to generate vendor intelligence data
           </p>
         </div>

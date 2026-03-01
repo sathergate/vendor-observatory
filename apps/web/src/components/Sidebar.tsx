@@ -7,8 +7,6 @@ import { NavLink } from "./NavLink";
 import { useVendor } from "@/context/VendorContext";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 
-// DEPRECATED: NAV_GROUPS is going to be deleted. New links should be added
-// to VENDOR_NAV_LINKS instead.
 const NAV_GROUPS = [
   {
     label: "Benchmarks",
@@ -52,18 +50,16 @@ export function Sidebar() {
   const pathname = usePathname();
   const { selectedVendor } = useVendor();
 
-  // Close drawer on navigation
   const handleLinkClick = () => setOpen(false);
 
-  // Logo is "active" on the home/benchmarks page
   const isHome = pathname === "/overview" || pathname === "/benchmarks";
 
   return (
     <>
-      {/* Mobile hamburger — visible below lg breakpoint */}
+      {/* Mobile hamburger */}
       <button
         onClick={() => setOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-40 p-2 rounded-md bg-gray-950 border border-gray-700 text-gray-400 hover:text-white"
+        className="lg:hidden fixed top-4 left-4 z-40 p-2 rounded-[6px] bg-surface border border-border text-secondary hover:text-primary"
         aria-label="Open navigation"
       >
         <div className="space-y-1">
@@ -81,32 +77,32 @@ export function Sidebar() {
         />
       )}
 
-      {/* Sidebar panel */}
+      {/* Sidebar panel — 220px per style guide */}
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-40
-          w-56 bg-gray-950 border-r border-gray-800
+          w-[220px] bg-base border-r border-border-subtle
           flex flex-col shrink-0
           transition-transform duration-200
           ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+        <div className="p-4 border-b border-border-subtle flex items-center justify-between">
           <div>
             <Link
               href="/overview"
               onClick={handleLinkClick}
-              className={`text-lg font-bold transition-colors ${
-                isHome ? "text-blue-300" : "text-blue-400 hover:text-blue-300"
+              className={`text-[14px] font-semibold transition-colors ${
+                isHome ? "text-accent" : "text-primary hover:text-accent"
               }`}
             >
               Vendor Observatory
             </Link>
-            <p className="text-xs text-gray-500 mt-1">Revealed Preference</p>
+            <p className="text-[11px] text-muted mt-0.5">Revealed Preference</p>
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="lg:hidden text-gray-500 hover:text-gray-300 p-1"
+            className="lg:hidden text-muted hover:text-secondary p-1"
             aria-label="Close navigation"
           >
             ✕
@@ -117,9 +113,7 @@ export function Sidebar() {
           {selectedVendor ? (
             <div className="mb-4">
               <div className="px-3 pt-2 pb-1">
-                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  My Dashboard
-                </span>
+                <span className="section-header">My Dashboard</span>
               </div>
               <div className="space-y-0.5">
                 {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
@@ -137,9 +131,7 @@ export function Sidebar() {
               {NAV_GROUPS.map((group) => (
                 <div key={group.label} className="mb-4">
                   <div className="px-3 pt-2 pb-1">
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      {group.label}
-                    </span>
+                    <span className="section-header">{group.label}</span>
                   </div>
                   <div className="space-y-0.5">
                     {group.links.map((link) => (
@@ -156,7 +148,7 @@ export function Sidebar() {
           )}
         </nav>
 
-        <div className="p-4 border-t border-gray-800 text-xs text-gray-500">
+        <div className="p-4 border-t border-border-subtle text-[11px] text-muted">
           v0.2.0
         </div>
       </aside>

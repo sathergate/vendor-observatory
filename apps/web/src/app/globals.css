@@ -1,20 +1,175 @@
 @import "tailwindcss";
 
+/* ── Style Guide: Annotated Instrument ──────────────────────────────── */
+
+/* Dark mode (default) */
 :root {
-  --bg-primary: #111827;
-  --bg-secondary: #1f2937;
-  --bg-tertiary: #374151;
-  --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --border: #374151;
-  --success: #22c55e;
-  --warning: #eab308;
-  --danger: #ef4444;
+  --bg-base:        #0d0d0f;
+  --bg-surface:     #111114;
+  --bg-raised:      #18181c;
+  --border-subtle:  #222228;
+  --border:         #2e2e38;
+
+  --text-primary:   #f0f0f4;
+  --text-secondary: #8a8a9a;
+  --text-muted:     #5a5a6e;
+
+  --accent:         #6366f1;
+  --accent-subtle:  #6366f120;
+
+  --data-1:  #6366f1;
+  --data-2:  #22d3ee;
+  --data-3:  #f59e0b;
+  --data-4:  #f43f5e;
+  --data-5:  #a3e635;
+  --data-muted: #3a3a4e;
+
+  --signal-strong:  #6366f1;
+  --signal-noise:   #3a3a4e;
+  --signal-absent:  #222228;
+
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --font-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+
+  color-scheme: dark;
 }
 
+/* Light mode */
+@media (prefers-color-scheme: light) {
+  :root:not(.dark) {
+    --bg-base:        #fafafa;
+    --bg-surface:     #ffffff;
+    --bg-raised:      #f4f4f6;
+    --border-subtle:  #e8e8ec;
+    --border:         #d4d4dc;
+
+    --text-primary:   #111114;
+    --text-secondary: #5a5a6e;
+    --text-muted:     #9090a4;
+
+    --accent:         #4f46e5;
+    --accent-subtle:  #4f46e520;
+
+    --data-1:  #4f46e5;
+    --data-2:  #0891b2;
+    --data-3:  #d97706;
+    --data-4:  #e11d48;
+    --data-5:  #65a30d;
+    --data-muted: #c4c4d4;
+
+    color-scheme: light;
+  }
+}
+
+/* ── Tailwind theme extension ───────────────────────────────────────── */
+@theme {
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+
+  --color-data-1: var(--data-1);
+  --color-data-2: var(--data-2);
+  --color-data-3: var(--data-3);
+  --color-data-4: var(--data-4);
+  --color-data-5: var(--data-5);
+  --color-data-muted: var(--data-muted);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border: var(--border);
+
+  --color-signal-strong: var(--signal-strong);
+  --color-signal-noise: var(--signal-noise);
+  --color-signal-absent: var(--signal-absent);
+
+  --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans);
+}
+
+/* ── Base styles ────────────────────────────────────────────────────── */
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-base);
   color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Data values: always monospace */
+.font-data {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* Section headers: 13px / 600 / uppercase / 0.08em */
+.section-header {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+/* Annotation block */
+.annotation-block {
+  border-left: 2px solid var(--data-muted);
+  padding-left: 12px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-muted);
+  max-width: 480px;
+  margin: 16px 0;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Quiet signal empty state */
+.quiet-signal {
+  background-color: var(--signal-absent);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* Table header: 12px / 600 / uppercase / 0.06em */
+.th-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+/* Stat card label: 12px / 500 / uppercase */
+.stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Hero metric: 32px monospace 500 */
+.stat-hero {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Context line */
+.stat-context {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
 }
