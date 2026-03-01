@@ -46,6 +46,46 @@ if (!process.env.OPENAI_API_KEY) {
 
 const pool = new Pool({ connectionString: dbUrl });
 
+// ── Ensure daily benchmark tables exist ──────────────────────────
+
+async function ensureDailyBenchmarkTables(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_benchmark_runs (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_date        DATE NOT NULL UNIQUE,
+      started_at      TIMESTAMPTZ,
+      completed_at    TIMESTAMPTZ,
+      worker_id       TEXT,
+      budget_usd      FLOAT NOT NULL DEFAULT 25.0,
+      assistants      TEXT[] NOT NULL DEFAULT ARRAY['claude_code','codex_cli','cursor'],
+      category        TEXT,
+      total_pairs     INT,
+      successful      INT,
+      failed          INT,
+      skipped         INT,
+      total_cost_usd  FLOAT,
+      error           TEXT
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS benchmark_costs (
+      id           SERIAL PRIMARY KEY,
+      recorded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      run_date     DATE NOT NULL,
+      run_id       UUID REFERENCES daily_benchmark_runs(id),
+      prompt_id    TEXT NOT NULL,
+      assistant    TEXT NOT NULL,
+      cost_usd     FLOAT,
+      duration_ms  INT,
+      error        TEXT
+    )
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS benchmark_costs_run_date ON benchmark_costs(run_date)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS benchmark_costs_run_id ON benchmark_costs(run_id)`);
+}
+
 // ── Ensure required columns exist ─────────────────────────────────
 
 async function ensureColumns(): Promise<void> {
@@ -165,6 +205,7 @@ async function mainLoop() {
   console.log(`[worker] ${WORKER_ID} starting polling loop`);
 
   // Ensure DB schema is up to date before polling
+  await ensureDailyBenchmarkTables();
   await ensureColumns();
 
   let iteration = 0;
