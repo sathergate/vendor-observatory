@@ -70,6 +70,27 @@ async function migrate() {
 
     console.log("✓ Created benchmark_costs table");
 
+    // ── daily_benchmark_logs ────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS daily_benchmark_logs (
+        id         SERIAL PRIMARY KEY,
+        ts         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        run_id     UUID REFERENCES daily_benchmark_runs(id),
+        event      TEXT NOT NULL,
+        detail     JSONB
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS daily_benchmark_logs_run_id ON daily_benchmark_logs(run_id)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS daily_benchmark_logs_event ON daily_benchmark_logs(event)
+    `);
+
+    console.log("✓ Created daily_benchmark_logs table");
+
     await client.query("COMMIT");
     console.log("\nMigration complete.");
   } catch (err) {

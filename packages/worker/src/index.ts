@@ -84,6 +84,19 @@ async function ensureDailyBenchmarkTables(): Promise<void> {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS benchmark_costs_run_date ON benchmark_costs(run_date)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS benchmark_costs_run_id ON benchmark_costs(run_id)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS daily_benchmark_logs (
+      id         SERIAL PRIMARY KEY,
+      ts         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      run_id     UUID REFERENCES daily_benchmark_runs(id),
+      event      TEXT NOT NULL,
+      detail     JSONB
+    )
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS daily_benchmark_logs_run_id ON daily_benchmark_logs(run_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS daily_benchmark_logs_event ON daily_benchmark_logs(event)`);
 }
 
 // ── Ensure required columns exist ─────────────────────────────────

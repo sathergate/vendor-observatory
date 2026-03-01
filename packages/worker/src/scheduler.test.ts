@@ -26,41 +26,24 @@ describe("checkAndScheduleDailyBenchmark", () => {
     vi.useRealTimers();
   });
 
-  it("does nothing before 12:00 UTC", async () => {
-    // Set clock to 11:59 UTC
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T11:59:00Z"));
-
-    const pool = createMockPool();
+  it("claims a pending run and executes it", async () => {
+    const pool = createMockPool(() => ({ rows: [{ id: "run-uuid-123", run_date: "2026-02-28" }] }));
     await checkAndScheduleDailyBenchmark(pool, "worker-abc");
 
-    expect(pool.query).not.toHaveBeenCalled();
-    expect(runDailyBenchmark).not.toHaveBeenCalled();
-  });
-
-  it("attempts to claim after 12:00 UTC", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T14:00:00Z"));
-
-    const pool = createMockPool(() => ({ rows: [{ id: "run-uuid-123" }] }));
-    await checkAndScheduleDailyBenchmark(pool, "worker-abc");
-
-    // Should have issued the INSERT query
+    // Should have issued the UPDATE query to claim the run
     expect(pool.query).toHaveBeenCalledTimes(1);
     const [sql, params] = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(sql).toContain("INSERT INTO daily_benchmark_runs");
-    expect(sql).toContain("ON CONFLICT (run_date) DO NOTHING");
-    expect(params).toEqual(["2026-02-28", "worker-abc"]);
+    expect(sql).toContain("UPDATE daily_benchmark_runs");
+    expect(sql).toContain("started_at IS NULL");
+    expect(sql).toContain("FOR UPDATE SKIP LOCKED");
+    expect(params).toEqual(["worker-abc"]);
 
     // Should have called runDailyBenchmark with the returned id
     expect(runDailyBenchmark).toHaveBeenCalledWith("run-uuid-123", pool);
   });
 
-  it("skips if today's run was already claimed (empty RETURNING)", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T14:00:00Z"));
-
-    // ON CONFLICT DO NOTHING → empty rows
+  it("does nothing when no pending runs exist", async () => {
+    // Empty rows = no unclaimed runs
     const pool = createMockPool(() => ({ rows: [] }));
     await checkAndScheduleDailyBenchmark(pool, "worker-abc");
 
@@ -69,10 +52,7 @@ describe("checkAndScheduleDailyBenchmark", () => {
   });
 
   it("calls markDailyRunFailed when runDailyBenchmark throws", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-02-28T14:00:00Z"));
-
-    const pool = createMockPool(() => ({ rows: [{ id: "run-fail-id" }] }));
+    const pool = createMockPool(() => ({ rows: [{ id: "run-fail-id", run_date: "2026-02-28" }] }));
     const err = new Error("adapter crash");
     vi.mocked(runDailyBenchmark).mockRejectedValueOnce(err);
 
@@ -81,27 +61,27 @@ describe("checkAndScheduleDailyBenchmark", () => {
     expect(markDailyRunFailed).toHaveBeenCalledWith("run-fail-id", err, pool);
   });
 
-  it("formats today's date correctly across midnight boundary", async () => {
+  it("can run at any time of day (no time gate)", async () => {
+    // Early morning — should still attempt to claim
     vi.useFakeTimers();
-    // 2026-03-01 00:30 UTC → should be date "2026-03-01" but hour 0 < 12
-    vi.setSystemTime(new Date("2026-03-01T00:30:00Z"));
+    vi.setSystemTime(new Date("2026-03-01T03:00:00Z"));
 
-    const pool = createMockPool();
+    const pool = createMockPool(() => ({ rows: [{ id: "early-run", run_date: "2026-03-01" }] }));
     await checkAndScheduleDailyBenchmark(pool, "worker-abc");
 
-    // Hour 0 < 12, so no query should be made
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    expect(runDailyBenchmark).toHaveBeenCalledWith("early-run", pool);
   });
 
-  it("uses correct date when called at exactly 12:00 UTC", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-15T12:00:00Z"));
+  it("handles Date objects from pg for run_date", async () => {
+    // pg can return DATE columns as JS Date objects
+    const pool = createMockPool(() => ({
+      rows: [{ id: "date-obj-run", run_date: new Date("2026-03-15T00:00:00Z") }],
+    }));
 
-    const pool = createMockPool(() => ({ rows: [{ id: "noon-run" }] }));
+    // Should not throw when run_date is a Date object
     await checkAndScheduleDailyBenchmark(pool, "worker-xyz");
 
-    const [, params] = (pool.query as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(params[0]).toBe("2026-03-15");
-    expect(params[1]).toBe("worker-xyz");
+    expect(runDailyBenchmark).toHaveBeenCalledWith("date-obj-run", pool);
   });
 });
