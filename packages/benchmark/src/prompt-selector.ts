@@ -11,8 +11,23 @@ import { BENCHMARK_PROMPTS, type BenchmarkPrompt } from "./prompts.js";
  *
  * Comprehensive tier: ~20 prompts — ALL from detected category + ALL cross-category
  *   + fill remaining from other categories for diversity
+ *
+ * Uses the hardcoded BENCHMARK_PROMPTS fallback.
+ * For DB-backed prompts, use selectOnboardingPromptsFromList() instead.
  */
 export function selectOnboardingPrompts(
+  category: string | null,
+  tier: "fast" | "balanced" | "comprehensive",
+): BenchmarkPrompt[] {
+  return selectOnboardingPromptsFromList(BENCHMARK_PROMPTS, category, tier);
+}
+
+/**
+ * Same selection logic but operates on an explicit prompt list
+ * (e.g. loaded from the database via loadBenchmarkPrompts).
+ */
+export function selectOnboardingPromptsFromList(
+  allPrompts: BenchmarkPrompt[],
   category: string | null,
   tier: "fast" | "balanced" | "comprehensive",
 ): BenchmarkPrompt[] {
@@ -24,7 +39,7 @@ export function selectOnboardingPrompts(
   const categoryPrompts: BenchmarkPrompt[] = [];
   const otherPrompts: BenchmarkPrompt[] = [];
 
-  for (const p of BENCHMARK_PROMPTS) {
+  for (const p of allPrompts) {
     // Skip cross-category prompts for category matching
     if (category && p.category === category) {
       categoryPrompts.push(p);

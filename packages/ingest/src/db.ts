@@ -207,6 +207,23 @@ const SCHEMA_STATEMENTS = [
     UNIQUE(session_id, vendor_canonical_id, rejection_reason)
   )`,
 
+  // Prompts: all LLM prompts stored in the DB for easy editing without deploys
+  `CREATE TABLE IF NOT EXISTS prompts (
+    id              TEXT PRIMARY KEY,
+    kind            TEXT NOT NULL,
+    category        TEXT,
+    template        TEXT,
+    text            TEXT NOT NULL,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    version         INTEGER NOT NULL DEFAULT 1,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_prompts_kind ON prompts(kind)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompts_category ON prompts(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompts_active ON prompts(is_active) WHERE is_active = TRUE`,
+
   // Fast benchmark: direct API probe responses (not full transcripts)
   `CREATE TABLE IF NOT EXISTS fast_benchmark_responses (
     id SERIAL PRIMARY KEY,
@@ -952,6 +969,78 @@ export class ObservatoryDB {
         icon: meta?.icon ?? "📦",
       });
     }
+  }
+
+  // ── Prompts ──────────────────────────────────────────────────────
+
+  async getPromptsByKind(kind: string, activeOnly = true): Promise<Array<{
+    id: string; kind: string; category: string | null; template: string | null;
+    text: string; metadata: Record<string, unknown>; is_active: boolean;
+    version: number;
+  }>> {
+    const sql = activeOnly
+      ? "SELECT id, kind, category, template, text, metadata, is_active, version FROM prompts WHERE kind = $1 AND is_active = TRUE ORDER BY id"
+      : "SELECT id, kind, category, template, text, metadata, is_active, version FROM prompts WHERE kind = $1 ORDER BY id";
+    const { rows } = await this.queryable.query(sql, [kind]);
+    return rows as Array<{
+      id: string; kind: string; category: string | null; template: string | null;
+      text: string; metadata: Record<string, unknown>; is_active: boolean;
+      version: number;
+    }>;
+  }
+
+  async getPromptById(id: string): Promise<{
+    id: string; kind: string; category: string | null; template: string | null;
+    text: string; metadata: Record<string, unknown>; is_active: boolean;
+    version: number;
+  } | null> {
+    const { rows } = await this.queryable.query(
+      "SELECT id, kind, category, template, text, metadata, is_active, version FROM prompts WHERE id = $1",
+      [id],
+    );
+    return (rows[0] as {
+      id: string; kind: string; category: string | null; template: string | null;
+      text: string; metadata: Record<string, unknown>; is_active: boolean;
+      version: number;
+    }) ?? null;
+  }
+
+  async upsertPrompt(prompt: {
+    id: string; kind: string; category?: string | null; template?: string | null;
+    text: string; metadata?: Record<string, unknown>; isActive?: boolean;
+    version?: number;
+  }): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO prompts (id, kind, category, template, text, metadata, is_active, version, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      ON CONFLICT(id) DO UPDATE SET
+        kind = EXCLUDED.kind,
+        category = EXCLUDED.category,
+        template = EXCLUDED.template,
+        text = EXCLUDED.text,
+        metadata = EXCLUDED.metadata,
+        is_active = EXCLUDED.is_active,
+        version = EXCLUDED.version,
+        updated_at = NOW()
+    `, [
+      prompt.id,
+      prompt.kind,
+      prompt.category ?? null,
+      prompt.template ?? null,
+      prompt.text,
+      JSON.stringify(prompt.metadata ?? {}),
+      prompt.isActive ?? true,
+      prompt.version ?? 1,
+    ]);
+  }
+
+  async getPromptsCount(kind?: string): Promise<number> {
+    const sql = kind
+      ? "SELECT COUNT(*) AS c FROM prompts WHERE kind = $1 AND is_active = TRUE"
+      : "SELECT COUNT(*) AS c FROM prompts WHERE is_active = TRUE";
+    const params = kind ? [kind] : [];
+    const { rows } = await this.queryable.query(sql, params);
+    return Number((rows[0] as { c: string }).c);
   }
 
   async close(): Promise<void> { await this.pool.end(); }

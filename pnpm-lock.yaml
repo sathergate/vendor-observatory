@@ -21,6 +21,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@obs/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@stripe/stripe-js':
         specifier: ^8.8.0
         version: 8.8.0

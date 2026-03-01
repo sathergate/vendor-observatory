@@ -72,6 +72,14 @@ export { normalizeVendorName } from "./normalizer.js";
 export { DEFAULT_CATEGORIES } from "./default-categories.js";
 export type { CategoryMeta } from "./default-categories.js";
 
+// ── Prompt Store ────────────────────────────────────────────────────
+export {
+  loadPromptsByKind,
+  loadPromptById,
+  hasPrompts,
+} from "./prompt-store.js";
+export type { PromptKind, PromptRow } from "./prompt-store.js";
+
 // ── Loaders ─────────────────────────────────────────────────────────
 export { loadVendorTaxonomy } from "./taxonomy-loader.js";
 

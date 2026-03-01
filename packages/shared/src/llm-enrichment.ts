@@ -20,6 +20,7 @@ import type {
   VendorDisposition,
   DisqualificationReason,
 } from "./types.js";
+import { loadPromptById } from "./prompt-store.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
@@ -54,14 +55,13 @@ interface LLMExtractionResult {
 
 // ── System Prompt ──────────────────────────────────────────────────
 
-function buildSystemPrompt(vendorNames: string[], constraints: string[]): string {
-  return `You are an analyst extracting structured data from AI coding assistant responses about developer tool vendor recommendations.
+const ENRICHMENT_SYSTEM_PROMPT_FALLBACK = `You are an analyst extracting structured data from AI coding assistant responses about developer tool vendor recommendations.
 
 You will be given the text of an AI assistant's response to a developer question. Extract the following information as JSON:
 
-KNOWN VENDORS (canonical IDs): ${vendorNames.slice(0, 100).join(", ")}
+KNOWN VENDORS (canonical IDs): {{VENDOR_NAMES}}
 
-PROMPT CONSTRAINTS to check for: ${constraints.length > 0 ? constraints.join(", ") : "none specified"}
+PROMPT CONSTRAINTS to check for: {{CONSTRAINTS}}
 
 Return ONLY valid JSON matching this schema:
 {
@@ -87,6 +87,32 @@ Rules:
 - "disposition" meanings: "recommended" = explicitly suggested as the solution, "compared" = discussed as an alternative, "rejected" = explicitly advised against, "mentioned" = named but not evaluated, "implemented" = code/config was written for it
 - confidence should be high (>0.8) when there's an explicit "I recommend X" or clear primary choice, medium (0.4-0.8) when the recommendation is implicit, low (<0.4) when it's ambiguous
 - Keep reasoning_chain, trade_offs, gotchas, and rationale concise — focus on substance, not verbosity`;
+
+/** Pool interface for optional DB loading */
+interface Queryable {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
+
+let _cachedEnrichmentTemplate: string | null = null;
+
+async function getEnrichmentTemplate(pool?: Queryable): Promise<string> {
+  if (_cachedEnrichmentTemplate) return _cachedEnrichmentTemplate;
+
+  if (pool) {
+    const row = await loadPromptById(pool, "system-enrichment");
+    if (row) {
+      _cachedEnrichmentTemplate = row.text;
+      return row.text;
+    }
+  }
+
+  return ENRICHMENT_SYSTEM_PROMPT_FALLBACK;
+}
+
+function buildSystemPrompt(template: string, vendorNames: string[], constraints: string[]): string {
+  return template
+    .replace("{{VENDOR_NAMES}}", vendorNames.slice(0, 100).join(", "))
+    .replace("{{CONSTRAINTS}}", constraints.length > 0 ? constraints.join(", ") : "none specified");
 }
 
 // ── Main LLM Extraction Function ──────────────────────────────────
@@ -101,6 +127,7 @@ export async function extractResponseContextWithLLM(
   turns: ParsedTurn[],
   taxonomy: VendorTaxonomy,
   promptConstraints: string[],
+  pool?: Queryable,
 ): Promise<ExtractedResponseContext | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -123,7 +150,8 @@ export async function extractResponseContextWithLLM(
     : assistantText;
 
   const vendorNames = taxonomy.vendors.map((v) => v.canonical_id);
-  const systemPrompt = buildSystemPrompt(vendorNames, promptConstraints);
+  const template = await getEnrichmentTemplate(pool);
+  const systemPrompt = buildSystemPrompt(template, vendorNames, promptConstraints);
 
   try {
     // Dynamic import to avoid requiring the SDK when enrichment is disabled

@@ -1,3 +1,11 @@
+import { loadPromptsByKind, hasPrompts } from "@obs/shared";
+import type { PromptRow } from "@obs/shared";
+
+/** Minimal pool interface — avoids hard dependency on `pg`. */
+interface Queryable {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
+
 export type TemplateType = "node-api" | "next-app" | "python-api";
 
 // ── Enrichment Dimensions ─────────────────────────────────────────────
@@ -1483,3 +1491,38 @@ For each requirement, recommend the fastest-to-implement option. Show the actual
     },
   },
 ];
+
+// ── DB-backed prompt loading ──────────────────────────────────────
+
+function rowToBenchmarkPrompt(row: PromptRow): BenchmarkPrompt {
+  const meta = row.metadata as Record<string, unknown>;
+  return {
+    id: row.id,
+    category: row.category ?? "other",
+    template: (row.template as TemplateType) ?? "node-api",
+    text: row.text,
+    metadata: {
+      contentTags: (meta.contentTags ?? []) as ContentTag[],
+      patternTags: (meta.patternTags ?? []) as PatternTag[],
+      constraints: (meta.constraints as string[]) ?? [],
+      existingStack: (meta.existingStack as string[]) ?? [],
+      failureMode: (meta.failureMode as string) ?? null,
+      vendorsNamedInPrompt: (meta.vendorsNamedInPrompt as string[]) ?? [],
+    },
+  };
+}
+
+/**
+ * Load benchmark prompts from the database.
+ * Falls back to the hardcoded BENCHMARK_PROMPTS array when the
+ * prompts table is empty or unreachable.
+ */
+export async function loadBenchmarkPrompts(pool: Queryable): Promise<BenchmarkPrompt[]> {
+  const seeded = await hasPrompts(pool, "benchmark");
+  if (!seeded) return BENCHMARK_PROMPTS;
+
+  const rows = await loadPromptsByKind(pool, "benchmark");
+  if (rows.length === 0) return BENCHMARK_PROMPTS;
+
+  return rows.map(rowToBenchmarkPrompt);
+}

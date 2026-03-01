@@ -5,8 +5,8 @@
  * without going through the CLI entry point.
  */
 
-export { BENCHMARK_PROMPTS, type BenchmarkPrompt, type TemplateType } from "./prompts.js";
-export { selectOnboardingPrompts } from "./prompt-selector.js";
+export { BENCHMARK_PROMPTS, loadBenchmarkPrompts, type BenchmarkPrompt, type TemplateType } from "./prompts.js";
+export { selectOnboardingPrompts, selectOnboardingPromptsFromList } from "./prompt-selector.js";
 export { runParallelBatch, type ParallelRunOptions } from "./parallel-runner.js";
 export { createWorkspace, cleanupOldWorkspaces } from "./workspace.js";
 export { ClaudeCodeAdapter } from "./adapters/claude-code.js";
