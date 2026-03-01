@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { loadPromptById } from "@obs/shared";
 
 /**
  * Fallback URL analysis when the Next.js API didn't complete it.
@@ -12,7 +13,7 @@ export async function runUrlAnalysisFallback(
 ): Promise<void> {
   try {
     const pageContent = await fetchPageContent(url);
-    const analysis = await extractWithLLM(pageContent, domain);
+    const analysis = await extractWithLLM(pageContent, domain, pool);
 
     await pool.query(
       `UPDATE onboarding_jobs
@@ -115,9 +116,38 @@ interface UrlAnalysisResult {
   competitors: Array<{ name: string; domain: string }>;
 }
 
+const URL_ANALYSIS_PROMPT_FALLBACK = `Given this homepage content for {{DOMAIN}}, extract structured product information.
+
+<page_content>
+{{PAGE_CONTENT}}
+</page_content>
+
+Return a JSON object with exactly these fields:
+- product_name: the canonical name of the product (string)
+- category: one of {{VALID_CATEGORIES}} (string)
+- description: one sentence describing what the product does (string)
+- competitors: top 5 direct competitors as an array of {name: string, domain: string}
+
+Return ONLY valid JSON, no markdown or explanation.`;
+
+let _cachedUrlAnalysisTemplate: string | null = null;
+
+async function getUrlAnalysisTemplate(pool: Pool): Promise<string> {
+  if (_cachedUrlAnalysisTemplate) return _cachedUrlAnalysisTemplate;
+
+  const row = await loadPromptById(pool, "system-url-analysis");
+  if (row) {
+    _cachedUrlAnalysisTemplate = row.text;
+    return row.text;
+  }
+
+  return URL_ANALYSIS_PROMPT_FALLBACK;
+}
+
 async function extractWithLLM(
   pageContent: string,
   domain: string,
+  pool: Pool,
 ): Promise<UrlAnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -130,19 +160,11 @@ async function extractWithLLM(
     };
   }
 
-  const prompt = `Given this homepage content for ${domain}, extract structured product information.
-
-<page_content>
-${pageContent.slice(0, 3000)}
-</page_content>
-
-Return a JSON object with exactly these fields:
-- product_name: the canonical name of the product (string)
-- category: one of ${JSON.stringify(VALID_CATEGORIES)} (string)
-- description: one sentence describing what the product does (string)
-- competitors: top 5 direct competitors as an array of {name: string, domain: string}
-
-Return ONLY valid JSON, no markdown or explanation.`;
+  const template = await getUrlAnalysisTemplate(pool);
+  const prompt = template
+    .replace("{{DOMAIN}}", domain)
+    .replace("{{PAGE_CONTENT}}", pageContent.slice(0, 3000))
+    .replace("{{VALID_CATEGORIES}}", JSON.stringify(VALID_CATEGORIES));
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
