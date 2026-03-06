@@ -1,7 +1,7 @@
 import { getVendorScorecard } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 import { loadCategoryMeta } from "../../../categories";
 import { PROMPT_SUMMARIES } from "../../../prompt-summaries";
@@ -37,15 +37,15 @@ export default async function ImplementationPage({ params }: { params: Promise<{
           </div>
         ) : (
           <>
-            <SectionNav sections={[
+            <TabbedView sections={[
               { id: "kpis", label: "KPIs" },
-              { id: "category-breakdown", label: "By Category" },
-              { id: "platform-split", label: "By Platform" },
+              ...(scorecard.categoryBreakdown.length > 0 ? [{ id: "category-breakdown", label: "By Category" }] : []),
+              ...(Object.keys(scorecard.platformSplit).length > 0 ? [{ id: "platform-split", label: "By Platform" }] : []),
               { id: "context", label: "Context" },
-            ]} />
+            ]}>
 
             {/* KPIs */}
-            <div id="kpis">
+            <TabPanel id="kpis"><div>
               <h2 className="section-header mb-3">Key Metrics</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-surface rounded-[6px] p-4 border border-border">
@@ -74,11 +74,11 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                   </p>
                 </div>
               </div>
-            </div>
+            </div></TabPanel>
 
             {/* Category Breakdown */}
             {scorecard.categoryBreakdown.length > 0 && (
-              <div id="category-breakdown">
+              <TabPanel id="category-breakdown"><div>
                 <h2 className="section-header mb-3">Implementation by Category</h2>
                 <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
                   <table className="w-full text-[13px]">
@@ -120,12 +120,12 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {/* Platform Split */}
             {Object.keys(scorecard.platformSplit).length > 0 && (
-              <div id="platform-split">
+              <TabPanel id="platform-split"><div>
                 <h2 className="section-header mb-3">Implementation by Platform</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {Object.entries(scorecard.platformSplit).map(([platform, count]) => {
@@ -160,11 +160,11 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                     );
                   })}
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {/* Implementation Context */}
-            <div id="context">
+            <TabPanel id="context"><div>
               <h2 className="section-header mb-3">Implementation Context</h2>
               {scorecard.implementationContext.length === 0 ? (
                 <div className="quiet-signal">
@@ -216,7 +216,8 @@ export default async function ImplementationPage({ params }: { params: Promise<{
                   </table>
                 </div>
               )}
-            </div>
+            </div></TabPanel>
+          </TabbedView>
           </>
         )}
       </VendorGuard>

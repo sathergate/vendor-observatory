@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getVendorScorecard, getCategoryCompetitorDensity } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 import { loadCategoryMeta } from "../../../categories";
 
@@ -40,14 +40,13 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
           </div>
         ) : (
           <>
-            <SectionNav sections={
+            <TabbedView sections={
               scorecard.categoryBreakdown.map(cat => ({
                 id: `cat-${cat.category}`,
                 label: CATEGORY_META[cat.category]?.label ?? cat.category,
               }))
-            } />
+            }>
 
-            <div className="space-y-6">
               {scorecard.categoryBreakdown.map((cat) => {
                 const catMeta = CATEGORY_META[cat.category];
                 const wr = cat.totalInCategory > 0 ? cat.recommendations / cat.totalInCategory : 0;
@@ -60,7 +59,7 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
                 );
 
                 return (
-                  <div key={cat.category} id={`cat-${cat.category}`} className="bg-surface rounded-[6px] p-4 border border-border">
+                  <TabPanel key={cat.category} id={`cat-${cat.category}`}><div className="bg-surface rounded-[6px] p-4 border border-border">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-[20px]">{catMeta?.icon ?? ""}</span>
@@ -120,10 +119,10 @@ export default async function CategoryCompetitionPage({ params }: { params: Prom
                     {competitorsInCategory.length === 0 && (
                       <p className="text-[13px] text-muted">No direct competitors identified in this category yet.</p>
                     )}
-                  </div>
+                  </div></TabPanel>
                 );
               })}
-            </div>
+          </TabbedView>
           </>
         )}
       </VendorGuard>

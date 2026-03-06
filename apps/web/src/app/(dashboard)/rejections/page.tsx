@@ -6,6 +6,7 @@ import {
 } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 
 export const dynamic = "force-dynamic";
 
@@ -63,9 +64,17 @@ export default async function RejectionsPage() {
         </div>
       )}
 
-      {/* Summary Stats */}
       {hasData && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <TabbedView sections={[
+          { id: "summary", label: "Summary" },
+          ...(reasonBreakdown.length > 0 ? [{ id: "reasons", label: "Reasons" }] : []),
+          ...(summary.length > 0 ? [{ id: "vendors", label: "Vendors" }] : []),
+          ...(alternativeFlows.length > 0 ? [{ id: "alternatives", label: "Alternatives" }] : []),
+          ...(recentDetails.length > 0 ? [{ id: "recent", label: "Recent" }] : []),
+        ]}>
+
+      {/* Summary Stats */}
+      <TabPanel id="summary"><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-surface rounded-[6px] p-6 border border-border">
             <p className="stat-label">Total Rejections</p>
             <p className="stat-hero mt-1 text-data-4">{totalRejections.toLocaleString()}</p>
@@ -84,12 +93,11 @@ export default async function RejectionsPage() {
             <p className="stat-label">With Alternative</p>
             <p className="stat-hero mt-1 text-data-5">{withAlternative.toLocaleString()}</p>
           </div>
-        </div>
-      )}
+        </div></TabPanel>
 
       {/* Section 1: Rejection Reason Breakdown */}
       {reasonBreakdown.length > 0 && (
-        <section className="space-y-4">
+        <TabPanel id="reasons"><section className="space-y-4">
           <h3 className="section-header">Rejection Reasons (All Vendors)</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {reasonBreakdown.map((r) => (
@@ -112,12 +120,12 @@ export default async function RejectionsPage() {
               </div>
             ))}
           </div>
-        </section>
+        </section></TabPanel>
       )}
 
       {/* Section 2: Vendor Rejection Summary Table */}
       {summary.length > 0 && (
-        <section className="space-y-4">
+        <TabPanel id="vendors"><section className="space-y-4">
           <h3 className="section-header">Vendor Rejection Summary</h3>
           <p className="text-[13px] text-secondary">
             Vendors ranked by rejection count. Higher rejection rate = more frequently advised against.
@@ -160,12 +168,12 @@ export default async function RejectionsPage() {
               </table>
             </div>
           </div>
-        </section>
+        </section></TabPanel>
       )}
 
       {/* Section 3: Alternative Flows */}
       {alternativeFlows.length > 0 && (
-        <section className="space-y-4">
+        <TabPanel id="alternatives"><section className="space-y-4">
           <h3 className="section-header">Rejection to Alternative Flows</h3>
           <p className="text-[13px] text-secondary">
             When a vendor is rejected, which vendor is selected instead?
@@ -188,12 +196,12 @@ export default async function RejectionsPage() {
               </div>
             ))}
           </div>
-        </section>
+        </section></TabPanel>
       )}
 
       {/* Section 4: Recent Rejection Details */}
       {recentDetails.length > 0 && (
-        <section className="space-y-4">
+        <TabPanel id="recent"><section className="space-y-4">
           <h3 className="section-header">Recent Rejections</h3>
           <div className="space-y-2">
             {recentDetails.slice(0, 20).map((d) => (
@@ -220,7 +228,9 @@ export default async function RejectionsPage() {
               </div>
             ))}
           </div>
-        </section>
+        </section></TabPanel>
+      )}
+      </TabbedView>
       )}
     </div>
   );
