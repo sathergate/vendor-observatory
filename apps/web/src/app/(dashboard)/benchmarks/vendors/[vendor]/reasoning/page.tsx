@@ -1,7 +1,7 @@
 import { getVendorScorecard } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 
 export const dynamic = "force-dynamic";
@@ -33,15 +33,15 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
           </div>
         ) : (
           <>
-            <SectionNav sections={[
+            <TabbedView sections={[
               ...(hasRationale ? [{ id: "rationale", label: "Why Recommended" }] : []),
               ...(hasTradeOffs ? [{ id: "tradeoffs", label: "Trade-offs" }] : []),
               ...(hasGotchas ? [{ id: "gotchas", label: "Gotchas" }] : []),
-            ]} />
+            ]}>
 
             {/* Rationale Snippets */}
             {hasRationale && (
-              <div id="rationale">
+              <TabPanel id="rationale"><div>
                 <h2 className="section-header mb-3">Why AI Recommends This Vendor</h2>
                 <div className="bg-surface rounded-[6px] p-4 space-y-3 border border-border">
                   {scorecard.rationaleSnippets.map((s, i) => (
@@ -50,12 +50,12 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
                     </p>
                   ))}
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {/* Trade-off Snippets */}
             {hasTradeOffs && (
-              <div id="tradeoffs">
+              <TabPanel id="tradeoffs"><div>
                 <h2 className="section-header mb-3">Trade-offs Cited</h2>
                 <div className="bg-surface rounded-[6px] p-4 space-y-3 border border-border">
                   {scorecard.tradeOffSnippets.map((s, i) => (
@@ -64,12 +64,12 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
                     </p>
                   ))}
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {/* Gotcha Snippets */}
             {hasGotchas && (
-              <div id="gotchas">
+              <TabPanel id="gotchas"><div>
                 <h2 className="section-header mb-3">Gotchas / Caveats</h2>
                 <div className="bg-surface rounded-[6px] p-4 space-y-3 border border-border">
                   {scorecard.gotchaSnippets.map((s, i) => (
@@ -78,8 +78,9 @@ export default async function ReasoningPage({ params }: { params: Promise<{ vend
                     </p>
                   ))}
                 </div>
-              </div>
+              </div></TabPanel>
             )}
+          </TabbedView>
           </>
         )}
       </VendorGuard>

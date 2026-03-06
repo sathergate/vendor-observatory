@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getVendorScorecard, getVendorHeadToHead, getVendorCoMentions } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 import { PROMPT_SUMMARIES } from "../../../prompt-summaries";
 
@@ -36,15 +36,15 @@ export default async function CompetitivePage({ params }: { params: Promise<{ ve
           </div>
         ) : (
           <>
-            <SectionNav sections={[
+            <TabbedView sections={[
               ...(coMentions.length > 0 ? [{ id: "co-mentions", label: "Co-Mentions" }] : []),
               ...(scorecard.competitorWins.length > 0 ? [{ id: "wins-over-you", label: "Wins Over You" }] : []),
               ...(h2h && h2h.scenarios.length > 0 ? [{ id: "head-to-head", label: "Head-to-Head" }] : []),
-            ]} />
+            ]}>
 
             {/* Co-mention Table */}
             {coMentions.length > 0 && (
-              <div id="co-mentions">
+              <TabPanel id="co-mentions"><div>
                 <h2 className="section-header mb-3">Co-Mentions</h2>
                 <p className="text-[12px] text-muted mb-3">
                   Vendors that appear most frequently in the same sessions as {vendorDisplayName(vendorId)}
@@ -74,12 +74,12 @@ export default async function CompetitivePage({ params }: { params: Promise<{ ve
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {/* Wins Over You */}
             {scorecard.competitorWins.length > 0 && (
-              <div id="wins-over-you">
+              <TabPanel id="wins-over-you"><div>
                 <h2 className="section-header mb-3">Competitors That Beat You</h2>
                 <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
                   <table className="w-full text-[13px]">
@@ -110,12 +110,12 @@ export default async function CompetitivePage({ params }: { params: Promise<{ ve
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {/* Head-to-Head */}
             {h2h && h2h.scenarios.length > 0 && (
-              <div id="head-to-head">
+              <TabPanel id="head-to-head"><div>
                 <h2 className="section-header mb-3">
                   Head-to-Head: {vendorDisplayName(vendorId)} vs {vendorDisplayName(h2h.vendorB)}
                 </h2>
@@ -162,7 +162,7 @@ export default async function CompetitivePage({ params }: { params: Promise<{ ve
                     ))}
                   </div>
                 </div>
-              </div>
+              </div></TabPanel>
             )}
 
             {coMentions.length === 0 && scorecard.competitorWins.length === 0 && (
@@ -170,6 +170,7 @@ export default async function CompetitivePage({ params }: { params: Promise<{ ve
                 <p className="text-secondary">No competitive data available yet.</p>
               </div>
             )}
+          </TabbedView>
           </>
         )}
       </VendorGuard>

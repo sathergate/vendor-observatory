@@ -1,7 +1,7 @@
 import { getVendorTrend } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 
 export const dynamic = "force-dynamic";
@@ -32,14 +32,14 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
           </div>
         ) : (
           <>
-            <SectionNav sections={[
+            <TabbedView sections={[
               { id: "trend-kpis", label: "KPIs" },
               { id: "activity", label: "Activity" },
               { id: "weekly-data", label: "Weekly Data" },
-            ]} />
+            ]}>
 
             {/* Trend KPIs */}
-            <div id="trend-kpis">
+            <TabPanel id="trend-kpis"><div>
               <h2 className="section-header mb-3">Trend Overview</h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-surface rounded-[6px] p-4 border border-border">
@@ -86,10 +86,10 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
                   </div>
                 </div>
               </div>
-            </div>
+            </div></TabPanel>
 
             {/* Sparkline */}
-            <div id="activity">
+            <TabPanel id="activity"><div>
               <h2 className="section-header mb-3">Weekly Activity</h2>
               <div className="bg-surface rounded-[6px] p-4 border border-border">
                 <div className="flex items-end gap-1 h-24">
@@ -126,10 +126,10 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
                   </span>
                 </div>
               </div>
-            </div>
+            </div></TabPanel>
 
             {/* Raw Data Table */}
-            <div id="weekly-data">
+            <TabPanel id="weekly-data"><div>
               <h2 className="section-header mb-3">Weekly Breakdown</h2>
               <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
                 <table className="w-full text-[13px]">
@@ -159,7 +159,8 @@ export default async function TrendsPage({ params }: { params: Promise<{ vendor:
                   </tbody>
                 </table>
               </div>
-            </div>
+            </div></TabPanel>
+          </TabbedView>
           </>
         )}
       </VendorGuard>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getVendorScorecard } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 import { loadCategoryMeta } from "../../../categories";
 
@@ -37,14 +37,14 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
           </div>
         ) : (
           <>
-            <SectionNav sections={[
+            <TabbedView sections={[
               { id: "dominant", label: "Top Category" },
               { id: "category-table", label: "All Categories" },
               { id: "platform-categories", label: "By Platform" },
-            ]} />
+            ]}>
 
             {/* Dominant Category Highlight */}
-            <div id="dominant">
+            <TabPanel id="dominant"><div>
               <h2 className="section-header mb-3">Dominant Category</h2>
               {(() => {
                 const sorted = [...scorecard.categoryBreakdown].sort(
@@ -90,10 +90,10 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                   </div>
                 );
               })()}
-            </div>
+            </div></TabPanel>
 
             {/* Category Table */}
-            <div id="category-table">
+            <TabPanel id="category-table"><div>
               <h2 className="section-header mb-3">Category Breakdown</h2>
               <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
                 <table className="w-full text-[13px]">
@@ -141,10 +141,10 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                   </tbody>
                 </table>
               </div>
-            </div>
+            </div></TabPanel>
 
             {/* Platform Split per Category */}
-            <div id="platform-categories">
+            <TabPanel id="platform-categories"><div>
               <h2 className="section-header mb-3">Platform Split by Category</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {scorecard.categoryBreakdown.map((cat) => {
@@ -179,7 +179,8 @@ export default async function UseCasesPage({ params }: { params: Promise<{ vendo
                   );
                 })}
               </div>
-            </div>
+            </div></TabPanel>
+          </TabbedView>
           </>
         )}
       </VendorGuard>
