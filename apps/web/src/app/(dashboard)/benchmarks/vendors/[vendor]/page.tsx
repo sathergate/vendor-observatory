@@ -3,7 +3,7 @@ import { getVendorScorecard, getVendorHeadToHead, getVendorTrend } from "@/lib/d
 import { generateRecommendations, computeAIReadinessScore, type Recommendation } from "@/lib/recommendations";
 import { vendorDisplayName, VENDOR_META, vendorCategory } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { SectionNav } from "@/components/SectionNav";
+import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 import { loadCategoryMeta } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
@@ -183,8 +183,8 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
         </div>
       </div>
 
-      {/* Section Navigation */}
-      <SectionNav sections={[
+      {/* Tabbed Navigation */}
+      <TabbedView sections={[
         { id: "profile", label: "Profile" },
         { id: "ai-readiness", label: "AI-Readiness" },
         ...(trend && trend.dataPoints.length > 0 ? [{ id: "trend", label: "Trend" }] : []),
@@ -195,10 +195,10 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
         ...((scorecard.tradeOffSnippets.length > 0 || scorecard.gotchaSnippets.length > 0) ? [{ id: "tradeoffs", label: "Trade-offs" }] : []),
         ...(scorecard.rationaleSnippets.length > 0 ? [{ id: "rationale", label: "Rationale" }] : []),
         ...(recommendations.length > 0 ? [{ id: "recommendations", label: "Signals" }] : []),
-      ]} />
+      ]}>
 
       {/* -- 1. Recommendation Profile -- */}
-      <div id="profile">
+      <TabPanel id="profile">
         <h2 className="section-header mb-3">Detection Profile</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-surface rounded-[6px] p-6 border border-border">
@@ -240,10 +240,10 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
             ))}
           </div>
         )}
-      </div>
+      </TabPanel>
 
       {/* -- AI-Readiness Score -- */}
-      <div id="ai-readiness">
+      <TabPanel id="ai-readiness">
         <h2 className="section-header mb-3">AI-Readiness Score</h2>
         <p className="text-[12px] text-muted mb-3">
           How well your documentation and SDK help AI assistants detect and implement your tool
@@ -300,11 +300,11 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
             </div>
           </div>
         </div>
-      </div>
+      </TabPanel>
 
       {/* -- Temporal Trend -- */}
       {trend && trend.dataPoints.length > 0 && (
-        <div id="trend">
+        <TabPanel id="trend"><div>
           <h2 className="section-header mb-3">Trend</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-surface rounded-[6px] p-6 border border-border">
@@ -365,12 +365,12 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </p>
             </div>
           </div>
-        </div>
+        </div></TabPanel>
       )}
 
       {/* -- 2. Category Breakdown -- */}
       {scorecard.categoryBreakdown.length > 0 && (
-        <div id="categories">
+        <TabPanel id="categories"><div>
           <h2 className="section-header mb-3">Category Breakdown</h2>
           <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
             <table className="w-full text-[14px]">
@@ -418,12 +418,12 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </tbody>
             </table>
           </div>
-        </div>
+        </div></TabPanel>
       )}
 
       {/* -- 3. Constraint Scorecard -- */}
       {(scorecard.constraintsAddressed.length > 0 || scorecard.constraintsMissed.length > 0) && (
-        <div id="constraints">
+        <TabPanel id="constraints"><div>
           <h2 className="section-header mb-3">Constraint Scorecard</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Addressed */}
@@ -459,12 +459,12 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </div>
             )}
           </div>
-        </div>
+        </div></TabPanel>
       )}
 
       {/* -- 4. Competitive Landscape -- */}
       {scorecard.competitorWins.length > 0 && (
-        <div id="competitive">
+        <TabPanel id="competitive"><div>
           <h2 className="section-header mb-3">Competitive Landscape</h2>
           <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
             <table className="w-full text-[14px]">
@@ -547,11 +547,11 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </div>
             </div>
           )}
-        </div>
+        </div></TabPanel>
       )}
 
       {/* -- 5. Prompts Won & Lost -- */}
-      <div id="scenarios" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <TabPanel id="scenarios"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {scorecard.promptsWon.length > 0 && (
           <div className="bg-surface rounded-[6px] p-6 border border-border">
             <h3 className="text-[13px] font-medium text-data-5 mb-3">
@@ -610,11 +610,11 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
             </div>
           </div>
         )}
-      </div>
+      </div></TabPanel>
 
       {/* -- 6. Trade-offs & Gotchas -- */}
       {(scorecard.tradeOffSnippets.length > 0 || scorecard.gotchaSnippets.length > 0) && (
-        <div id="tradeoffs">
+        <TabPanel id="tradeoffs"><div>
           <h2 className="section-header mb-3">Trade-offs &amp; Gotchas Cited</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {scorecard.tradeOffSnippets.length > 0 && (
@@ -643,12 +643,12 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </div>
             )}
           </div>
-        </div>
+        </div></TabPanel>
       )}
 
       {/* -- 7. Rationale Snippets -- */}
       {scorecard.rationaleSnippets.length > 0 && (
-        <div id="rationale">
+        <TabPanel id="rationale"><div>
           <h2 className="section-header mb-3">Why AI Detects This Vendor</h2>
           <div className="bg-surface rounded-[6px] p-6 border border-border space-y-3">
             {scorecard.rationaleSnippets.map((s, i) => (
@@ -657,12 +657,12 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </p>
             ))}
           </div>
-        </div>
+        </div></TabPanel>
       )}
 
       {/* -- 8. Actionable Recommendations -- */}
       {recommendations.length > 0 && (
-        <div id="recommendations">
+        <TabPanel id="recommendations"><div>
           <h2 className="section-header mb-3">
             Actionable Signals
           </h2>
@@ -687,8 +687,9 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               </div>
             </details>
           )}
-        </div>
+        </div></TabPanel>
       )}
+      </TabbedView>
       </VendorGuard>
     </div>
   );
