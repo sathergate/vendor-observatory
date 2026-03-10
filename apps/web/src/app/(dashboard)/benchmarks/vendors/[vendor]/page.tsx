@@ -194,131 +194,167 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
       <TabPanel id="overview">
         <div className="space-y-8">
 
-        {/* Detection Profile */}
+        {/* ── Your Reach ─────────────────────────────────────────────── */}
         <div>
-          <h2 className="section-header mb-3">Detection Profile</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-surface rounded-[6px] p-6 border border-border">
-              <p className="stat-label">Primary Detections</p>
-              <p className="stat-hero mt-1 text-accent">{scorecard.totalRecommendations.toLocaleString()}</p>
-            </div>
-            <div className="bg-surface rounded-[6px] p-6 border border-border">
-              <p className="stat-label">Total Mentions</p>
-              <p className="stat-hero mt-1">{scorecard.totalMentions.toLocaleString()}</p>
-            </div>
-            <div className="bg-surface rounded-[6px] p-6 border border-border">
-              <p className="stat-label">Win Rate</p>
-              <p className={`stat-hero mt-1 ${
-                scorecard.winRate > 0.6 ? "text-data-5" : scorecard.winRate > 0.3 ? "text-data-3" : "text-data-4"
-              }`}>
-                {pct(scorecard.winRate)}
-              </p>
-            </div>
-            <div className="bg-surface rounded-[6px] p-6 border border-border">
-              <p className="stat-label">Implementation Rate</p>
-              <p className={`stat-hero mt-1 ${
-                scorecard.implementationRate > 0.6 ? "text-data-5" : scorecard.implementationRate > 0.3 ? "text-data-3" : "text-data-4"
-              }`}>
-                {pct(scorecard.implementationRate)}
-              </p>
-            </div>
-          </div>
+          <h2 className="section-header mb-3">Your reach</h2>
+          <p className="text-[14px] text-secondary mb-4">
+            Across {scorecard.totalMentions.toLocaleString()} AI conversations,
+            {" "}{vendorDisplayName(vendorId)} was the recommended choice{" "}
+            <span className="font-data text-accent">{scorecard.totalRecommendations.toLocaleString()}</span> times.
+            {scorecard.implementationRate > 0 && (
+              <> When recommended, developers wrote integration code{" "}
+              <span className="font-data text-data-5">{pct(scorecard.implementationRate)}</span> of the time.</>
+            )}
+          </p>
 
-          {/* Platform split */}
+          {/* Platform presence */}
           {Object.keys(scorecard.platformSplit).length > 0 && (
-            <div className="mt-3 flex gap-2">
-              {Object.entries(scorecard.platformSplit).map(([platform, count]) => (
-                <span
-                  key={platform}
-                  className="text-[14px] px-2 py-1 rounded-[6px] bg-raised text-secondary font-data"
-                >
-                  {platform}: {count}
-                </span>
+            <div className="flex gap-3">
+              {Object.entries(scorecard.platformSplit)
+                .sort(([, a], [, b]) => b - a)
+                .map(([platform, count]) => (
+                <div key={platform} className="bg-surface rounded-[6px] p-4 border border-border flex-1">
+                  <p className="text-[12px] text-muted">{platform.replace(/_/g, " ")}</p>
+                  <p className="font-data text-[20px] text-primary mt-1">{count}</p>
+                  <p className="text-[12px] text-muted">recommendations</p>
+                </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* AI-Readiness Breakdown */}
+        {/* ── Opportunity Map ────────────────────────────────────────── */}
         <div>
-          <h2 className="section-header mb-3">AI-Readiness</h2>
-          <div className="bg-surface rounded-[6px] p-6 border border-border">
-            <div className="space-y-3">
-              {[
-                { label: "Implementation Rate", data: aiReadiness.breakdown.implementationRate, desc: "How often AI writes code after detecting" },
-                { label: "Win Rate", data: aiReadiness.breakdown.winRate, desc: "How often selected as primary choice" },
-                { label: "Constraint Coverage", data: aiReadiness.breakdown.constraintCoverage, desc: "% of prompt constraints addressed" },
-                { label: "Gotcha Avoidance", data: aiReadiness.breakdown.gotchaRate, desc: "Fewer gotchas = more AI-friendly" },
-                { label: "Cross-Platform", data: aiReadiness.breakdown.crossPlatformConsistency, desc: "Consistency across assistants" },
-              ].map((item) => (
-                <div key={item.label}>
-                  <div className="flex justify-between text-[12px] mb-1">
-                    <span className="text-primary">{item.label}</span>
-                    <span className={`font-data ${
-                      item.data.score >= 70 ? "text-data-5" :
-                      item.data.score >= 40 ? "text-data-3" :
-                      "text-data-4"
-                    }`}>
-                      {item.data.score}/100
-                    </span>
-                  </div>
-                  <div className="w-full bg-data-muted rounded-[6px] h-2">
-                    <div
-                      className={`h-2 rounded-[6px] transition-all ${
-                        item.data.score >= 70 ? "bg-data-5" :
-                        item.data.score >= 40 ? "bg-data-3" :
-                        "bg-data-4"
-                      }`}
-                      style={{ width: `${Math.max(2, item.data.score)}%` }}
-                    />
-                  </div>
-                  <p className="text-[12px] text-muted mt-0.5">{item.desc}</p>
-                </div>
-              ))}
+          <h2 className="section-header mb-3">Where you can grow</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {/* Scenarios you're winning vs total */}
+            <div className="bg-surface rounded-[6px] p-6 border border-border">
+              <div className="flex items-baseline justify-between mb-3">
+                <p className="text-[13px] text-primary font-medium">Scenarios won</p>
+                <p className="font-data text-[14px] text-accent">
+                  {scorecard.promptsWon.length} of {scorecard.promptsWon.length + scorecard.promptsLost.length}
+                </p>
+              </div>
+              <div className="w-full bg-data-muted rounded-[6px] h-3">
+                <div
+                  className="h-3 rounded-[6px] bg-accent"
+                  style={{ width: `${Math.max(2, (scorecard.promptsWon.length / Math.max(scorecard.promptsWon.length + scorecard.promptsLost.length, 1)) * 100)}%` }}
+                />
+              </div>
+              {scorecard.promptsLost.length > 0 && (
+                <p className="text-[12px] text-muted mt-2">
+                  {scorecard.promptsLost.length} scenario{scorecard.promptsLost.length !== 1 ? "s" : ""} where
+                  a competitor was chosen instead — see the Signals tab for details
+                </p>
+              )}
             </div>
+
+            {/* Requirements coverage */}
+            {(scorecard.constraintsAddressed.length > 0 || scorecard.constraintsMissed.length > 0) && (
+              <div className="bg-surface rounded-[6px] p-6 border border-border">
+                <div className="flex items-baseline justify-between mb-3">
+                  <p className="text-[13px] text-primary font-medium">Developer requirements covered</p>
+                  <p className="font-data text-[14px] text-accent">
+                    {scorecard.constraintsAddressed.length} of {scorecard.constraintsAddressed.length + scorecard.constraintsMissed.length}
+                  </p>
+                </div>
+                <div className="w-full bg-data-muted rounded-[6px] h-3">
+                  <div
+                    className="h-3 rounded-[6px] bg-accent"
+                    style={{ width: `${Math.max(2, (scorecard.constraintsAddressed.length / Math.max(scorecard.constraintsAddressed.length + scorecard.constraintsMissed.length, 1)) * 100)}%` }}
+                  />
+                </div>
+                {scorecard.constraintsMissed.length > 0 && (
+                  <p className="text-[12px] text-muted mt-2">
+                    {scorecard.constraintsMissed.length} requirement{scorecard.constraintsMissed.length !== 1 ? "s" : ""} that
+                    developers asked for where AI didn&apos;t know you qualified
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Competitors winning against you */}
+            {scorecard.competitorWins.length > 0 && (
+              <div className="bg-surface rounded-[6px] p-6 border border-border">
+                <p className="text-[13px] text-primary font-medium mb-3">Top competitors winning scenarios</p>
+                <div className="space-y-2">
+                  {scorecard.competitorWins.slice(0, 3).map((comp) => (
+                    <div key={comp.competitor} className="flex items-center justify-between text-[14px]">
+                      <Link
+                        href={`/benchmarks/vendors/${encodeURIComponent(comp.competitor)}`}
+                        className="text-secondary hover:text-accent transition-colors"
+                      >
+                        {vendorDisplayName(comp.competitor)}
+                      </Link>
+                      <span className="font-data text-secondary">{comp.count} win{comp.count !== 1 ? "s" : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Clean recommendation rate */}
+            {scorecard.gotchaSnippets.length > 0 ? (
+              <div className="bg-surface rounded-[6px] p-6 border border-border">
+                <p className="text-[13px] text-primary font-medium mb-2">Warnings flagged by AI</p>
+                <p className="font-data text-[20px] text-data-3">{scorecard.gotchaSnippets.length}</p>
+                <p className="text-[12px] text-muted mt-1">
+                  AI added caveats when recommending you — fixing these could increase your selection rate
+                </p>
+              </div>
+            ) : (
+              <div className="bg-surface rounded-[6px] p-6 border border-border">
+                <p className="text-[13px] text-primary font-medium mb-2">Warnings flagged by AI</p>
+                <p className="font-data text-[20px] text-data-5">0</p>
+                <p className="text-[12px] text-muted mt-1">
+                  AI recommends you without caveats — clean signal
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Trend */}
+        {/* ── Momentum ───────────────────────────────────────────────── */}
         {trend && trend.dataPoints.length > 0 && (
           <div>
-            <h2 className="section-header mb-3">Trend</h2>
+            <h2 className="section-header mb-3">Momentum</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-surface rounded-[6px] p-6 border border-border">
-                <p className="stat-label">Win Rate Trend</p>
+                <p className="stat-label">Selection rate</p>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-[24px] font-bold text-primary">
-                    {trend.trend === "rising" ? "\u2191" : trend.trend === "falling" ? "\u2193" : "\u2192"}
-                  </span>
-                  <span className={`font-data text-[20px] ${
+                  <span className={`font-data text-[24px] ${
                     trend.trend === "rising" ? "text-data-5" :
                     trend.trend === "falling" ? "text-data-4" :
                     "text-secondary"
+                  }`}>
+                    {pct(trend.currentWinRate)}
+                  </span>
+                  <span className={`font-data text-[14px] ${
+                    trend.winRateDelta >= 0 ? "text-data-5" : "text-data-4"
                   }`}>
                     {trend.winRateDelta >= 0 ? "+" : ""}{pct(trend.winRateDelta)}
                   </span>
                 </div>
                 <p className="stat-context mt-1">
-                  {pct(trend.previousWinRate)} &rarr; {pct(trend.currentWinRate)}
+                  was {pct(trend.previousWinRate)} last period
                 </p>
               </div>
               <div className="bg-surface rounded-[6px] p-6 border border-border">
-                <p className="stat-label">Mention Volume</p>
+                <p className="stat-label">Conversations this period</p>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <span className={`font-data text-[24px] ${
-                    trend.mentionDelta > 0 ? "text-data-5" :
-                    trend.mentionDelta < 0 ? "text-data-4" :
-                    "text-secondary"
-                  }`}>
+                  <span className="font-data text-[24px] text-primary">
                     {trend.currentMentions.toLocaleString()}
                   </span>
-                  <span className="text-[14px] text-muted font-data">
-                    ({trend.mentionDelta >= 0 ? "+" : ""}{trend.mentionDelta} vs prior)
+                  <span className={`font-data text-[14px] ${
+                    trend.mentionDelta >= 0 ? "text-data-5" : "text-data-4"
+                  }`}>
+                    {trend.mentionDelta >= 0 ? "+" : ""}{trend.mentionDelta}
                   </span>
                 </div>
               </div>
               <div className="bg-surface rounded-[6px] p-6 border border-border">
-                <p className="stat-label">Weekly Activity</p>
+                <p className="stat-label">Weekly activity</p>
                 <div className="flex items-end gap-1 mt-2 h-12">
                   {trend.dataPoints.map((dp, i) => {
                     const maxMentions = Math.max(...trend.dataPoints.map(p => p.mentions), 1);
