@@ -1,0 +1,23 @@
+# DLT pipeline for benchmark transcript processing (Bronze → Silver → Gold)
+
+resources:
+  pipelines:
+    benchmark_etl:
+      name: benchmark_etl
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      root_path: "../src/benchmark_etl"
+
+      libraries:
+        - glob:
+            include: ../src/benchmark_etl/transformations/**
+
+      configuration:
+        spark.databricks.benchmark.catalog: ${var.catalog}
+        spark.databricks.benchmark.schema: ${var.schema}
+
+      environment:
+        dependencies:
+          # Include the benchmark package so DLT tasks can import parsers/extractors
+          - --editable ${workspace.file_path}

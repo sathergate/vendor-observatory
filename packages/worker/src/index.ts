@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { executeJob } from "./executor.js";
 import { cleanupOldWorkspaces } from "./cleanup.js";
 import { checkAndScheduleDailyBenchmark } from "./scheduler.js";
+import { startDatabricksPoller } from "./databricks-poller.js";
 
 const WORKER_ID = `worker-${randomUUID().slice(0, 8)}`;
 const POLL_INTERVAL_MS = 3000;
@@ -97,6 +98,25 @@ async function ensureDailyBenchmarkTables(): Promise<void> {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS daily_benchmark_logs_run_id ON daily_benchmark_logs(run_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS daily_benchmark_logs_event ON daily_benchmark_logs(event)`);
+
+  // Ensure ingest tables exist (normally created by ingest CLI, but worker's
+  // ingest-bridge writes directly to these)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vendor_rejections (
+      id SERIAL PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      vendor_canonical_id TEXT NOT NULL,
+      rejection_reason TEXT NOT NULL,
+      rejection_reason_detail TEXT,
+      chosen_alternative TEXT,
+      timestamp TEXT NOT NULL,
+      UNIQUE(session_id, vendor_canonical_id, rejection_reason)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_vendor ON vendor_rejections(vendor_canonical_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_session ON vendor_rejections(session_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_reason ON vendor_rejections(rejection_reason)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_alternative ON vendor_rejections(chosen_alternative)`);
 }
 
 // ── Ensure required columns exist ─────────────────────────────────
@@ -271,8 +291,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Start
+// Start onboarding poll loop + Databricks benchmark poller
 mainLoop().catch((err) => {
   console.error("[worker] Fatal error:", err);
   process.exit(1);
+});
+
+// Start Databricks poller for daily benchmark tasks (runs alongside onboarding loop)
+startDatabricksPoller(WORKER_ID).catch((err) => {
+  console.error("[databricks-poller] Fatal error:", err);
+  // Non-fatal — onboarding loop continues
 });

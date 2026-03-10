@@ -1,0 +1,30 @@
+resources:
+  jobs:
+    process_transcripts:
+      name: process_transcripts
+      description: "Refresh DLT pipeline and compute vendor scores"
+      schedule:
+        quartz_cron_expression: "0 */30 * * * ?"  # Every 30 minutes
+        timezone_id: UTC
+        pause_status: PAUSED
+      tasks:
+        - task_key: refresh_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.benchmark_etl.id}
+            full_refresh: false
+
+        - task_key: compute_scores
+          depends_on:
+            - task_key: refresh_pipeline
+          spark_python_task:
+            python_file: ../src/benchmark/jobs/compute_scores.py
+            parameters:
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - --editable ${workspace.file_path}
