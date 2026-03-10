@@ -97,6 +97,25 @@ async function ensureDailyBenchmarkTables(): Promise<void> {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS daily_benchmark_logs_run_id ON daily_benchmark_logs(run_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS daily_benchmark_logs_event ON daily_benchmark_logs(event)`);
+
+  // Ensure ingest tables exist (normally created by ingest CLI, but worker's
+  // ingest-bridge writes directly to these)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vendor_rejections (
+      id SERIAL PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id),
+      vendor_canonical_id TEXT NOT NULL,
+      rejection_reason TEXT NOT NULL,
+      rejection_reason_detail TEXT,
+      chosen_alternative TEXT,
+      timestamp TEXT NOT NULL,
+      UNIQUE(session_id, vendor_canonical_id, rejection_reason)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_vendor ON vendor_rejections(vendor_canonical_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_session ON vendor_rejections(session_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_reason ON vendor_rejections(rejection_reason)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rejections_alternative ON vendor_rejections(chosen_alternative)`);
 }
 
 // ── Ensure required columns exist ─────────────────────────────────
