@@ -5,6 +5,7 @@ Run via: databricks bundle run process_transcripts (Task 2, after DLT refresh)
 
 from __future__ import annotations
 
+import argparse
 from datetime import date
 
 from pyspark.sql import SparkSession
@@ -12,12 +13,21 @@ from pyspark.sql import SparkSession
 from benchmark.scoring.scorer import compute_scores, compute_vendor_scores_daily
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", default="benchmarks")
+    parser.add_argument("--schema", default="dev")
+    parser.add_argument("--run-id", default="")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = _parse_args()
     spark = SparkSession.builder.getOrCreate()
 
-    catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
-    schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
-    run_id = spark.conf.get("spark.databricks.benchmark.run_id", "")
+    catalog = args.catalog
+    schema = args.schema
+    run_id = args.run_id
 
     _ensure_gold_tables(spark, catalog, schema)
 

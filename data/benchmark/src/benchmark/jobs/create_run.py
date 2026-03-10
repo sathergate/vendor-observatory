@@ -5,20 +5,32 @@ Run via: databricks bundle run create_benchmark_run
 
 from __future__ import annotations
 
+import argparse
 import uuid
 from datetime import date, datetime, timezone
 
 from pyspark.sql import SparkSession
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", default="benchmarks")
+    parser.add_argument("--schema", default="dev")
+    parser.add_argument("--budget-usd", type=float, default=30.0)
+    parser.add_argument("--assistants", default="claude_code,codex_cli,cursor")
+    parser.add_argument("--category", default="")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = _parse_args()
     spark = SparkSession.builder.getOrCreate()
 
-    catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
-    schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
-    budget_usd = float(spark.conf.get("spark.databricks.benchmark.budget_usd", "30.0"))
-    assistants_raw = spark.conf.get("spark.databricks.benchmark.assistants", "claude_code,codex_cli,cursor")
-    category_filter = spark.conf.get("spark.databricks.benchmark.category", "")
+    catalog = args.catalog
+    schema = args.schema
+    budget_usd = args.budget_usd
+    assistants_raw = args.assistants
+    category_filter = args.category
 
     assistants = [a.strip() for a in assistants_raw.split(",") if a.strip()]
     run_date = date.today().isoformat()

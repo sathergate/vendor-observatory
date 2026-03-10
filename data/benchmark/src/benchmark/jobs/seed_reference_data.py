@@ -6,6 +6,7 @@ Run via: databricks bundle run seed_reference_data
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -14,12 +15,19 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType, BooleanType
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", default="benchmarks")
+    parser.add_argument("--schema", default="dev")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = _parse_args()
     spark = SparkSession.builder.getOrCreate()
 
-    # Read bundle variables from Spark conf (set by Databricks job parameters)
-    catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
-    schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
+    catalog = args.catalog
+    schema = args.schema
 
     fixtures_dir = Path(__file__).resolve().parents[3] / "fixtures"
 

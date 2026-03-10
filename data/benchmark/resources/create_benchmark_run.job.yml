@@ -6,7 +6,7 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"  # Daily at 6 AM UTC
         timezone_id: UTC
-        pause_status: PAUSED  # Paused in dev, enabled in prod
+        pause_status: PAUSED
       parameters:
         - name: budget_usd
           default: "30.0"
@@ -18,15 +18,13 @@ resources:
         - task_key: create_run
           spark_python_task:
             python_file: ../src/benchmark/jobs/create_run.py
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 0
-            spark_conf:
-              spark.databricks.benchmark.catalog: ${var.catalog}
-              spark.databricks.benchmark.schema: ${var.schema}
-              spark.databricks.benchmark.budget_usd: "{{job.parameters.budget_usd}}"
-              spark.databricks.benchmark.assistants: "{{job.parameters.assistants}}"
-              spark.databricks.benchmark.category: "{{job.parameters.category}}"
-          libraries:
-            - whl: ../dist/*.whl
+            parameters:
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - --editable ${workspace.file_path}

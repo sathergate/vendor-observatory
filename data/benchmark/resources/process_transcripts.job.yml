@@ -18,12 +18,13 @@ resources:
             - task_key: refresh_pipeline
           spark_python_task:
             python_file: ../src/benchmark/jobs/compute_scores.py
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 0
-            spark_conf:
-              spark.databricks.benchmark.catalog: ${var.catalog}
-              spark.databricks.benchmark.schema: ${var.schema}
-          libraries:
-            - whl: ../dist/*.whl
+            parameters:
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - --editable ${workspace.file_path}
