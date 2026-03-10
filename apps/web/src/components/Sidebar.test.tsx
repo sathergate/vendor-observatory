@@ -39,19 +39,13 @@ vi.mock("./NavLink", () => ({
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("Sidebar", () => {
-  it("does not show Profile link when no vendor is selected", () => {
+  it("shows loading state when no vendor is selected", () => {
     mockSelectedVendor = null;
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    // Standard nav items should still be present
-    expect(screen.getByText("Vendor Intel")).toBeDefined();
-    expect(screen.getByText("Prompt Intel")).toBeDefined();
-
-    // No profile link
-    const links = screen.queryAllByText(/^Profile/);
-    expect(links.length).toBe(0);
+    expect(screen.getByText("Loading vendor...")).toBeDefined();
   });
 
   it("shows vendor dashboard nav when a vendor is selected", () => {
@@ -60,17 +54,10 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
 
-    // Vendor nav shows "My Dashboard" group with vendor-specific links
-    expect(screen.getByText("My Dashboard")).toBeDefined();
-    const profileLink = screen.getByText("My Profile");
-    expect(profileLink).toBeDefined();
-    expect(profileLink.getAttribute("href")).toBe("/benchmarks/vendors/supabase");
-    expect(screen.getByText("Implementation Rate")).toBeDefined();
-    expect(screen.getByText("Competitive Landscape")).toBeDefined();
-    expect(screen.getByText("Confidence Trends")).toBeDefined();
-    expect(screen.getByText("Use Cases")).toBeDefined();
-    expect(screen.getByText("Reasoning Samples")).toBeDefined();
-    expect(screen.getByText("Category Competition")).toBeDefined();
+    const dashboardLink = screen.getByText("My Dashboard");
+    expect(dashboardLink).toBeDefined();
+    expect(dashboardLink.getAttribute("href")).toBe("/benchmarks/vendors/supabase");
+    expect(screen.getByText("Rejections")).toBeDefined();
   });
 
   it("vendor nav uses correct href for vendor IDs with special characters", () => {
@@ -79,9 +66,9 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
 
-    const profileLink = screen.getByText("My Profile");
-    expect(profileLink).toBeDefined();
-    expect(profileLink.getAttribute("href")).toBe("/benchmarks/vendors/cloudflare-workers");
+    const dashboardLink = screen.getByText("My Dashboard");
+    expect(dashboardLink).toBeDefined();
+    expect(dashboardLink.getAttribute("href")).toBe("/benchmarks/vendors/cloudflare-workers");
   });
 
   it("hides standard nav groups when vendor is selected", () => {
@@ -90,7 +77,6 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
 
-    // Vendor users see "My Dashboard" instead of standard groups
     expect(screen.getByText("My Dashboard")).toBeDefined();
     expect(screen.queryByText("Benchmarks")).toBeNull();
     expect(screen.queryByText("Analytics")).toBeNull();

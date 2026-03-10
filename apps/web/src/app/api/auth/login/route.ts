@@ -8,7 +8,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email and password required" }, { status: 400 });
   }
 
-  const user = await verifyUser(email, password);
+  let user;
+  try {
+    user = await verifyUser(email, password);
+  } catch {
+    return NextResponse.json({ error: "Database unavailable" }, { status: 500 });
+  }
   if (!user) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }

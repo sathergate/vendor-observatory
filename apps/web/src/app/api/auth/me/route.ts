@@ -3,7 +3,7 @@ import { getCurrentUser, hasActivePayment, getUserSubscription } from "@/lib/aut
 
 /** Email that always bypasses payment checks. */
 const BYPASS_EMAIL = "test@test.com";
-const BYPASS_VENDOR = "supabase";
+const BYPASS_VENDOR = "neon";
 
 export async function GET() {
   const user = await getCurrentUser();

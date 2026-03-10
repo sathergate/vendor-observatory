@@ -28,6 +28,16 @@ export default function LoginPage() {
         return;
       }
       window.dispatchEvent(new Event("auth-change"));
+      // Redirect to user's vendor profile page
+      try {
+        const meRes = await fetch("/api/auth/me");
+        const meData = await meRes.json();
+        const vendor = meData?.subscription?.vendorCanonicalId;
+        if (vendor) {
+          router.push(`/benchmarks/vendors/${vendor}`);
+          return;
+        }
+      } catch {}
       router.push("/");
     } catch {
       setError("Something went wrong");

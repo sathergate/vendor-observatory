@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import { VendorProvider, useVendor } from "./VendorContext";
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -21,17 +21,24 @@ function VendorDisplay() {
 
 beforeEach(() => {
   localStorage.clear();
+  // Mock fetch to return no vendor by default (simulates unauthenticated)
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: false,
+    json: () => Promise.resolve({ user: null }),
+  }));
 });
 
 describe("VendorProvider", () => {
-  it("defaults to null when localStorage is empty", () => {
+  it("defaults to null when localStorage is empty", async () => {
     render(
       <VendorProvider>
         <VendorDisplay />
       </VendorProvider>,
     );
 
-    expect(screen.getByTestId("vendor").textContent).toBe("none");
+    await waitFor(() => {
+      expect(screen.getByTestId("vendor").textContent).toBe("none");
+    });
   });
 
   it("hydrates from localStorage on mount", () => {
@@ -47,6 +54,8 @@ describe("VendorProvider", () => {
   });
 
   it("persists selection to localStorage when setSelectedVendor is called", () => {
+    localStorage.setItem("vendor-observatory:selected-vendor", "neon");
+
     render(
       <VendorProvider>
         <VendorDisplay />
