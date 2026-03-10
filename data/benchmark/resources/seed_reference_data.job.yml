@@ -1,0 +1,20 @@
+resources:
+  jobs:
+    seed_reference_data:
+      name: seed_reference_data
+      description: "Seed vendor taxonomy, package map, and prompts into Delta tables"
+      tasks:
+        - task_key: seed
+          spark_python_task:
+            python_file: ../src/benchmark/jobs/seed_reference_data.py
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "i3.xlarge"
+            num_workers: 0
+            spark_conf:
+              spark.databricks.benchmark.catalog: ${var.catalog}
+              spark.databricks.benchmark.schema: ${var.schema}
+          libraries:
+            - pypi:
+                package: pyyaml
+            - whl: ../dist/*.whl

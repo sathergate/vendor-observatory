@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { executeJob } from "./executor.js";
 import { cleanupOldWorkspaces } from "./cleanup.js";
 import { checkAndScheduleDailyBenchmark } from "./scheduler.js";
+import { startDatabricksPoller } from "./databricks-poller.js";
 
 const WORKER_ID = `worker-${randomUUID().slice(0, 8)}`;
 const POLL_INTERVAL_MS = 3000;
@@ -290,8 +291,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Start
+// Start onboarding poll loop + Databricks benchmark poller
 mainLoop().catch((err) => {
   console.error("[worker] Fatal error:", err);
   process.exit(1);
+});
+
+// Start Databricks poller for daily benchmark tasks (runs alongside onboarding loop)
+startDatabricksPoller(WORKER_ID).catch((err) => {
+  console.error("[databricks-poller] Fatal error:", err);
+  // Non-fatal — onboarding loop continues
 });
