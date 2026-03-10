@@ -35,13 +35,7 @@ const NAV_GROUPS = [
 ];
 
 const VENDOR_NAV_LINKS = (vendorId: string) => [
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}`, label: "My Profile" },
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/implementation`, label: "Implementation Rate" },
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/competitive`, label: "Competitive Landscape" },
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/trends`, label: "Confidence Trends" },
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/use-cases`, label: "Use Cases" },
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/reasoning`, label: "Reasoning Samples" },
-  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}/category-competition`, label: "Category Competition" },
+  { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}`, label: "My Dashboard" },
   { href: "/rejections", label: "Rejections" },
 ];
 
@@ -111,40 +105,20 @@ export function Sidebar() {
 
         <nav className="flex-1 p-3 overflow-y-auto" onClick={handleLinkClick}>
           {selectedVendor ? (
-            <div className="mb-4">
-              <div className="px-3 pt-2 pb-1">
-                <span className="section-header">My Dashboard</span>
-              </div>
-              <div className="space-y-0.5">
-                {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
-                  <NavLink
-                    key={link.href}
-                    href={link.href}
-                    label={link.label}
-                    exact={link.label === "My Profile"}
-                  />
-                ))}
-              </div>
+            <div className="space-y-0.5">
+              {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
+                <NavLink
+                  key={link.href}
+                  href={link.href}
+                  label={link.label}
+                  exact={link.label === "My Dashboard"}
+                />
+              ))}
             </div>
           ) : (
-            <>
-              {NAV_GROUPS.map((group) => (
-                <div key={group.label} className="mb-4">
-                  <div className="px-3 pt-2 pb-1">
-                    <span className="section-header">{group.label}</span>
-                  </div>
-                  <div className="space-y-0.5">
-                    {group.links.map((link) => (
-                      <NavLink
-                        key={link.href}
-                        href={link.href}
-                        label={link.label}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </>
+            <div className="px-3 pt-2 pb-1">
+              <span className="text-[13px] text-muted">Loading vendor...</span>
+            </div>
           )}
         </nav>
 

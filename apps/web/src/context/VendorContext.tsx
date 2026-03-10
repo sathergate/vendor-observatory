@@ -20,8 +20,24 @@ export function VendorProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) setSelectedVendorState(stored);
-    setHydrated(true);
+    if (stored) {
+      setSelectedVendorState(stored);
+      setHydrated(true);
+      return;
+    }
+
+    // No localStorage value — fetch from auth endpoint
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const vendorId = data?.subscription?.vendorCanonicalId;
+        if (vendorId) {
+          setSelectedVendorState(vendorId);
+          localStorage.setItem(STORAGE_KEY, vendorId);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setHydrated(true));
   }, []);
 
   const setSelectedVendor = useCallback((vendorId: string | null) => {

@@ -103,16 +103,12 @@ export async function createUser(email: string, password: string): Promise<AuthU
 export async function verifyUser(email: string, password: string): Promise<AuthUser | null> {
   await ensureTables();
   const pool = getPool();
-  if (!pool) return null;
-  try {
-    const { rows } = await pool.query(
-      "SELECT id, email FROM auth_users WHERE email = $1 AND password = $2",
-      [email, password],
-    );
-    return (rows[0] as AuthUser) ?? null;
-  } catch {
-    return null;
-  }
+  if (!pool) throw new Error("Database unavailable");
+  const { rows } = await pool.query(
+    "SELECT id, email FROM auth_users WHERE email = $1 AND password = $2",
+    [email, password],
+  );
+  return (rows[0] as AuthUser) ?? null;
 }
 
 // ── Session operations ────────────────────────────────────────────
@@ -312,7 +308,7 @@ export async function deactivateSubscriptionByStripeId(
 }
 
 /** Default vendor for the test bypass account. */
-const BYPASS_VENDOR = "supabase";
+const BYPASS_VENDOR = "neon";
 
 /**
  * Check whether a user has an active payment linked.
