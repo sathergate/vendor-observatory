@@ -239,62 +239,42 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           )}
         </div>
 
-        {/* AI-Readiness Score */}
+        {/* AI-Readiness Breakdown */}
         <div>
-          <h2 className="section-header mb-3">AI-Readiness Score</h2>
-          <p className="text-[12px] text-muted mb-3">
-            How well your documentation and SDK help AI assistants detect and implement your tool
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Overall score */}
-            <div className="bg-surface rounded-[6px] p-6 border border-border flex flex-col items-center justify-center">
-              <div className="font-data text-[48px] text-accent">
-                {aiReadiness.overall}
-              </div>
-              <div className="font-data text-[24px] mt-1 text-accent">
-                Grade: {aiReadiness.grade}
-              </div>
-              <p className="stat-context mt-2">out of 100</p>
-            </div>
-
-            {/* Breakdown */}
-            <div className="bg-surface rounded-[6px] p-6 border border-border md:col-span-2">
-              <div className="space-y-3">
-                {[
-                  { label: "Implementation Rate", data: aiReadiness.breakdown.implementationRate, desc: "How often AI writes code after detecting" },
-                  { label: "Win Rate", data: aiReadiness.breakdown.winRate, desc: "How often selected as primary choice" },
-                  { label: "Constraint Coverage", data: aiReadiness.breakdown.constraintCoverage, desc: "% of prompt constraints addressed" },
-                  { label: "Gotcha Avoidance", data: aiReadiness.breakdown.gotchaRate, desc: "Fewer gotchas = more AI-friendly" },
-                  { label: "Cross-Platform", data: aiReadiness.breakdown.crossPlatformConsistency, desc: "Consistency across assistants" },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <div className="flex justify-between text-[12px] mb-1">
-                      <span className="text-primary">
-                        {item.label}
-                        <span className="text-muted ml-1 font-data">({(item.data.weight * 100).toFixed(0)}%)</span>
-                      </span>
-                      <span className={`font-data ${
-                        item.data.score >= 70 ? "text-data-5" :
-                        item.data.score >= 40 ? "text-data-3" :
-                        "text-data-4"
-                      }`}>
-                        {item.data.score}/100
-                      </span>
-                    </div>
-                    <div className="w-full bg-data-muted rounded-[6px] h-2">
-                      <div
-                        className={`h-2 rounded-[6px] transition-all ${
-                          item.data.score >= 70 ? "bg-data-5" :
-                          item.data.score >= 40 ? "bg-data-3" :
-                          "bg-data-4"
-                        }`}
-                        style={{ width: `${Math.max(2, item.data.score)}%` }}
-                      />
-                    </div>
-                    <p className="text-[12px] text-muted mt-0.5">{item.desc}</p>
+          <h2 className="section-header mb-3">AI-Readiness</h2>
+          <div className="bg-surface rounded-[6px] p-6 border border-border">
+            <div className="space-y-3">
+              {[
+                { label: "Implementation Rate", data: aiReadiness.breakdown.implementationRate, desc: "How often AI writes code after detecting" },
+                { label: "Win Rate", data: aiReadiness.breakdown.winRate, desc: "How often selected as primary choice" },
+                { label: "Constraint Coverage", data: aiReadiness.breakdown.constraintCoverage, desc: "% of prompt constraints addressed" },
+                { label: "Gotcha Avoidance", data: aiReadiness.breakdown.gotchaRate, desc: "Fewer gotchas = more AI-friendly" },
+                { label: "Cross-Platform", data: aiReadiness.breakdown.crossPlatformConsistency, desc: "Consistency across assistants" },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="flex justify-between text-[12px] mb-1">
+                    <span className="text-primary">{item.label}</span>
+                    <span className={`font-data ${
+                      item.data.score >= 70 ? "text-data-5" :
+                      item.data.score >= 40 ? "text-data-3" :
+                      "text-data-4"
+                    }`}>
+                      {item.data.score}/100
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="w-full bg-data-muted rounded-[6px] h-2">
+                    <div
+                      className={`h-2 rounded-[6px] transition-all ${
+                        item.data.score >= 70 ? "bg-data-5" :
+                        item.data.score >= 40 ? "bg-data-3" :
+                        "bg-data-4"
+                      }`}
+                      style={{ width: `${Math.max(2, item.data.score)}%` }}
+                    />
+                  </div>
+                  <p className="text-[12px] text-muted mt-0.5">{item.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
