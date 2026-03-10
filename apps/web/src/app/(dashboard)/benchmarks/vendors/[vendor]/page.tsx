@@ -229,7 +229,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* Scenarios you're winning vs total */}
-            <div className="bg-surface rounded-[6px] p-6 border border-border">
+            <Link href={`/benchmarks/vendors/${encodeURIComponent(vendorId)}/use-cases`} className="bg-surface rounded-[6px] p-6 border border-border hover:border-accent/40 transition-colors block">
               <div className="flex items-baseline justify-between mb-3">
                 <p className="text-[13px] text-primary font-medium">Scenarios won</p>
                 <p className="font-data text-[14px] text-accent">
@@ -245,14 +245,14 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
               {scorecard.promptsLost.length > 0 && (
                 <p className="text-[12px] text-muted mt-2">
                   {scorecard.promptsLost.length} scenario{scorecard.promptsLost.length !== 1 ? "s" : ""} where
-                  a competitor was chosen instead — see the Signals tab for details
+                  a competitor was chosen instead
                 </p>
               )}
-            </div>
+            </Link>
 
             {/* Requirements coverage */}
             {(scorecard.constraintsAddressed.length > 0 || scorecard.constraintsMissed.length > 0) && (
-              <div className="bg-surface rounded-[6px] p-6 border border-border">
+              <Link href={`/benchmarks/vendors/${encodeURIComponent(vendorId)}/implementation`} className="bg-surface rounded-[6px] p-6 border border-border hover:border-accent/40 transition-colors block">
                 <div className="flex items-baseline justify-between mb-3">
                   <p className="text-[13px] text-primary font-medium">Developer requirements covered</p>
                   <p className="font-data text-[14px] text-accent">
@@ -271,47 +271,45 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
                     developers asked for where AI didn&apos;t know you qualified
                   </p>
                 )}
-              </div>
+              </Link>
             )}
 
             {/* Competitors winning against you */}
             {scorecard.competitorWins.length > 0 && (
-              <div className="bg-surface rounded-[6px] p-6 border border-border">
+              <Link href={`/benchmarks/vendors/${encodeURIComponent(vendorId)}/competitive`} className="bg-surface rounded-[6px] p-6 border border-border hover:border-accent/40 transition-colors block">
                 <p className="text-[13px] text-primary font-medium mb-3">Top competitors winning scenarios</p>
                 <div className="space-y-2">
                   {scorecard.competitorWins.slice(0, 3).map((comp) => (
                     <div key={comp.competitor} className="flex items-center justify-between text-[14px]">
-                      <Link
-                        href={`/benchmarks/vendors/${encodeURIComponent(comp.competitor)}`}
-                        className="text-secondary hover:text-accent transition-colors"
-                      >
+                      <span className="text-secondary">
                         {vendorDisplayName(comp.competitor)}
-                      </Link>
+                      </span>
                       <span className="font-data text-secondary">{comp.count} win{comp.count !== 1 ? "s" : ""}</span>
                     </div>
                   ))}
                 </div>
-              </div>
+              </Link>
             )}
 
             {/* Clean recommendation rate */}
-            {scorecard.gotchaSnippets.length > 0 ? (
-              <div className="bg-surface rounded-[6px] p-6 border border-border">
-                <p className="text-[13px] text-primary font-medium mb-2">Warnings flagged by AI</p>
-                <p className="font-data text-[20px] text-data-3">{scorecard.gotchaSnippets.length}</p>
-                <p className="text-[12px] text-muted mt-1">
-                  AI added caveats when recommending you — fixing these could increase your selection rate
-                </p>
-              </div>
-            ) : (
-              <div className="bg-surface rounded-[6px] p-6 border border-border">
-                <p className="text-[13px] text-primary font-medium mb-2">Warnings flagged by AI</p>
-                <p className="font-data text-[20px] text-data-5">0</p>
-                <p className="text-[12px] text-muted mt-1">
-                  AI recommends you without caveats — clean signal
-                </p>
-              </div>
-            )}
+            <Link href={`/benchmarks/vendors/${encodeURIComponent(vendorId)}/reasoning`} className="bg-surface rounded-[6px] p-6 border border-border hover:border-accent/40 transition-colors block">
+              <p className="text-[13px] text-primary font-medium mb-2">Warnings flagged by AI</p>
+              {scorecard.gotchaSnippets.length > 0 ? (
+                <>
+                  <p className="font-data text-[20px] text-data-3">{scorecard.gotchaSnippets.length}</p>
+                  <p className="text-[12px] text-muted mt-1">
+                    AI added caveats when recommending you
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-data text-[20px] text-data-5">0</p>
+                  <p className="text-[12px] text-muted mt-1">
+                    AI recommends you without caveats
+                  </p>
+                </>
+              )}
+            </Link>
           </div>
         </div>
 
