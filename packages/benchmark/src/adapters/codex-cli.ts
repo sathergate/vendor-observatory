@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { which } from "../util.js";
 import type { AssistantAdapter, RunOptions, BenchmarkResult } from "./types.js";
 
@@ -15,6 +18,9 @@ export class CodexCliAdapter implements AssistantAdapter {
     const start = Date.now();
 
     try {
+      // Snapshot existing session files so we can diff after the run
+      const sessionsBefore = getCodexSessionFiles();
+
       const args = ["exec"];
 
       // On CI/GitHub Actions, the runner is already externally sandboxed.
@@ -40,6 +46,9 @@ export class CodexCliAdapter implements AssistantAdapter {
       const endedAt = new Date().toISOString();
       const durationMs = Date.now() - start;
 
+      // Find the new session file created by this run
+      const transcriptPath = findNewSessionFile(sessionsBefore);
+
       // Timeouts that produced output are not errors
       const hasContent = stdout.length > 100;
       const isError = exitCode !== 0 && !hasContent;
@@ -53,7 +62,7 @@ export class CodexCliAdapter implements AssistantAdapter {
         durationMs,
         stdout: stdout.slice(0, 5000),
         stderr: stderr.slice(0, 2000),
-        transcriptPath: null, // Codex auto-saves to ~/.codex/sessions/
+        transcriptPath,
         costUsd: null,
         error: isError ? `Exit code ${exitCode}: ${stderr.slice(0, 500)}` : null,
       };
@@ -73,6 +82,48 @@ export class CodexCliAdapter implements AssistantAdapter {
       };
     }
   }
+}
+
+/**
+ * Recursively collect all .jsonl file paths under ~/.codex/sessions/.
+ */
+function getCodexSessionFiles(): Set<string> {
+  const sessionsDir = join(homedir(), ".codex", "sessions");
+  const files = new Set<string>();
+
+  function walk(dir: string): void {
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name.endsWith(".jsonl")) {
+          files.add(full);
+        }
+      }
+    } catch {
+      // Directory may not exist yet
+    }
+  }
+
+  walk(sessionsDir);
+  return files;
+}
+
+/**
+ * Find the new session file that appeared after a run.
+ * Falls back to most recently modified .jsonl if multiple new files appear.
+ */
+function findNewSessionFile(before: Set<string>): string | null {
+  const after = getCodexSessionFiles();
+  const newFiles = [...after].filter((f) => !before.has(f));
+
+  if (newFiles.length === 1) return newFiles[0];
+  if (newFiles.length > 1) {
+    // Pick the most recently modified
+    return newFiles.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+  }
+  return null;
 }
 
 /**

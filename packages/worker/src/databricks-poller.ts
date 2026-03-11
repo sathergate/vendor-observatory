@@ -29,6 +29,9 @@ type AdapterResult = {
   costUsd: number | null;
   durationMs: number;
   transcriptPath: string | null;
+  stdout: string;
+  stderr: string;
+  error: string | null;
 };
 
 const POLL_INTERVAL_MS = 5000;
@@ -100,14 +103,21 @@ async function runTask(
     const durationMs = Date.now() - start;
 
     // Find and upload the transcript
+    const today = new Date().toISOString().slice(0, 10);
     let volumePath: string | null = null;
     if (adapterResult.transcriptPath) {
-      const today = new Date().toISOString().slice(0, 10);
       volumePath = `/Volumes/${config.catalog}/${config.volumesSchema}/transcripts/${today}/${task.agent}/${task.prompt_id}.jsonl`;
 
       const transcriptContent = readFileSync(adapterResult.transcriptPath, "utf-8");
       await uploadTranscript(config, volumePath, transcriptContent);
     }
+
+    // Upload stdout/stderr logs for debugging
+    const logBase = `/Volumes/${config.catalog}/${config.volumesSchema}/logs/${today}/${task.id}`;
+    await Promise.all([
+      uploadTranscript(config, `${logBase}/stdout.log`, adapterResult.stdout),
+      uploadTranscript(config, `${logBase}/stderr.log`, adapterResult.stderr),
+    ]);
 
     return {
       exitCode: adapterResult.exitCode,
@@ -116,6 +126,19 @@ async function runTask(
       transcriptPath: volumePath,
     };
   } catch (err) {
+    // Upload error log even on unexpected failures
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const errorContent = err instanceof Error ? err.stack ?? err.message : String(err);
+      const logBase = `/Volumes/${config.catalog}/${config.volumesSchema}/logs/${today}/${task.id}`;
+      await Promise.all([
+        uploadTranscript(config, `${logBase}/stdout.log`, ""),
+        uploadTranscript(config, `${logBase}/stderr.log`, errorContent),
+      ]);
+    } catch {
+      // Log upload failed — don't mask the original error
+    }
+
     return {
       exitCode: 1,
       costUsd: 0,
