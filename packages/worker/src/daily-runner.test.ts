@@ -473,7 +473,7 @@ describe("markDailyRunFailed", () => {
 
     // The UPDATE call is the second query (after the log INSERT)
     const calls = (pool.query as ReturnType<typeof vi.fn>).mock.calls;
-    const updateCall = calls.find(([sql]: [string]) => sql.includes("UPDATE daily_benchmark_runs"));
+    const updateCall = calls.find((args: any[]) => typeof args[0] === "string" && args[0].includes("UPDATE daily_benchmark_runs"));
     expect(updateCall).toBeDefined();
     expect(updateCall![1][0]).toBe("string error");
   });

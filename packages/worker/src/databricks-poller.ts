@@ -26,7 +26,7 @@ import { createWorkspace } from "@obs/benchmark/workspace";
 // Adapters imported dynamically to avoid hard dependency if packages aren't built
 type AdapterResult = {
   exitCode: number;
-  costUsd: number;
+  costUsd: number | null;
   durationMs: number;
   transcriptPath: string | null;
 };
@@ -61,7 +61,7 @@ export async function startDatabricksPoller(workerId: string): Promise<void> {
       await updateTask(config, task.id, {
         status: result.error ? "failed" : "completed",
         transcript_path: result.transcriptPath ?? undefined,
-        cost_usd: result.costUsd,
+        cost_usd: result.costUsd ?? undefined,
         duration_ms: result.durationMs,
         exit_code: result.exitCode,
         error: result.error,
@@ -77,7 +77,7 @@ export async function startDatabricksPoller(workerId: string): Promise<void> {
 
 interface TaskResult {
   exitCode: number;
-  costUsd: number;
+  costUsd: number | null;
   durationMs: number;
   transcriptPath: string | null;
   error?: string;
@@ -96,7 +96,7 @@ async function runTask(
     const workDir = createWorkspace(task.prompt_id, task.agent, template, task.run_id);
 
     // Run the adapter
-    const adapterResult = await runAdapter(task.agent, task.prompt_text, workDir);
+    const adapterResult = await runAdapter(task.agent, task.prompt_text, workDir, task.prompt_id);
     const durationMs = Date.now() - start;
 
     // Find and upload the transcript
@@ -130,23 +130,25 @@ async function runAdapter(
   agent: string,
   promptText: string,
   workDir: string,
+  promptId: string,
 ): Promise<AdapterResult> {
+  const opts = { prompt: promptText, promptId, workDir, budgetUsd: 1, timeoutMs: 300_000 };
   // Dynamic import to avoid hard dependency
   switch (agent) {
     case "claude_code": {
       const { ClaudeCodeAdapter } = await import("@obs/benchmark/adapters/claude-code");
       const adapter = new ClaudeCodeAdapter();
-      return adapter.run(promptText, workDir);
+      return adapter.run(opts);
     }
     case "codex_cli": {
       const { CodexCliAdapter } = await import("@obs/benchmark/adapters/codex-cli");
       const adapter = new CodexCliAdapter();
-      return adapter.run(promptText, workDir);
+      return adapter.run(opts);
     }
     case "cursor": {
       const { CursorAgentAdapter } = await import("@obs/benchmark/adapters/cursor-agent");
       const adapter = new CursorAgentAdapter();
-      return adapter.run(promptText, workDir);
+      return adapter.run(opts);
     }
     default:
       throw new Error(`Unknown agent: ${agent}`);
