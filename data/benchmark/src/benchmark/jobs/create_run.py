@@ -36,6 +36,9 @@ def main() -> None:
     run_date = date.today().isoformat()
     run_id = str(uuid.uuid4())
 
+    # Ensure tables exist before any queries
+    _ensure_tables(spark, catalog, schema)
+
     # Check budget — cumulative cost for rolling 30-day window
     budget_check = spark.sql(f"""
         SELECT COALESCE(SUM(total_cost_usd), 0) AS total_cost
@@ -63,8 +66,6 @@ def main() -> None:
     now = datetime.now(timezone.utc).isoformat()
 
     # Create benchmark_runs row
-    _ensure_tables(spark, catalog, schema)
-
     spark.sql(f"""
         INSERT INTO {catalog}.{schema}.benchmark_runs
         VALUES (
