@@ -85,9 +85,11 @@ def main() -> None:
             # Escape single quotes in text
             prompt_text = (prompt["text"] or "").replace("'", "''")
             prompt_metadata = (prompt["metadata"] or "{}").replace("'", "''")
+            prompt_template = (prompt["template"] or "").replace("'", "''")
+            prompt_category = (prompt["category"] or "").replace("'", "''")
             queue_values.append(
                 f"('{task_id}', '{run_id}', '{prompt['id']}', '{agent}', "
-                f"'{prompt_text}', '{prompt.get('template', '')}', '{prompt.get('category', '')}', "
+                f"'{prompt_text}', '{prompt_template}', '{prompt_category}', "
                 f"'{prompt_metadata}', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
             )
 
