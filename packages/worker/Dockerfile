@@ -24,5 +24,7 @@ RUN chmod +x /entrypoint.sh
 # Switch to non-root user before running
 USER worker
 
+ENV DATABRICKS_WAREHOUSE_ID=dd7165b90dbdd269
+
 EXPOSE 8080
 ENTRYPOINT ["/entrypoint.sh"]
