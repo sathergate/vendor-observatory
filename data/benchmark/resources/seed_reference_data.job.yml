@@ -16,5 +16,5 @@ resources:
           spec:
             environment_version: "4"
             dependencies:
-              - --editable ${workspace.file_path}
+              - ${workspace.file_path}/dist/benchmark-0.0.1-py3-none-any.whl
               - pyyaml

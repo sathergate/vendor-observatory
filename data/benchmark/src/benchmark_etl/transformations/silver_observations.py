@@ -12,8 +12,9 @@ from pyspark.sql.functions import col, udf, explode, current_timestamp
 from pyspark.sql.types import ArrayType, DoubleType, StringType, StructField, StructType
 
 from benchmark.extraction.extractor import extract_vendor_mentions
-from benchmark.extraction.types import VendorTaxonomy, VendorEntry
+from benchmark.extraction.types import VendorTaxonomy
 from benchmark.parsers.types import ParsedTurn, ToolUseRecord, ToolResultRecord
+from taxonomy_loader import load_taxonomy
 
 _mention_schema = StructType([
     StructField("vendor_canonical_id", StringType(), False),
@@ -22,24 +23,6 @@ _mention_schema = StructType([
     StructField("confidence", DoubleType(), True),
     StructField("context_snippet", StringType(), True),
 ])
-
-
-def _load_taxonomy_from_delta(spark) -> VendorTaxonomy:
-    """Load vendor taxonomy from Delta table."""
-    catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
-    schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
-    rows = spark.sql(f"SELECT * FROM {catalog}.{schema}.vendors").collect()
-    vendors = [
-        VendorEntry(
-            canonical_id=r["canonical_id"],
-            display_name=r["display_name"],
-            synonyms=r["synonyms"] or [],
-            category=r["category"] or "",
-            website=r["website"] or "",
-        )
-        for r in rows
-    ]
-    return VendorTaxonomy(vendors=vendors)
 
 
 def _extract_mentions_from_session(raw_turns_json: str, taxonomy: VendorTaxonomy) -> list[tuple]:
@@ -91,22 +74,17 @@ def _extract_mentions_from_session(raw_turns_json: str, taxonomy: VendorTaxonomy
     return all_mentions
 
 
+_taxonomy = load_taxonomy()
+
+
 @dlt.table(
     name="observations",
     comment="Silver: vendor mentions extracted from transcript turns",
 )
 def observations():
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    taxonomy = _load_taxonomy_from_delta(spark)
-
-    # Broadcast taxonomy for UDF
-    taxonomy_bc = spark.sparkContext.broadcast(taxonomy)
-
     @udf(returnType=ArrayType(_mention_schema))
     def extract_mentions_udf(raw_turns_json):
-        return _extract_mentions_from_session(raw_turns_json, taxonomy_bc.value)
+        return _extract_mentions_from_session(raw_turns_json, _taxonomy)
 
     raw = dlt.read("raw_transcripts")
 

@@ -9,8 +9,9 @@ from pyspark.sql.functions import col, udf, explode, current_timestamp
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 
 from benchmark.extraction.rejection_extractor import extract_vendor_rejections
-from benchmark.extraction.types import VendorTaxonomy, VendorEntry
+from benchmark.extraction.types import VendorTaxonomy
 from benchmark.parsers.types import ParsedTurn, ToolUseRecord, ToolResultRecord
+from taxonomy_loader import load_taxonomy
 
 _rejection_schema = StructType([
     StructField("vendor_canonical_id", StringType(), False),
@@ -45,26 +46,17 @@ def _extract_rejections_from_session(raw_turns_json: str, taxonomy: VendorTaxono
     return [(r.vendor_canonical_id, r.rejection_reason, r.chosen_alternative) for r in rejections]
 
 
+_taxonomy = load_taxonomy()
+
+
 @dlt.table(
     name="vendor_rejections",
     comment="Silver: vendor rejections extracted from transcript turns",
 )
 def vendor_rejections():
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
-    schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
-    rows = spark.sql(f"SELECT * FROM {catalog}.{schema}.vendors").collect()
-    taxonomy = VendorTaxonomy(vendors=[
-        VendorEntry(canonical_id=r["canonical_id"], display_name=r["display_name"], synonyms=r["synonyms"] or [], category=r["category"] or "")
-        for r in rows
-    ])
-    taxonomy_bc = spark.sparkContext.broadcast(taxonomy)
-
     @udf(returnType=ArrayType(_rejection_schema))
     def extract_rejections_udf(raw_turns_json):
-        return _extract_rejections_from_session(raw_turns_json, taxonomy_bc.value)
+        return _extract_rejections_from_session(raw_turns_json, _taxonomy)
 
     raw = dlt.read("raw_transcripts")
 

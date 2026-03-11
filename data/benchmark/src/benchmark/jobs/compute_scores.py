@@ -48,7 +48,7 @@ def main() -> None:
             SELECT br.id
             FROM {catalog}.{schema}.benchmark_runs br
             WHERE br.run_date = '{today}'
-              AND br.id NOT IN (SELECT DISTINCT run_id FROM {catalog}.{schema}.vendor_scores)
+              AND br.id NOT IN (SELECT DISTINCT run_id FROM {catalog}.{schema}.vendor_scores_computed)
         """).collect()
 
         for row in unscored:
@@ -63,7 +63,7 @@ def main() -> None:
 
 def _ensure_gold_tables(spark: SparkSession, catalog: str, schema: str) -> None:
     spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.vendor_scores (
+        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.vendor_scores_computed (
             run_id STRING NOT NULL,
             vendor_canonical_id STRING NOT NULL,
             mention_rate DOUBLE,
@@ -76,7 +76,7 @@ def _ensure_gold_tables(spark: SparkSession, catalog: str, schema: str) -> None:
     """)
 
     spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.vendor_scores_daily (
+        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.vendor_scores_computed_daily (
             run_date STRING NOT NULL,
             vendor_canonical_id STRING NOT NULL,
             mention_rate DOUBLE,

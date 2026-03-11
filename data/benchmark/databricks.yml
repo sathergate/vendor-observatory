@@ -8,6 +8,10 @@ include:
   - resources/*.yml
   - resources/*/*.yml
 
+sync:
+  include:
+    - dist/*.whl
+
 # Variable declarations. These variables are assigned in the dev/prod targets below.
 variables:
   catalog:

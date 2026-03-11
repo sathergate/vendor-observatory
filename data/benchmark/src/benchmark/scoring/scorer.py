@@ -13,16 +13,16 @@ def compute_scores(spark: SparkSession, catalog: str, schema: str, run_id: str) 
     """Compute vendor_scores for a benchmark run and write to the gold table.
 
     Aggregates observations → mention/install/config rates per run×vendor.
-    Writes results to `{catalog}.{schema}.vendor_scores`.
+    Writes results to `{catalog}.{schema}.vendor_scores_computed`.
     """
     spark.sql(f"""
-        MERGE INTO {catalog}.{schema}.vendor_scores AS target
+        MERGE INTO {catalog}.{schema}.vendor_scores_computed AS target
         USING (
             WITH sessions AS (
                 SELECT DISTINCT wq.id AS queue_id, rt.session_id
                 FROM {catalog}.{schema}.worker_queue wq
                 JOIN {catalog}.{schema}.raw_transcripts rt
-                    ON rt.run_id = wq.run_id
+                    ON rt.transcript_path = wq.transcript_path
                 WHERE wq.run_id = '{run_id}'
                     AND wq.status = 'completed'
             ),
@@ -65,10 +65,10 @@ def compute_vendor_scores_daily(spark: SparkSession, catalog: str, schema: str, 
     """Compute vendor_scores_daily for a given date.
 
     Aggregates across all runs on that date into a single time-series row per vendor.
-    Writes results to `{catalog}.{schema}.vendor_scores_daily`.
+    Writes results to `{catalog}.{schema}.vendor_scores_computed_daily`.
     """
     spark.sql(f"""
-        MERGE INTO {catalog}.{schema}.vendor_scores_daily AS target
+        MERGE INTO {catalog}.{schema}.vendor_scores_computed_daily AS target
         USING (
             SELECT
                 '{run_date}' AS run_date,
@@ -77,7 +77,7 @@ def compute_vendor_scores_daily(spark: SparkSession, catalog: str, schema: str, 
                 ROUND(AVG(vs.install_rate), 1) AS install_rate,
                 ROUND(AVG(vs.config_rate), 1) AS config_rate,
                 LEAST(100, ROUND(AVG(vs.ai_readiness))) AS ai_readiness
-            FROM {catalog}.{schema}.vendor_scores vs
+            FROM {catalog}.{schema}.vendor_scores_computed vs
             JOIN {catalog}.{schema}.benchmark_runs br ON br.id = vs.run_id
             WHERE br.run_date = '{run_date}'
             GROUP BY vs.vendor_canonical_id

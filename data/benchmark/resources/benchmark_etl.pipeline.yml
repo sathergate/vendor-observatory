@@ -20,4 +20,4 @@ resources:
       environment:
         dependencies:
           # Include the benchmark package so DLT tasks can import parsers/extractors
-          - --editable ${workspace.file_path}
+          - ${workspace.file_path}/dist/benchmark-0.0.1-py3-none-any.whl

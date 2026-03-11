@@ -9,8 +9,9 @@ from pyspark.sql.functions import col, udf, current_timestamp
 from pyspark.sql.types import ArrayType, BooleanType, DoubleType, StringType, StructField, StructType
 
 from benchmark.extraction.reasoning_extractor import extract_response_context
-from benchmark.extraction.types import VendorTaxonomy, VendorEntry
+from benchmark.extraction.types import VendorTaxonomy
 from benchmark.parsers.types import ParsedTurn, ToolUseRecord, ToolResultRecord
+from taxonomy_loader import load_taxonomy
 
 _context_schema = StructType([
     StructField("primary_vendor", StringType(), True),
@@ -61,26 +62,17 @@ def _extract_context_from_session(raw_turns_json: str, taxonomy: VendorTaxonomy)
     )
 
 
+_taxonomy = load_taxonomy()
+
+
 @dlt.table(
     name="response_context",
     comment="Silver: extracted reasoning context from benchmark sessions",
 )
 def response_context():
-    from pyspark.sql import SparkSession
-
-    spark = SparkSession.builder.getOrCreate()
-    catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
-    schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
-    rows = spark.sql(f"SELECT * FROM {catalog}.{schema}.vendors").collect()
-    taxonomy = VendorTaxonomy(vendors=[
-        VendorEntry(canonical_id=r["canonical_id"], display_name=r["display_name"], synonyms=r["synonyms"] or [], category=r["category"] or "")
-        for r in rows
-    ])
-    taxonomy_bc = spark.sparkContext.broadcast(taxonomy)
-
     @udf(returnType=_context_schema)
     def extract_context_udf(raw_turns_json):
-        return _extract_context_from_session(raw_turns_json, taxonomy_bc.value)
+        return _extract_context_from_session(raw_turns_json, _taxonomy)
 
     raw = dlt.read("raw_transcripts")
 
