@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 
 import dlt
-from pyspark.sql.functions import col, udf, input_file_name, current_timestamp
+from pyspark.sql.functions import col, udf, current_timestamp
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType, IntegerType
 
 from benchmark.parsers.claude_code import parse_claude_code_jsonl
@@ -99,7 +99,7 @@ def _read_with_autoloader():
     parse_udf = udf(_parse_transcript_udf, ArrayType(_session_schema))
 
     return (
-        raw.withColumn("file_path", input_file_name())
+        raw.withColumn("file_path", col("_metadata.file_path"))
         .withColumn("sessions", parse_udf(col("value"), col("file_path")))
         .selectExpr("explode(sessions) as session")
         .select(
@@ -110,7 +110,7 @@ def _read_with_autoloader():
             col("session.started_at").alias("started_at"),
             col("session.turn_count").alias("turn_count"),
             col("session.raw_turns_json").alias("raw_turns_json"),
-            input_file_name().alias("transcript_path"),
+            col("_metadata.file_path").alias("transcript_path"),
             current_timestamp().alias("ingested_at"),
         )
     )
