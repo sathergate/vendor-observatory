@@ -84,7 +84,8 @@ def _read_with_autoloader():
     catalog = spark.conf.get("spark.databricks.benchmark.catalog", "benchmarks")
     schema = spark.conf.get("spark.databricks.benchmark.schema", "dev")
 
-    volumes_path = f"/Volumes/{catalog}/{schema}/transcripts/"
+    volumes_schema = spark.conf.get("spark.databricks.benchmark.volumes_schema", "default")
+    volumes_path = f"/Volumes/{catalog}/{volumes_schema}/transcripts/"
 
     # Use cloudFiles Auto Loader for incremental ingestion
     raw = (

@@ -15,6 +15,7 @@ export interface DatabricksConfig {
   token: string;
   catalog: string;
   schema: string;
+  volumesSchema: string;
   warehouseId: string;
 }
 
@@ -33,14 +34,15 @@ export function loadDatabricksConfig(): DatabricksConfig {
   const host = process.env.DATABRICKS_HOST;
   const token = process.env.DATABRICKS_TOKEN;
   const catalog = process.env.DATABRICKS_CATALOG ?? "benchmarks";
-  const schema = process.env.DATABRICKS_SCHEMA ?? "dev";
+  const schema = process.env.DATABRICKS_SCHEMA ?? "prod";
+  const volumesSchema = process.env.DATABRICKS_VOLUMES_SCHEMA ?? "default";
   const warehouseId = process.env.DATABRICKS_WAREHOUSE_ID ?? "";
 
   if (!host || !token) {
     throw new Error("DATABRICKS_HOST and DATABRICKS_TOKEN must be set");
   }
 
-  return { host: host.replace(/\/$/, ""), token, catalog, schema, warehouseId };
+  return { host: host.replace(/\/$/, ""), token, catalog, schema, volumesSchema, warehouseId };
 }
 
 // ── SQL Statements API ──────────────────────────────────────────────

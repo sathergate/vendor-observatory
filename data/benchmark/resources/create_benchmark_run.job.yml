@@ -6,7 +6,6 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 6 * * ?"  # Daily at 6 AM UTC
         timezone_id: UTC
-        pause_status: PAUSED
       parameters:
         - name: budget_usd
           default: "30.0"

@@ -103,7 +103,7 @@ async function runTask(
     let volumePath: string | null = null;
     if (adapterResult.transcriptPath) {
       const today = new Date().toISOString().slice(0, 10);
-      volumePath = `/Volumes/${config.catalog}/${config.schema}/transcripts/${today}/${task.agent}/${task.prompt_id}.jsonl`;
+      volumePath = `/Volumes/${config.catalog}/${config.volumesSchema}/transcripts/${today}/${task.agent}/${task.prompt_id}.jsonl`;
 
       const transcriptContent = readFileSync(adapterResult.transcriptPath, "utf-8");
       await uploadTranscript(config, volumePath, transcriptContent);
