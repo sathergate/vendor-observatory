@@ -6,7 +6,9 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./lib": "./dist/lib.js"
+    "./lib": "./dist/lib.js",
+    "./workspace": "./dist/workspace.js",
+    "./adapters/*": "./dist/adapters/*.js"
   },
   "bin": {
     "obs-bench": "dist/index.js"
