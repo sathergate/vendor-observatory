@@ -13,6 +13,12 @@
 import { Pool } from "pg";
 import { safeJsonParse } from "./db";
 
+// ── Table names (Lakebase synced tables) ─────────────────────────────
+const T_SESSIONS = "sessions_synced";
+const T_OBSERVATIONS = "observations_synced";
+const T_RESPONSE_CONTEXT = "response_context_synced";
+const T_PROMPT_METADATA = "prompt_metadata_synced";
+
 // ── Lazy Pool (same pattern as db.ts) ──────────────────────────────────
 
 let _pool: Pool | null = null;
@@ -117,14 +123,14 @@ export async function queryVendorWinRate(
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT))) return null;
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.constraints_addressed,
              s.source_platform, pm.category, pm.constraints
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
     `);
 
     type ResponseRow = {
@@ -198,12 +204,12 @@ export async function queryConstraintCorrelation(
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return null;
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, pm.constraints
-      FROM response_context rc
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
       WHERE rc.primary_vendor IS NOT NULL
     `);
 
@@ -263,15 +269,15 @@ export async function queryPlatformComparison(
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT))) return null;
 
     const whereClause = keyType === "prompt" ? "rc.prompt_id = $1" : "pm.category = $1";
 
     const { rows: responses } = await pool.query(`
       SELECT rc.primary_vendor, s.source_platform
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
       WHERE ${whereClause}
     `, [key]);
 
@@ -302,10 +308,10 @@ export async function queryPromptDifficulty(promptId: string): Promise<PromptDif
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT))) return null;
 
     const { rows: responses } = await pool.query(
-      "SELECT primary_vendor FROM response_context WHERE prompt_id = $1 AND primary_vendor IS NOT NULL",
+      `SELECT primary_vendor FROM ${T_RESPONSE_CONTEXT} WHERE prompt_id = $1 AND primary_vendor IS NOT NULL`,
       [promptId],
     );
 
@@ -349,12 +355,12 @@ export async function queryWhatIf(
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return null;
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, pm.constraints
-      FROM response_context rc
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
     `);
 
     type ResponseRow = {
@@ -423,27 +429,27 @@ export async function getQueryAutocompleteData(): Promise<AutocompleteData> {
     const promptIds: string[] = [];
 
     // Vendors from response_context
-    if (await hasTable(pool, "response_context")) {
+    if (await hasTable(pool, T_RESPONSE_CONTEXT)) {
       const { rows: vendorRows } = await pool.query(
-        "SELECT DISTINCT primary_vendor FROM response_context WHERE primary_vendor IS NOT NULL ORDER BY primary_vendor"
+        `SELECT DISTINCT primary_vendor FROM ${T_RESPONSE_CONTEXT} WHERE primary_vendor IS NOT NULL ORDER BY primary_vendor`
       );
       vendors.push(...(vendorRows as Array<{ primary_vendor: string }>).map((r) => r.primary_vendor));
 
       const { rows: promptRows } = await pool.query(
-        "SELECT DISTINCT prompt_id FROM response_context ORDER BY prompt_id"
+        `SELECT DISTINCT prompt_id FROM ${T_RESPONSE_CONTEXT} ORDER BY prompt_id`
       );
       promptIds.push(...(promptRows as Array<{ prompt_id: string }>).map((r) => r.prompt_id));
     }
 
     // Categories + constraints from prompt_metadata
-    if (await hasTable(pool, "prompt_metadata")) {
+    if (await hasTable(pool, T_PROMPT_METADATA)) {
       const { rows: catRows } = await pool.query(
-        "SELECT DISTINCT category FROM prompt_metadata WHERE category IS NOT NULL ORDER BY category"
+        `SELECT DISTINCT category FROM ${T_PROMPT_METADATA} WHERE category IS NOT NULL ORDER BY category`
       );
       categories.push(...(catRows as Array<{ category: string }>).map((r) => r.category));
 
       const { rows: constraintRows } = await pool.query(
-        "SELECT constraints FROM prompt_metadata WHERE constraints IS NOT NULL"
+        `SELECT constraints FROM ${T_PROMPT_METADATA} WHERE constraints IS NOT NULL`
       );
       for (const r of constraintRows as Array<{ constraints: string }>) {
         const parsed = safeJsonParse<string[]>(r.constraints, []);
@@ -454,7 +460,7 @@ export async function getQueryAutocompleteData(): Promise<AutocompleteData> {
     // Platforms from sessions
     try {
       const { rows: platRows } = await pool.query(
-        "SELECT DISTINCT source_platform FROM sessions ORDER BY source_platform"
+        `SELECT DISTINCT source_platform FROM ${T_SESSIONS} ORDER BY source_platform`
       );
       platforms.push(...(platRows as Array<{ source_platform: string }>).map((r) => r.source_platform));
     } catch { /* sessions table may not exist */ }

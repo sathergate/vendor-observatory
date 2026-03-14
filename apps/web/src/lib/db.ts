@@ -1,5 +1,11 @@
 import { Pool } from "pg";
 
+// ── Table names (Lakebase synced tables) ─────────────────────────────
+const T_SESSIONS = "sessions_synced";
+const T_OBSERVATIONS = "observations_synced";
+const T_RESPONSE_CONTEXT = "response_context_synced";
+const T_PROMPT_METADATA = "prompt_metadata_synced";
+
 // ── Lazy Pool initialization ──────────────────────────────────────────
 
 let _pool: Pool | null = null;
@@ -58,10 +64,10 @@ export async function getDashboardStats() {
   const pool = getPool();
   if (!pool) return { totalSessions: 0, totalObservations: 0, uniqueVendors: 0, platformBreakdown: {} as Record<string, number>, lastIngestedAt: null as string | null };
   try {
-    const sessions = (await pool.query("SELECT COUNT(*) AS c FROM sessions")).rows[0] as { c: string };
-    const observations = (await pool.query("SELECT COUNT(*) AS c FROM observations")).rows[0] as { c: string };
-    const vendors = (await pool.query("SELECT COUNT(DISTINCT vendor_canonical_id) AS c FROM observations")).rows[0] as { c: string };
-    const { rows: platforms } = await pool.query("SELECT source_platform, COUNT(*) AS c FROM sessions GROUP BY source_platform");
+    const sessions = (await pool.query(`SELECT COUNT(*) AS c FROM ${T_SESSIONS}`)).rows[0] as { c: string };
+    const observations = (await pool.query(`SELECT COUNT(*) AS c FROM ${T_OBSERVATIONS}`)).rows[0] as { c: string };
+    const vendors = (await pool.query(`SELECT COUNT(DISTINCT vendor_canonical_id) AS c FROM ${T_OBSERVATIONS}`)).rows[0] as { c: string };
+    const { rows: platforms } = await pool.query(`SELECT source_platform, COUNT(*) AS c FROM ${T_SESSIONS} GROUP BY source_platform`);
     const platformBreakdown: Record<string, number> = {};
     for (const p of platforms as Array<{ source_platform: string; c: string }>) platformBreakdown[p.source_platform] = Number(p.c);
     const lastIngested = (await pool.query("SELECT MAX(ingested_at) AS t FROM ingested_files")).rows[0] as { t: string | null };
@@ -97,7 +103,7 @@ export async function getVendorStats(platformFilter?: string, categoryFilter?: s
       params.push(vendorScope);
     }
     if (platformFilter) {
-      where += ` AND o.session_id IN (SELECT id FROM sessions WHERE source_platform = $${paramIdx++})`;
+      where += ` AND o.session_id IN (SELECT id FROM ${T_SESSIONS} WHERE source_platform = $${paramIdx++})`;
       params.push(platformFilter);
     }
     if (categoryFilter) {
@@ -117,8 +123,8 @@ export async function getVendorStats(platformFilter?: string, categoryFilter?: s
         SUM(CASE WHEN o.mention_type = 'rejected' THEN 1 ELSE 0 END) AS rejected,
         string_agg(DISTINCT s.source_platform, ',') AS platforms,
         o.work_category
-      FROM observations o
-      JOIN sessions s ON o.session_id = s.id
+      FROM ${T_OBSERVATIONS} o
+      JOIN ${T_SESSIONS} s ON o.session_id = s.id
       ${where}
       GROUP BY o.vendor_canonical_id, o.work_category
       ORDER BY total DESC
@@ -163,8 +169,8 @@ export async function getPlatformComparison(vendorScope?: string | null): Promis
         o.vendor_canonical_id,
         SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) AS claude_code_count,
         SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) AS codex_cli_count
-      FROM observations o
-      JOIN sessions s ON o.session_id = s.id
+      FROM ${T_OBSERVATIONS} o
+      JOIN ${T_SESSIONS} s ON o.session_id = s.id
       ${vendorWhere}
       GROUP BY o.vendor_canonical_id
       HAVING SUM(CASE WHEN s.source_platform = 'claude_code' THEN 1 ELSE 0 END) > 0
@@ -204,7 +210,7 @@ export async function getActionFunnel(vendorScope?: string | null): Promise<Funn
         SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) AS mentioned_total,
         SUM(CASE WHEN mention_type IN ('recommended') THEN 1 ELSE 0 END) AS recommended_total,
         SUM(CASE WHEN mention_type IN ('installed', 'configured', 'implemented') THEN 1 ELSE 0 END) AS installed_total
-      FROM observations
+      FROM ${T_OBSERVATIONS}
       ${vendorWhere}
       GROUP BY vendor_canonical_id
       HAVING SUM(CASE WHEN mention_type IN ('mentioned', 'compared', 'recommended', 'installed', 'configured', 'implemented') THEN 1 ELSE 0 END) > 0
@@ -240,7 +246,7 @@ export async function getSessionList(limit = 50, offset = 0, vendorScope?: strin
     let paramIdx = 1;
     let vendorWhere = "";
     if (vendorScope) {
-      vendorWhere = `WHERE s.id IN (SELECT session_id FROM observations WHERE vendor_canonical_id = $${paramIdx++})`;
+      vendorWhere = `WHERE s.id IN (SELECT session_id FROM ${T_OBSERVATIONS} WHERE vendor_canonical_id = $${paramIdx++})`;
       params.push(vendorScope);
     }
     params.push(limit, offset);
@@ -249,8 +255,8 @@ export async function getSessionList(limit = 50, offset = 0, vendorScope?: strin
         s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
         COUNT(o.id) AS observation_count,
         string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
-      FROM sessions s
-      LEFT JOIN observations o ON s.id = o.session_id
+      FROM ${T_SESSIONS} s
+      LEFT JOIN ${T_OBSERVATIONS} o ON s.id = o.session_id
       ${vendorWhere}
       GROUP BY s.id
       ORDER BY s.started_at DESC
@@ -282,15 +288,15 @@ export async function getSessionDetail(id: string, vendorScope?: string | null):
     // If vendor scoped, verify this session has observations for the vendor
     if (vendorScope) {
       const check = await pool.query(
-        "SELECT 1 FROM observations WHERE session_id = $1 AND vendor_canonical_id = $2 LIMIT 1",
+        `SELECT 1 FROM ${T_OBSERVATIONS} WHERE session_id = $1 AND vendor_canonical_id = $2 LIMIT 1`,
         [id, vendorScope],
       );
       if (check.rows.length === 0) return null;
     }
-    const sessionResult = await pool.query("SELECT * FROM sessions WHERE id = $1", [id]);
+    const sessionResult = await pool.query(`SELECT * FROM ${T_SESSIONS} WHERE id = $1`, [id]);
     const session = sessionResult.rows[0] as SessionDetail["session"] | undefined;
     if (!session) return null;
-    const obsResult = await pool.query("SELECT vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, timestamp FROM observations WHERE session_id = $1 ORDER BY timestamp", [id]);
+    const obsResult = await pool.query(`SELECT vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, timestamp FROM ${T_OBSERVATIONS} WHERE session_id = $1 ORDER BY timestamp`, [id]);
     const toolResult = await pool.query("SELECT tool_name, command_or_path, vendor_canonical_id, action_type, success, timestamp FROM tool_actions WHERE session_id = $1 ORDER BY timestamp", [id]);
     return { session, observations: obsResult.rows as SessionDetail["observations"], toolActions: toolResult.rows as SessionDetail["toolActions"] };
   } catch { return null; }
@@ -304,7 +310,7 @@ export async function getTopVendors(limit = 10): Promise<Array<{ vendor_canonica
   try {
     const { rows } = await pool.query(`
       SELECT vendor_canonical_id, COUNT(*) AS count
-      FROM observations
+      FROM ${T_OBSERVATIONS}
       GROUP BY vendor_canonical_id
       ORDER BY count DESC
       LIMIT $1
@@ -322,7 +328,7 @@ export async function getCategories(): Promise<string[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    const { rows } = await pool.query("SELECT DISTINCT work_category FROM observations WHERE work_category IS NOT NULL ORDER BY work_category");
+    const { rows } = await pool.query(`SELECT DISTINCT work_category FROM ${T_OBSERVATIONS} WHERE work_category IS NOT NULL ORDER BY work_category`);
     return rows.map((r: { work_category: string }) => r.work_category);
   } catch { return []; }
 }
@@ -369,7 +375,7 @@ export async function getBenchmarkSessions(limit = 100, vendorScope?: string | n
     let paramIdx = 1;
     let extraWhere = "";
     if (vendorScope) {
-      extraWhere = `AND s.id IN (SELECT session_id FROM observations WHERE vendor_canonical_id = $${paramIdx++})`;
+      extraWhere = `AND s.id IN (SELECT session_id FROM ${T_OBSERVATIONS} WHERE vendor_canonical_id = $${paramIdx++})`;
       params.push(vendorScope);
     }
     params.push(limit);
@@ -377,7 +383,7 @@ export async function getBenchmarkSessions(limit = 100, vendorScope?: string | n
       SELECT s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
         COUNT(o.id) AS observation_count,
         string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors
-      FROM sessions s LEFT JOIN observations o ON s.id = o.session_id
+      FROM ${T_SESSIONS} s LEFT JOIN ${T_OBSERVATIONS} o ON s.id = o.session_id
       WHERE s.is_benchmark = TRUE ${extraWhere}
       GROUP BY s.id ORDER BY s.started_at DESC LIMIT $${paramIdx}
     `, params);
@@ -418,7 +424,7 @@ export async function getBenchmarkVendorComparison(vendorScope?: string | null):
         SUM(CASE WHEN s.source_platform = 'codex_cli' THEN 1 ELSE 0 END) AS codex_cli_count,
         SUM(CASE WHEN s.source_platform = 'cursor' THEN 1 ELSE 0 END) AS cursor_count,
         COUNT(*) AS total
-      FROM observations o JOIN sessions s ON o.session_id = s.id
+      FROM ${T_OBSERVATIONS} o JOIN ${T_SESSIONS} s ON o.session_id = s.id
       WHERE s.is_benchmark = TRUE ${extraWhere}
       GROUP BY o.vendor_canonical_id ORDER BY total DESC
     `, params);
@@ -437,15 +443,15 @@ export async function getBenchmarkStats(vendorScope?: string | null) {
   if (!pool) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
   try {
     const vendorFilter = vendorScope
-      ? "AND id IN (SELECT session_id FROM observations WHERE vendor_canonical_id = $1)"
+      ? "AND id IN (SELECT session_id FROM ${T_OBSERVATIONS} WHERE vendor_canonical_id = $1)"
       : "";
     const obsVendorFilter = vendorScope
       ? "AND vendor_canonical_id = $1"
       : "";
     const params = vendorScope ? [vendorScope] : [];
-    const sessions = (await pool.query(`SELECT COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE ${vendorFilter}`, params)).rows[0] as { c: string };
-    const observations = (await pool.query(`SELECT COUNT(*) AS c FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE is_benchmark = TRUE) ${obsVendorFilter}`, params)).rows[0] as { c: string };
-    const { rows: platforms } = await pool.query(`SELECT source_platform, COUNT(*) AS c FROM sessions WHERE is_benchmark = TRUE ${vendorFilter} GROUP BY source_platform`, params);
+    const sessions = (await pool.query(`SELECT COUNT(*) AS c FROM ${T_SESSIONS} WHERE is_benchmark = TRUE ${vendorFilter}`, params)).rows[0] as { c: string };
+    const observations = (await pool.query(`SELECT COUNT(*) AS c FROM ${T_OBSERVATIONS} WHERE session_id IN (SELECT id FROM ${T_SESSIONS} WHERE is_benchmark = TRUE) ${obsVendorFilter}`, params)).rows[0] as { c: string };
+    const { rows: platforms } = await pool.query(`SELECT source_platform, COUNT(*) AS c FROM ${T_SESSIONS} WHERE is_benchmark = TRUE ${vendorFilter} GROUP BY source_platform`, params);
     const platformBreakdown: Record<string, number> = {};
     for (const p of platforms as Array<{ source_platform: string; c: string }>) platformBreakdown[p.source_platform] = Number(p.c);
     return { totalBenchmarkSessions: Number(sessions.c), totalBenchmarkObservations: Number(observations.c), platformBreakdown };
@@ -469,8 +475,8 @@ export async function getPromptMetadata(): Promise<PromptMetadataWebRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "prompt_metadata"))) return [];
-    const { rows } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
+    if (!(await hasTable(pool, T_PROMPT_METADATA))) return [];
+    const { rows } = await pool.query(`SELECT * FROM ${T_PROMPT_METADATA} ORDER BY prompt_id`);
     return rows as PromptMetadataWebRow[];
   } catch { return []; }
 }
@@ -479,8 +485,8 @@ export async function getPromptMetadataById(promptId: string): Promise<PromptMet
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "prompt_metadata"))) return null;
-    const { rows } = await pool.query("SELECT * FROM prompt_metadata WHERE prompt_id = $1", [promptId]);
+    if (!(await hasTable(pool, T_PROMPT_METADATA))) return null;
+    const { rows } = await pool.query(`SELECT * FROM ${T_PROMPT_METADATA} WHERE prompt_id = $1`, [promptId]);
     return (rows[0] as PromptMetadataWebRow) ?? null;
   } catch { return null; }
 }
@@ -505,11 +511,11 @@ export async function getResponseContextByPrompt(promptId: string): Promise<(Res
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT))) return [];
     const { rows } = await pool.query(`
       SELECT rc.*, s.source_platform
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
       WHERE rc.prompt_id = $1
       ORDER BY rc.extracted_at DESC
     `, [promptId]);
@@ -521,8 +527,8 @@ export async function getResponseContextBySession(sessionId: string): Promise<Re
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context"))) return [];
-    const { rows } = await pool.query("SELECT * FROM response_context WHERE session_id = $1", [sessionId]);
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT))) return [];
+    const { rows } = await pool.query(`SELECT * FROM ${T_RESPONSE_CONTEXT} WHERE session_id = $1`, [sessionId]);
     return rows as ResponseContextWebRow[];
   } catch { return []; }
 }
@@ -544,7 +550,7 @@ export async function getPrimaryVendorCounts(filters?: {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
     let where = "rc.primary_vendor IS NOT NULL";
     const params: string[] = [];
     let paramIdx = 1;
@@ -570,9 +576,9 @@ export async function getPrimaryVendorCounts(filters?: {
     }
     const { rows } = await pool.query(`
       SELECT rc.primary_vendor, COUNT(*) AS count
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
       WHERE ${where}
       GROUP BY rc.primary_vendor
       ORDER BY count DESC
@@ -597,9 +603,9 @@ export async function getConstraintCoverage(promptId?: string): Promise<Constrai
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
 
-    let metaQuery = "SELECT prompt_id, constraints FROM prompt_metadata";
+    let metaQuery = `SELECT prompt_id, constraints FROM ${T_PROMPT_METADATA}`;
     const metaParams: string[] = [];
     if (promptId) {
       metaQuery += " WHERE prompt_id = $1";
@@ -607,7 +613,7 @@ export async function getConstraintCoverage(promptId?: string): Promise<Constrai
     }
     const { rows: metas } = await pool.query(metaQuery, metaParams);
 
-    let rcQuery = "SELECT prompt_id, constraints_addressed FROM response_context";
+    let rcQuery = `SELECT prompt_id, constraints_addressed FROM ${T_RESPONSE_CONTEXT}`;
     const rcParams: string[] = [];
     if (promptId) {
       rcQuery += " WHERE prompt_id = $1";
@@ -670,12 +676,12 @@ export async function getPromptEnrichmentSummaries(vendorScope?: string | null):
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
 
-    const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
+    const { rows: metas } = await pool.query(`SELECT * FROM ${T_PROMPT_METADATA} ORDER BY prompt_id`);
     const rcQuery = vendorScope
-      ? "SELECT * FROM response_context WHERE primary_vendor = $1"
-      : "SELECT * FROM response_context";
+      ? `SELECT * FROM ${T_RESPONSE_CONTEXT} WHERE primary_vendor = $1`
+      : `SELECT * FROM ${T_RESPONSE_CONTEXT}`;
     const rcParams = vendorScope ? [vendorScope] : [];
     const { rows: allContexts } = await pool.query(rcQuery, rcParams);
 
@@ -759,13 +765,13 @@ export async function getVendorScorecard(vendor: string): Promise<VendorScorecar
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return null;
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.*, s.source_platform, pm.category, pm.constraints
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
     `);
 
     type ResponseRow = ResponseContextWebRow & { source_platform: string; category: string; constraints: string };
@@ -957,13 +963,13 @@ export async function getAllVendorScorecards(): Promise<VendorScorecard[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.*, s.source_platform, pm.category, pm.constraints
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
     `);
 
     type ResponseRow = ResponseContextWebRow & { source_platform: string; category: string; constraints: string };
@@ -1173,14 +1179,14 @@ export async function getAllVendorNames(): Promise<VendorListItem[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.is_implemented,
              s.source_platform, pm.category
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
     `);
 
     const vendorMap = new Map<string, {
@@ -1262,13 +1268,13 @@ export async function getVendorHeadToHead(vendorA: string, vendorB: string): Pro
   const empty: HeadToHeadResult = { vendorA, vendorB, scenarios: [], aWins: 0, bWins: 0, ties: 0 };
   if (!pool) return empty;
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return empty;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return empty;
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.prompt_id, rc.primary_vendor, rc.vendors_mentioned, rc.rationale_snippet,
              pm.category
-      FROM response_context rc
-      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      LEFT JOIN ${T_PROMPT_METADATA} pm ON rc.prompt_id = pm.prompt_id
     `);
 
     const scenarios: HeadToHeadResult["scenarios"] = [];
@@ -1379,7 +1385,7 @@ export async function getEnrichmentByCategory(category: string): Promise<Categor
   }
 
   try {
-    if (!(await hasTable(pool, "prompt_metadata")) || !(await hasTable(pool, "response_context"))) {
+    if (!(await hasTable(pool, T_PROMPT_METADATA)) || !(await hasTable(pool, T_RESPONSE_CONTEXT))) {
       return { prompts, promptMetadata: [], responses: [], vendorCounts: [], constraintCoverage: [] };
     }
 
@@ -1387,14 +1393,14 @@ export async function getEnrichmentByCategory(category: string): Promise<Categor
     const placeholders = promptIds.map((_, i) => `$${i + 1}`).join(",");
 
     const { rows: promptMetadata } = await pool.query(
-      `SELECT * FROM prompt_metadata WHERE category = $1 ORDER BY prompt_id`,
+      `SELECT * FROM ${T_PROMPT_METADATA} WHERE category = $1 ORDER BY prompt_id`,
       [category],
     );
 
     const { rows: responses } = await pool.query(
       `SELECT rc.*, s.source_platform
-       FROM response_context rc
-       JOIN sessions s ON rc.session_id = s.id
+       FROM ${T_RESPONSE_CONTEXT} rc
+       JOIN ${T_SESSIONS} s ON rc.session_id = s.id
        WHERE rc.prompt_id IN (${placeholders})
        ORDER BY rc.prompt_id, s.source_platform`,
       promptIds,
@@ -1434,13 +1440,13 @@ export async function getVendorTrend(vendor: string, windowDays = 60): Promise<V
   const pool = getPool();
   if (!pool) return null;
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return null;
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return null;
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.extracted_at,
              s.started_at, s.source_platform
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
       WHERE rc.extracted_at >= (NOW() - $1::interval)::text
          OR s.started_at >= (NOW() - $1::interval)::text
     `, [`${windowDays} days`]);
@@ -1526,13 +1532,13 @@ export async function getAllVendorTrends(): Promise<VendorTrend[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT))) return [];
 
     const { rows: allResponses } = await pool.query(`
       SELECT rc.primary_vendor, rc.vendors_mentioned, rc.extracted_at,
              s.started_at
-      FROM response_context rc
-      JOIN sessions s ON rc.session_id = s.id
+      FROM ${T_RESPONSE_CONTEXT} rc
+      JOIN ${T_SESSIONS} s ON rc.session_id = s.id
     `);
 
     // Build per-vendor week maps in a single pass over the data
@@ -1650,10 +1656,10 @@ export async function getPromptLeaderboard(): Promise<PromptLeaderboardRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
 
-    const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id");
-    const { rows: allContexts } = await pool.query("SELECT * FROM response_context");
+    const { rows: metas } = await pool.query(`SELECT * FROM ${T_PROMPT_METADATA} ORDER BY prompt_id`);
+    const { rows: allContexts } = await pool.query(`SELECT * FROM ${T_RESPONSE_CONTEXT}`);
 
     const results: PromptLeaderboardRow[] = [];
 
@@ -1720,10 +1726,10 @@ export async function getConstraintDemand(): Promise<ConstraintDemandRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) return [];
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) return [];
 
-    const { rows: metas } = await pool.query("SELECT * FROM prompt_metadata");
-    const { rows: allContexts } = await pool.query("SELECT * FROM response_context");
+    const { rows: metas } = await pool.query(`SELECT * FROM ${T_PROMPT_METADATA}`);
+    const { rows: allContexts } = await pool.query(`SELECT * FROM ${T_RESPONSE_CONTEXT}`);
 
     const constraintMap = new Map<string, {
       promptIds: Set<string>;
@@ -1782,13 +1788,13 @@ export async function getPromptPageData(): Promise<{
   const pool = getPool();
   if (!pool) return { leaderboard: [], constraintDemand: [] };
   try {
-    if (!(await hasTable(pool, "response_context")) || !(await hasTable(pool, "prompt_metadata"))) {
+    if (!(await hasTable(pool, T_RESPONSE_CONTEXT)) || !(await hasTable(pool, T_PROMPT_METADATA))) {
       return { leaderboard: [], constraintDemand: [] };
     }
 
     const [{ rows: metas }, { rows: allContexts }] = await Promise.all([
-      pool.query("SELECT * FROM prompt_metadata ORDER BY prompt_id"),
-      pool.query("SELECT * FROM response_context"),
+      pool.query(`SELECT * FROM ${T_PROMPT_METADATA} ORDER BY prompt_id`),
+      pool.query(`SELECT * FROM ${T_RESPONSE_CONTEXT}`),
     ]);
 
     // Index contexts by prompt_id for O(1) lookup instead of O(N) filter
@@ -1946,7 +1952,7 @@ export async function getIntentDistribution(): Promise<IntentDistributionRow[]> 
         const vendorResult = await pool.query(`
           SELECT rc.primary_vendor, COUNT(*) AS cnt
           FROM prompt_intents pi
-          JOIN response_context rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
+          JOIN ${T_RESPONSE_CONTEXT} rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
           WHERE pi.intent = $1 AND rc.primary_vendor IS NOT NULL
           GROUP BY rc.primary_vendor
           ORDER BY cnt DESC
@@ -1976,7 +1982,7 @@ export async function getIntentVendorMatrix(): Promise<IntentVendorRow[]> {
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "prompt_intents")) || !(await hasTable(pool, "response_context"))) return [];
+    if (!(await hasTable(pool, "prompt_intents")) || !(await hasTable(pool, T_RESPONSE_CONTEXT))) return [];
 
     const { rows } = await pool.query(`
       SELECT
@@ -1984,10 +1990,10 @@ export async function getIntentVendorMatrix(): Promise<IntentVendorRow[]> {
         rc.primary_vendor AS vendor,
         COUNT(*) AS wins,
         (SELECT COUNT(*) FROM prompt_intents pi2
-         JOIN response_context rc2 ON pi2.session_id = rc2.session_id AND pi2.prompt_id = rc2.prompt_id
+         JOIN ${T_RESPONSE_CONTEXT} rc2 ON pi2.session_id = rc2.session_id AND pi2.prompt_id = rc2.prompt_id
          WHERE pi2.intent = pi.intent AND rc2.primary_vendor IS NOT NULL) AS total
       FROM prompt_intents pi
-      JOIN response_context rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
+      JOIN ${T_RESPONSE_CONTEXT} rc ON pi.session_id = rc.session_id AND pi.prompt_id = rc.prompt_id
       WHERE pi.intent != 'unknown' AND rc.primary_vendor IS NOT NULL
       GROUP BY pi.intent, rc.primary_vendor
       ORDER BY pi.intent, wins DESC
@@ -2217,11 +2223,11 @@ export async function getVendorCoMentions(vendor: string): Promise<CoMentionRow[
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "observations"))) return [];
+    if (!(await hasTable(pool, T_OBSERVATIONS))) return [];
     const { rows } = await pool.query(`
       SELECT v2.vendor_canonical_id AS co_vendor, COUNT(DISTINCT v1.session_id) AS session_count
-      FROM observations v1
-      JOIN observations v2
+      FROM ${T_OBSERVATIONS} v1
+      JOIN ${T_OBSERVATIONS} v2
         ON v1.session_id = v2.session_id
         AND v2.vendor_canonical_id != $1
       WHERE v1.vendor_canonical_id = $1
@@ -2247,10 +2253,10 @@ export async function getCategoryCompetitorDensity(): Promise<CategoryDensityRow
   const pool = getPool();
   if (!pool) return [];
   try {
-    if (!(await hasTable(pool, "observations"))) return [];
+    if (!(await hasTable(pool, T_OBSERVATIONS))) return [];
     const { rows } = await pool.query(`
       SELECT work_category, COUNT(DISTINCT vendor_canonical_id) AS vendor_count
-      FROM observations
+      FROM ${T_OBSERVATIONS}
       WHERE work_category IS NOT NULL
       GROUP BY work_category
       ORDER BY vendor_count DESC
@@ -2304,7 +2310,7 @@ export async function getRejectionSummary(vendorScope?: string | null): Promise<
         (SELECT vr2.chosen_alternative FROM vendor_rejections vr2
          WHERE vr2.vendor_canonical_id = vr.vendor_canonical_id AND vr2.chosen_alternative IS NOT NULL
          GROUP BY vr2.chosen_alternative ORDER BY COUNT(*) DESC LIMIT 1) AS top_alternative,
-        COALESCE((SELECT COUNT(*) FROM observations o WHERE o.vendor_canonical_id = vr.vendor_canonical_id), 0) AS total_mentions
+        COALESCE((SELECT COUNT(*) FROM ${T_OBSERVATIONS} o WHERE o.vendor_canonical_id = vr.vendor_canonical_id), 0) AS total_mentions
       FROM vendor_rejections vr
       ${vendorWhere}
       GROUP BY vr.vendor_canonical_id
@@ -2358,7 +2364,7 @@ export async function getRejectionDetails(vendorId?: string, limit = 100): Promi
     const { rows } = await pool.query(`
       SELECT vr.*, s.source_platform
       FROM vendor_rejections vr
-      LEFT JOIN sessions s ON vr.session_id = s.id
+      LEFT JOIN ${T_SESSIONS} s ON vr.session_id = s.id
       ${where}
       ORDER BY vr.timestamp DESC
       LIMIT $${paramIdx}
