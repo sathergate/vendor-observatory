@@ -18,6 +18,8 @@ variables:
     description: The catalog to use
   schema:
     description: The schema to use
+  warehouse_id:
+    description: SQL warehouse ID for dashboards
 
 targets:
   dev:
@@ -32,6 +34,7 @@ targets:
     variables:
       catalog: benchmarks
       schema: dev
+      warehouse_id: dd7165b90dbdd269
   prod:
     mode: production
     workspace:
@@ -41,6 +44,7 @@ targets:
     variables:
       catalog: benchmarks
       schema: prod
+      warehouse_id: dd7165b90dbdd269
     permissions:
       - user_name: talcorn.92@gmail.com
         level: CAN_MANAGE

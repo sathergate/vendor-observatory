@@ -1,0 +1,6 @@
+resources:
+  dashboards:
+    operations_monitor:
+      display_name: "Benchmark Operations Monitor"
+      file_path: ../src/operations_monitor.lvdash.json
+      warehouse_id: ${var.warehouse_id}

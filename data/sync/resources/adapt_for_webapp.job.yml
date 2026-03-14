@@ -1,0 +1,23 @@
+resources:
+  jobs:
+    adapt_for_webapp:
+      name: adapt_for_webapp
+      description: "Transform benchmarks.prod tables into webapp-compatible adapter tables in benchmarks.sync"
+      schedule:
+        quartz_cron_expression: "0 */30 * * * ?"  # Every 30 minutes
+        timezone_id: UTC
+      tasks:
+        - task_key: adapt
+          spark_python_task:
+            python_file: ../src/sync/jobs/adapt.py
+            parameters:
+              - --catalog=${var.catalog}
+              - --source-schema=${var.source_schema}
+              - --target-schema=${var.schema}
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ${workspace.file_path}/dist/sync-0.0.1-py3-none-any.whl
