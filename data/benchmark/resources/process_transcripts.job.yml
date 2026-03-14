@@ -4,7 +4,7 @@ resources:
       name: process_transcripts
       description: "Refresh DLT pipeline and compute vendor scores"
       schedule:
-        quartz_cron_expression: "0 */30 * * * ?"  # Every 30 minutes
+        quartz_cron_expression: "0 0 9 * * ?"  # Daily at 9 AM UTC
         timezone_id: UTC
       tasks:
         - task_key: refresh_pipeline

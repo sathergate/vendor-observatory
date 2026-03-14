@@ -4,7 +4,7 @@ resources:
       name: adapt_for_webapp
       description: "Transform benchmarks.prod tables into webapp-compatible adapter tables in benchmarks.sync"
       schedule:
-        quartz_cron_expression: "0 */30 * * * ?"  # Every 30 minutes
+        quartz_cron_expression: "0 0 10 * * ?"  # Daily at 10 AM UTC
         timezone_id: UTC
       tasks:
         - task_key: adapt
