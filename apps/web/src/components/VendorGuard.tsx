@@ -10,7 +10,10 @@ interface VendorGuardProps {
 }
 
 export function VendorGuard({ vendorId, children }: VendorGuardProps) {
-  const { selectedVendor } = useVendor();
+  const { selectedVendor, isAdmin } = useVendor();
+
+  // Admins can view any vendor page
+  if (isAdmin) return <>{children}</>;
 
   if (!selectedVendor) {
     return (

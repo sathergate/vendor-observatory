@@ -188,6 +188,17 @@ export async function deleteSession(token: string): Promise<void> {
 /** Email that always bypasses payment checks. */
 const BYPASS_EMAIL = "test@test.com";
 
+/** Admin emails — full access to all vendors and bypass payment gate. */
+const ADMIN_EMAILS: string[] = [
+  "james@lm-panopticon.com",
+  "tom@lm-panopticon.com",
+];
+
+/** Check whether a given email has admin privileges. */
+export function isAdmin(email: string): boolean {
+  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
 export interface Subscription {
   id: string;
   user_id: string;
@@ -358,6 +369,7 @@ const BYPASS_VENDOR = "neon";
  */
 export async function hasActivePayment(userId: string, email: string): Promise<boolean> {
   if (email === BYPASS_EMAIL) return true;
+  if (isAdmin(email)) return true;
   const sub = await getUserSubscription(userId);
   if (!sub) return false;
   return sub.status === "active" || sub.status === "trialing";
@@ -496,6 +508,12 @@ export async function requireActivePayment(): Promise<
   // Bypass user gets a hardcoded vendor
   if (user.email === BYPASS_EMAIL) {
     return { user, vendorCanonicalId: BYPASS_VENDOR };
+  }
+
+  // Admin users bypass payment and see all vendors (vendorCanonicalId = null means unrestricted)
+  if (isAdmin(user.email)) {
+    const sub = await getSubscriptionForUser(user.id);
+    return { user, vendorCanonicalId: sub?.vendor_canonical_id ?? null };
   }
 
   const sub = await getSubscriptionForUser(user.id);
