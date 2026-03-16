@@ -4,6 +4,19 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Vendor Observatory",
   description: "Passive observation of AI coding assistant vendor signals",
+  openGraph: {
+    title: "Revealed Preference > Stated",
+    description: "Passive observation of AI coding assistant vendor signals",
+    siteName: "Vendor Observatory",
+    url: "https://panopticonos.com",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Revealed Preference > Stated",
+    description: "Passive observation of AI coding assistant vendor signals",
+  },
+  metadataBase: new URL("https://panopticonos.com"),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
