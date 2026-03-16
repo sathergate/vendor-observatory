@@ -47,8 +47,8 @@ export default function ForgotPasswordPage() {
         {success ? (
           <div className="space-y-4">
             <p className="text-green-400 text-[13px] text-center">
-              A password reset link has been sent to your email. Please check
-              your inbox.
+              If an account with that email exists, a password reset link has
+              been sent. Please check your inbox (and spam folder).
             </p>
             <p className="text-center">
               <Link
