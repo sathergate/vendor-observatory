@@ -57,14 +57,20 @@ function ResetPasswordForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),
       });
-      const data = await res.json();
+      let data: { error?: string; message?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setError("Something went wrong. Please try again later.");
+        return;
+      }
       if (!res.ok) {
         setError(data.error || "Something went wrong");
         return;
       }
       router.push("/login?reset=success");
     } catch {
-      setError("Something went wrong");
+      setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
     }

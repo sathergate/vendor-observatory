@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { resetPassword } from "@/lib/auth";
 
 export async function POST(req: Request) {
-  const { token, password } = (await req.json()) as {
-    token?: string;
-    password?: string;
-  };
+  let body: { token?: string; password?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const { token, password } = body;
 
   if (!token || !password) {
     return NextResponse.json(
@@ -21,7 +25,17 @@ export async function POST(req: Request) {
     );
   }
 
-  const success = await resetPassword(token, password);
+  let success: boolean;
+  try {
+    success = await resetPassword(token, password);
+  } catch (err) {
+    console.error("[auth] resetPassword threw:", err);
+    return NextResponse.json(
+      { error: "Unable to reset password. Please try again later." },
+      { status: 500 },
+    );
+  }
+
   if (!success) {
     return NextResponse.json(
       { error: "Invalid or expired reset token" },

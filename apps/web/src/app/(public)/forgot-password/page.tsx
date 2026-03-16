@@ -21,14 +21,20 @@ export default function ForgotPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
+      let data: { error?: string; message?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setError("Something went wrong. Please try again later.");
+        return;
+      }
       if (!res.ok) {
         setError(data.error || "Something went wrong");
         return;
       }
       setSuccess(true);
     } catch {
-      setError("Something went wrong");
+      setError("Something went wrong. Please try again later.");
     } finally {
       setLoading(false);
     }
