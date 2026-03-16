@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // Routes that don't require authentication
-const PUBLIC_PATHS = ["/", "/login", "/signup"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/forgot-password", "/reset-password"];
 const PUBLIC_PREFIXES = [
   "/api/auth/",
   "/api/health",

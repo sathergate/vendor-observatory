@@ -73,6 +73,16 @@ async function ensureTables() {
       CREATE INDEX IF NOT EXISTS idx_subscriptions_vendor
         ON subscriptions(vendor_canonical_id)
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        token TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
     _tablesReady = true;
   } catch (err) {
     console.error("[auth] Failed to create tables:", err);
@@ -156,6 +166,96 @@ export async function verifyUser(email: string, password: string): Promise<AuthU
   }
 
   return null;
+}
+
+// ── Password reset operations ────────────────────────────────────
+
+/** Create a password reset token for a user. Returns the token string. */
+export async function createPasswordResetToken(email: string): Promise<string | null> {
+  await ensureTables();
+  const pool = getPool();
+  if (!pool) return null;
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await getUserByEmail(normalizedEmail);
+  if (!user) return null;
+
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  try {
+    // Invalidate any existing tokens for this user
+    await pool.query(
+      "UPDATE password_reset_tokens SET used = TRUE WHERE user_id = $1 AND used = FALSE",
+      [user.id],
+    );
+    await pool.query(
+      "INSERT INTO password_reset_tokens (token, user_id, email, expires_at) VALUES ($1, $2, $3, $4)",
+      [token, user.id, normalizedEmail, expiresAt],
+    );
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+/** Verify a password reset token. Returns the user if valid, null otherwise. */
+export async function verifyPasswordResetToken(token: string): Promise<AuthUser | null> {
+  await ensureTables();
+  const pool = getPool();
+  if (!pool) return null;
+
+  try {
+    const { rows } = await pool.query(
+      "SELECT user_id, email FROM password_reset_tokens WHERE token = $1 AND used = FALSE AND expires_at > NOW()",
+      [token],
+    );
+    if (rows.length === 0) return null;
+    return { id: rows[0].user_id, email: rows[0].email };
+  } catch {
+    return null;
+  }
+}
+
+/** Reset a user's password using a valid token. */
+export async function resetPassword(token: string, newPassword: string): Promise<boolean> {
+  await ensureTables();
+  const pool = getPool();
+  if (!pool) return false;
+
+  const user = await verifyPasswordResetToken(token);
+  if (!user) return false;
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  try {
+    // Update password in Auth.js users table
+    await pool.query(
+      'UPDATE users SET "passwordHash" = $1 WHERE id = $2',
+      [passwordHash, user.id],
+    );
+    // Also update legacy table if it exists
+    try {
+      await pool.query(
+        "UPDATE auth_users SET password = $1 WHERE id = $2",
+        [passwordHash, user.id],
+      );
+    } catch { /* legacy table may not exist */ }
+    // Mark token as used
+    await pool.query(
+      "UPDATE password_reset_tokens SET used = TRUE WHERE token = $1",
+      [token],
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Check if an email exists in the system. */
+export async function emailExists(email: string): Promise<boolean> {
+  const user = await getUserByEmail(email);
+  return user !== null;
 }
 
 // ── Legacy session operations (kept for backward compat) ─────────
