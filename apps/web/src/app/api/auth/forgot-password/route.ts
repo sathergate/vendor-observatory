@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { emailExists, createPasswordResetToken } from "@/lib/auth";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: Request) {
   const { email } = (await req.json()) as { email?: string };
 
@@ -31,6 +29,7 @@ export async function POST(req: Request) {
 
   const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/reset-password?token=${token}`;
 
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL || "noreply@lm-panopticon.com",
     to: normalizedEmail,
