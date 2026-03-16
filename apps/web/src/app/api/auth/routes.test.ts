@@ -67,7 +67,7 @@ describe("POST /api/auth/signup", () => {
     mockCreateUser.mockResolvedValue({ id: "u1", email: "a@b.com" });
     mockCreateSession.mockResolvedValue("tok-123");
 
-    const res = await callSignup({ email: "a@b.com", password: "pass" });
+    const res = await callSignup({ email: "a@b.com", password: "password123" });
     expect(res.status).toBe(200);
 
     const data = await res.json();
@@ -94,7 +94,7 @@ describe("POST /api/auth/signup", () => {
   it("returns 409 when email is already taken", async () => {
     mockCreateUser.mockResolvedValue(null);
 
-    const res = await callSignup({ email: "dup@b.com", password: "pass" });
+    const res = await callSignup({ email: "dup@b.com", password: "password123" });
     expect(res.status).toBe(409);
     const data = await res.json();
     expect(data.error).toBeDefined();

@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-export default function AnalyzePage() {
+function AnalyzeForm() {
   const router = useRouter();
-  const [url, setUrl] = useState("");
+  const searchParams = useSearchParams();
+  const prefilled = searchParams.get("domain") ?? "";
+  const [url, setUrl] = useState(prefilled);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +30,6 @@ export default function AnalyzePage() {
         return;
       }
       router.push(`/get-started/${data.jobId}`);
-      // Don't reset loading — component will unmount on navigation
     } catch {
       setError("Something went wrong");
       setLoading(false);
@@ -37,11 +39,12 @@ export default function AnalyzePage() {
   return (
     <div className="max-w-md mx-auto px-6 py-24">
       <h1 className="text-2xl font-bold mb-2 text-center text-primary">
-        What&apos;s your home page?
+        {prefilled ? "Confirm your product URL" : "What\u2019s your home page?"}
       </h1>
       <p className="text-[14px] text-secondary text-center mb-8">
-        Enter your product&apos;s domain and we&apos;ll analyze how AI coding
-        assistants mention it.
+        {prefilled
+          ? "We detected this from your email. Edit if needed."
+          : "Enter your product\u2019s domain and we\u2019ll analyze how AI coding assistants mention it."}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -69,5 +72,13 @@ export default function AnalyzePage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function AnalyzePage() {
+  return (
+    <Suspense>
+      <AnalyzeForm />
+    </Suspense>
   );
 }

@@ -1,6 +1,7 @@
 import { Pool } from "pg";
-import { cookies } from "next/headers";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import { auth } from "@/auth";
 
 // ── Lazy Pool (reuse from db.ts pattern) ──────────────────────────
 
@@ -33,6 +34,8 @@ async function ensureTables() {
   const pool = getPool();
   if (!pool) return;
   try {
+    // Auth.js creates its own users/accounts/sessions tables via the adapter.
+    // Keep legacy auth_users for backward compatibility during migration.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth_users (
         id TEXT PRIMARY KEY,
@@ -44,14 +47,14 @@ async function ensureTables() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth_sessions (
         token TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subscriptions (
         id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
         stripe_customer_id TEXT,
         stripe_subscription_id TEXT UNIQUE,
         plan TEXT NOT NULL DEFAULT 'starter',
@@ -62,7 +65,6 @@ async function ensureTables() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    // Migration: add vendor_canonical_id if missing (existing installs)
     await pool.query(`
       ALTER TABLE subscriptions
         ADD COLUMN IF NOT EXISTS vendor_canonical_id TEXT
@@ -77,26 +79,38 @@ async function ensureTables() {
   }
 }
 
-// ── User operations ───────────────────────────────────────────────
+// ── User types ───────────────────────────────────────────────────
 
 export interface AuthUser {
   id: string;
   email: string;
 }
 
+// ── User operations (for signup API — uses bcrypt) ───────────────
+
 export async function createUser(email: string, password: string): Promise<AuthUser | null> {
   await ensureTables();
   const pool = getPool();
   if (!pool) return null;
   const id = crypto.randomUUID();
+  const passwordHash = await bcrypt.hash(password, 10);
   try {
+    // Insert into Auth.js users table (used by the adapter)
     await pool.query(
-      "INSERT INTO auth_users (id, email, password) VALUES ($1, $2, $3)",
-      [id, email, password],
+      `INSERT INTO users (id, email, "emailVerified", "passwordHash")
+       VALUES ($1, $2, NULL, $3)
+       ON CONFLICT (email) DO NOTHING`,
+      [id, email.toLowerCase().trim(), passwordHash],
     );
-    return { id, email };
+    // Check if insert succeeded (might conflict on duplicate email)
+    const { rows } = await pool.query(
+      "SELECT id, email FROM users WHERE email = $1",
+      [email.toLowerCase().trim()],
+    );
+    if (rows.length === 0) return null;
+    return { id: rows[0].id, email: rows[0].email };
   } catch {
-    return null; // e.g. duplicate email
+    return null;
   }
 }
 
@@ -104,14 +118,47 @@ export async function verifyUser(email: string, password: string): Promise<AuthU
   await ensureTables();
   const pool = getPool();
   if (!pool) throw new Error("Database unavailable");
-  const { rows } = await pool.query(
-    "SELECT id, email FROM auth_users WHERE email = $1 AND password = $2",
-    [email, password],
-  );
-  return (rows[0] as AuthUser) ?? null;
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Try Auth.js users table first
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, email, "passwordHash" FROM users WHERE email = $1',
+      [normalizedEmail],
+    );
+    if (rows.length > 0 && rows[0].passwordHash) {
+      const valid = await bcrypt.compare(password, rows[0].passwordHash);
+      if (valid) return { id: rows[0].id, email: rows[0].email };
+      return null;
+    }
+  } catch {
+    // users table may not exist yet
+  }
+
+  // Fallback: check legacy auth_users table
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, email, password FROM auth_users WHERE email = $1",
+      [normalizedEmail],
+    );
+    if (rows.length > 0) {
+      let valid = false;
+      try {
+        valid = await bcrypt.compare(password, rows[0].password);
+      } catch {
+        valid = password === rows[0].password;
+      }
+      if (valid) return { id: rows[0].id, email: rows[0].email };
+    }
+  } catch {
+    // legacy table may not exist
+  }
+
+  return null;
 }
 
-// ── Session operations ────────────────────────────────────────────
+// ── Legacy session operations (kept for backward compat) ─────────
 
 export async function createSession(userId: string): Promise<string> {
   await ensureTables();
@@ -125,21 +172,6 @@ export async function createSession(userId: string): Promise<string> {
     );
   } catch { /* best effort */ }
   return token;
-}
-
-export async function getUserFromToken(token: string): Promise<AuthUser | null> {
-  await ensureTables();
-  const pool = getPool();
-  if (!pool) return null;
-  try {
-    const { rows } = await pool.query(
-      "SELECT u.id, u.email FROM auth_users u JOIN auth_sessions s ON u.id = s.user_id WHERE s.token = $1",
-      [token],
-    );
-    return (rows[0] as AuthUser) ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export async function deleteSession(token: string): Promise<void> {
@@ -230,15 +262,25 @@ export async function upsertSubscription(
   }
 }
 
-/** Look up a user by email. */
+/** Look up a user by email (checks both Auth.js users table and legacy). */
 export async function getUserByEmail(email: string): Promise<AuthUser | null> {
   await ensureTables();
   const pool = getPool();
   if (!pool) return null;
+  const normalizedEmail = email.toLowerCase().trim();
   try {
+    // Auth.js users table
+    const { rows } = await pool.query(
+      "SELECT id, email FROM users WHERE email = $1",
+      [normalizedEmail],
+    );
+    if (rows.length > 0) return rows[0] as AuthUser;
+  } catch { /* table may not exist */ }
+  try {
+    // Legacy table
     const { rows } = await pool.query(
       "SELECT id, email FROM auth_users WHERE email = $1",
-      [email],
+      [normalizedEmail],
     );
     return (rows[0] as AuthUser) ?? null;
   } catch {
@@ -374,20 +416,9 @@ export async function setSubscriptionVendor(userId: string, vendorCanonicalId: s
   }
 }
 
-// ── Cookie helper for server components / route handlers ──────────
+// ── Cookie helpers (legacy — kept for backward compat) ────────────
 
 const COOKIE_NAME = "session_token";
-
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(COOKIE_NAME)?.value;
-    if (!token) return null;
-    return getUserFromToken(token);
-  } catch {
-    return null;
-  }
-}
 
 export function sessionCookieOptions(token: string) {
   return {
@@ -410,6 +441,42 @@ export function deleteSessionCookie() {
   };
 }
 
+// ── getCurrentUser — now uses Auth.js session ─────────────────────
+
+/**
+ * Get the current authenticated user.
+ * Tries Auth.js JWT session first, falls back to legacy cookie-based session.
+ */
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  // Try Auth.js session
+  try {
+    const session = await auth();
+    if (session?.user?.id && session?.user?.email) {
+      return { id: session.user.id, email: session.user.email };
+    }
+  } catch {
+    // Auth.js not configured or session unavailable
+  }
+
+  // Fallback: legacy cookie-based session
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const token = cookieStore.get(COOKIE_NAME)?.value;
+    if (!token) return null;
+    await ensureTables();
+    const pool = getPool();
+    if (!pool) return null;
+    const { rows } = await pool.query(
+      "SELECT u.id, u.email FROM auth_users u JOIN auth_sessions s ON u.id = s.user_id WHERE s.token = $1",
+      [token],
+    );
+    return (rows[0] as AuthUser) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Payment gate for API routes ──────────────────────────────────
 
 /**
@@ -419,7 +486,6 @@ export function deleteSessionCookie() {
 export async function requireActivePayment(): Promise<
   { user: AuthUser; vendorCanonicalId: string | null; error?: never } | { user?: never; vendorCanonicalId?: never; error: Response }
 > {
-  // Dynamic import to avoid pulling NextResponse into non-API contexts
   const { NextResponse } = await import("next/server");
 
   const user = await getCurrentUser();

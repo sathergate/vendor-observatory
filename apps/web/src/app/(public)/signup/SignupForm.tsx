@@ -31,9 +31,6 @@ export default function SignupForm() {
         return;
       }
 
-      // TODO: Send email verification to the new user's address.
-      console.log(`[auth] TODO: send email verification to ${email}`);
-
       window.dispatchEvent(new Event("auth-change"));
       const paymentParams = new URLSearchParams();
       if (plan) paymentParams.set("plan", plan);
