@@ -7,8 +7,8 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function Image() {
-  const jetbrainsMono = await fetch(
-    "https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff"
+  const fontData = await fetch(
+    new URL("./fonts/JetBrainsMono-Medium.ttf", import.meta.url)
   ).then((res) => res.arrayBuffer());
 
   return new ImageResponse(
@@ -17,8 +17,8 @@ export default async function Image() {
         style={{
           display: "flex",
           flexDirection: "column",
-          width: "100%",
-          height: "100%",
+          width: "1200px",
+          height: "630px",
           backgroundColor: "#0d0d0f",
         }}
       >
@@ -26,13 +26,15 @@ export default async function Image() {
         <div
           style={{
             display: "flex",
-            flex: 1,
             alignItems: "center",
             justifyContent: "center",
+            width: "1200px",
+            height: "530px",
           }}
         >
-          <span
+          <div
             style={{
+              display: "flex",
               fontFamily: "JetBrains Mono",
               fontSize: 64,
               fontWeight: 500,
@@ -41,7 +43,7 @@ export default async function Image() {
             }}
           >
             vendor-observatory
-          </span>
+          </div>
         </div>
 
         {/* Bottom bar */}
@@ -50,31 +52,35 @@ export default async function Image() {
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
+            width: "1200px",
+            height: "100px",
             padding: "24px 40px",
             backgroundColor: "#18181c",
             borderTop: "1px solid #222228",
-            gap: "4px",
           }}
         >
-          <span
+          <div
             style={{
+              display: "flex",
               fontFamily: "JetBrains Mono",
               fontSize: 24,
               fontWeight: 500,
               color: "#f0f0f4",
+              marginBottom: "4px",
             }}
           >
-            Revealed Preference {">"} Stated
-          </span>
-          <span
+            Revealed Preference &gt; Stated
+          </div>
+          <div
             style={{
+              display: "flex",
               fontFamily: "JetBrains Mono",
               fontSize: 16,
               color: "#5a5a6e",
             }}
           >
             panopticonos.com
-          </span>
+          </div>
         </div>
       </div>
     ),
@@ -83,7 +89,7 @@ export default async function Image() {
       fonts: [
         {
           name: "JetBrains Mono",
-          data: jetbrainsMono,
+          data: fontData,
           style: "normal",
           weight: 500,
         },
