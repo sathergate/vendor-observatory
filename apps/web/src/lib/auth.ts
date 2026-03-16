@@ -34,7 +34,55 @@ async function ensureTables() {
   const pool = getPool();
   if (!pool) return;
   try {
-    // Auth.js creates its own users/accounts/sessions tables via the adapter.
+    // Auth.js adapter tables — the adapter does NOT auto-create these.
+    // The users table is extended with passwordHash for credentials-based signup.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        email TEXT UNIQUE,
+        "emailVerified" TIMESTAMPTZ,
+        image TEXT,
+        "passwordHash" TEXT
+      )
+    `);
+    // Idempotent: add passwordHash if table was previously created without it
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "passwordHash" TEXT
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+        "userId" TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        "providerAccountId" TEXT NOT NULL,
+        refresh_token TEXT,
+        access_token TEXT,
+        expires_at BIGINT,
+        token_type TEXT,
+        scope TEXT,
+        id_token TEXT,
+        session_state TEXT,
+        UNIQUE(provider, "providerAccountId")
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+        "sessionToken" TEXT UNIQUE NOT NULL,
+        "userId" TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS verification_token (
+        identifier TEXT NOT NULL,
+        token TEXT NOT NULL,
+        expires TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (identifier, token)
+      )
+    `);
     // Keep legacy auth_users for backward compatibility during migration.
     await pool.query(`
       CREATE TABLE IF NOT EXISTS auth_users (
@@ -119,7 +167,8 @@ export async function createUser(email: string, password: string): Promise<AuthU
     );
     if (rows.length === 0) return null;
     return { id: rows[0].id, email: rows[0].email };
-  } catch {
+  } catch (err) {
+    console.error("[auth] createUser failed:", err);
     return null;
   }
 }
@@ -142,8 +191,8 @@ export async function verifyUser(email: string, password: string): Promise<AuthU
       if (valid) return { id: rows[0].id, email: rows[0].email };
       return null;
     }
-  } catch {
-    // users table may not exist yet
+  } catch (err) {
+    console.error("[auth] verifyUser (users):", err);
   }
 
   // Fallback: check legacy auth_users table
@@ -161,8 +210,8 @@ export async function verifyUser(email: string, password: string): Promise<AuthU
       }
       if (valid) return { id: rows[0].id, email: rows[0].email };
     }
-  } catch {
-    // legacy table may not exist
+  } catch (err) {
+    console.error("[auth] verifyUser (auth_users):", err);
   }
 
   return null;
@@ -375,7 +424,7 @@ export async function getUserByEmail(email: string): Promise<AuthUser | null> {
       [normalizedEmail],
     );
     if (rows.length > 0) return rows[0] as AuthUser;
-  } catch { /* table may not exist */ }
+  } catch (err) { console.error("[auth] getUserByEmail (users):", err); }
   try {
     // Legacy table
     const { rows } = await pool.query(
@@ -567,11 +616,19 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     await ensureTables();
     const pool = getPool();
     if (!pool) return null;
+    // Try Auth.js users table first (new signups go here)
     const { rows } = await pool.query(
+      "SELECT u.id, u.email FROM users u JOIN auth_sessions s ON u.id = s.user_id WHERE s.token = $1",
+      [token],
+    );
+    if (rows.length > 0) return rows[0] as AuthUser;
+
+    // Fallback: legacy auth_users table
+    const { rows: legacyRows } = await pool.query(
       "SELECT u.id, u.email FROM auth_users u JOIN auth_sessions s ON u.id = s.user_id WHERE s.token = $1",
       [token],
     );
-    return (rows[0] as AuthUser) ?? null;
+    return (legacyRows[0] as AuthUser) ?? null;
   } catch {
     return null;
   }
