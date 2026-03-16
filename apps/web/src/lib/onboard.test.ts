@@ -246,7 +246,7 @@ describe("getJobStatus", () => {
   });
 
   it("when elapsed is 0s: stages are pending/running with no data", async () => {
-    const now = new Date();
+    const now = new Date(Date.now() - 2_000); // 2s ago so elapsed > 0 reliably
     mockQuery.mockImplementation(async (sql: string) => {
       if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
         return {
