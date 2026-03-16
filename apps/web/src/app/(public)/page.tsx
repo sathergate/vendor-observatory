@@ -17,7 +17,7 @@ export default function LandingPage() {
           </p>
           <div className="flex items-center gap-4">
             <a
-              href="/get-started/analyze"
+              href="/get-started/signup"
               className="inline-flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent/90 rounded-full text-[14px] font-medium transition-colors"
             >
               Analyze your product
@@ -151,7 +151,7 @@ export default function LandingPage() {
             Enter your domain. Get a report in under a minute.
           </p>
           <a
-            href="/get-started/analyze"
+            href="/get-started/signup"
             className="inline-flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent/90 rounded-full text-[14px] font-medium transition-colors"
           >
             Start free analysis
