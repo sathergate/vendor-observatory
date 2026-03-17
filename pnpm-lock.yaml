@@ -57,6 +57,9 @@ importers:
       stripe:
         specifier: ^20.4.0
         version: 20.4.0(@types/node@22.19.11)
+      yaml:
+        specifier: ^2.8.2
+        version: 2.8.2
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.0.0

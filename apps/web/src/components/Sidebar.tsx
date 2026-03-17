@@ -72,6 +72,7 @@ const IA_V2_NAV: NavArea[] = [
     area: "Fixes",
     href: "/fixes",
     children: [
+      { href: "/fixes/factors", label: "Factor Analysis" },
       { href: "/fixes/issues", label: "Remediation Issues" },
       { href: "/fixes/docs", label: "Docs/SDK Patches" },
     ],
