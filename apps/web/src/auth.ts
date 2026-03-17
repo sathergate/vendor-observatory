@@ -3,7 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import PostgresAdapter from "@auth/pg-adapter";
 import { Pool } from "pg";
-import bcrypt from "bcryptjs";
+import { verifyUser } from "@/lib/auth";
 
 // ── Shared PG pool for the adapter ──────────────────────────────────
 
@@ -45,46 +45,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const pool = getAuthPool();
-        if (!pool) return null;
-
         const email = (credentials.email as string).toLowerCase().trim();
         const password = credentials.password as string;
 
-        // Look up user in auth_users (legacy) or users (Auth.js) table
         try {
-          // Try Auth.js users table first
-          const { rows } = await pool.query(
-            'SELECT id, email, "passwordHash" FROM users WHERE email = $1',
-            [email],
-          );
-          if (rows.length > 0) {
-            const user = rows[0];
-            if (!user.passwordHash) return null;
-            const valid = await bcrypt.compare(password, user.passwordHash);
-            if (!valid) return null;
-            return { id: user.id, email: user.email };
-          }
-
-          // Fallback: check legacy auth_users table
-          const legacy = await pool.query(
-            "SELECT id, email, password FROM auth_users WHERE email = $1",
-            [email],
-          );
-          if (legacy.rows.length > 0) {
-            const user = legacy.rows[0];
-            // Legacy passwords may be plaintext — try bcrypt first, then plaintext
-            let valid = false;
-            try {
-              valid = await bcrypt.compare(password, user.password);
-            } catch {
-              valid = password === user.password;
-            }
-            if (!valid) return null;
-            return { id: user.id, email: user.email };
-          }
-
-          return null;
+          const user = await verifyUser(email, password);
+          if (!user) return null;
+          return { id: user.id, email: user.email };
         } catch {
           return null;
         }

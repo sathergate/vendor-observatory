@@ -52,6 +52,7 @@ describe("sessionCookieOptions", () => {
       name: "session_token",
       value: "tok-123",
       httpOnly: true,
+      secure: false, // NODE_ENV !== "production" in test
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
       sameSite: "lax",

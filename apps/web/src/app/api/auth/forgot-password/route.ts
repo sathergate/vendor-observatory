@@ -29,19 +29,19 @@ export async function POST(req: Request) {
     );
   }
 
+  // Always return success to prevent email enumeration — but only send email if account exists
   if (!exists) {
-    return NextResponse.json(
-      { error: "No account found with that email address" },
-      { status: 404 },
-    );
+    return NextResponse.json({
+      message: "If an account exists with that email, a password reset link has been sent",
+    });
   }
 
   const token = await createPasswordResetToken(normalizedEmail);
   if (!token) {
-    return NextResponse.json(
-      { error: "Failed to create reset token" },
-      { status: 500 },
-    );
+    // Don't reveal the failure reason to the client
+    return NextResponse.json({
+      message: "If an account exists with that email, a password reset link has been sent",
+    });
   }
 
   const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/reset-password?token=${token}`;
@@ -84,6 +84,6 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({
-    message: "Password reset link has been sent to your email",
+    message: "If an account exists with that email, a password reset link has been sent",
   });
 }

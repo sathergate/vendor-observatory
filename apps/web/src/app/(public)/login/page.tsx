@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -20,16 +21,17 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
       });
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Login failed");
+
+      if (result?.error) {
+        setError("Invalid email or password");
         return;
       }
+
       window.dispatchEvent(new Event("auth-change"));
       // Redirect to user's vendor profile page
       try {

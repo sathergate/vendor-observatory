@@ -46,7 +46,10 @@ export default async function PlansPage({
 }) {
   const { email = "", jobId = "" } = await searchParams;
   const cookieStore = await cookies();
-  const isLoggedIn = !!cookieStore.get("session_token")?.value;
+  const isLoggedIn =
+    !!cookieStore.get("session_token")?.value ||
+    !!cookieStore.get("authjs.session-token")?.value ||
+    !!cookieStore.get("__Secure-authjs.session-token")?.value;
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-12">

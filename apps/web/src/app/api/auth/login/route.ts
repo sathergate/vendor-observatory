@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { verifyUser, createSession, sessionCookieOptions } from "@/lib/auth";
+import { verifyUser } from "@/lib/auth";
 
+/**
+ * POST /api/auth/login — verifies credentials.
+ * The frontend now uses NextAuth signIn("credentials") for actual session creation.
+ * This route is kept for backward compatibility / API consumers.
+ */
 export async function POST(req: Request) {
   const { email, password } = (await req.json()) as { email?: string; password?: string };
 
@@ -18,8 +23,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
-  const token = await createSession(user.id);
-  const res = NextResponse.json({ user });
-  res.cookies.set(sessionCookieOptions(token));
-  return res;
+  return NextResponse.json({ user });
 }

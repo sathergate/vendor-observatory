@@ -4,7 +4,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockCreateUser = vi.fn();
 const mockVerifyUser = vi.fn();
-const mockCreateSession = vi.fn();
 const mockDeleteSession = vi.fn();
 const mockGetCurrentUser = vi.fn();
 const mockHasActivePayment = vi.fn();
@@ -13,7 +12,7 @@ const mockGetUserSubscription = vi.fn();
 vi.mock("@/lib/auth", () => ({
   createUser: (...args: unknown[]) => mockCreateUser(...args),
   verifyUser: (...args: unknown[]) => mockVerifyUser(...args),
-  createSession: (...args: unknown[]) => mockCreateSession(...args),
+  createSession: vi.fn().mockResolvedValue("tok-123"),
   deleteSession: (...args: unknown[]) => mockDeleteSession(...args),
   getCurrentUser: () => mockGetCurrentUser(),
   hasActivePayment: (...args: unknown[]) => mockHasActivePayment(...args),
@@ -22,6 +21,7 @@ vi.mock("@/lib/auth", () => ({
     name: "session_token",
     value: token,
     httpOnly: true,
+    secure: false,
     path: "/",
     maxAge: 2592000,
     sameSite: "lax",
@@ -63,18 +63,14 @@ describe("POST /api/auth/signup", () => {
     return POST(jsonRequest(body));
   }
 
-  it("creates user and returns 200 with session cookie", async () => {
+  it("creates user and returns 200 with user data", async () => {
     mockCreateUser.mockResolvedValue({ id: "u1", email: "a@b.com" });
-    mockCreateSession.mockResolvedValue("tok-123");
 
     const res = await callSignup({ email: "a@b.com", password: "password123" });
     expect(res.status).toBe(200);
 
     const data = await res.json();
     expect(data.user).toEqual({ id: "u1", email: "a@b.com" });
-
-    const cookie = res.cookies.get("session_token");
-    expect(cookie?.value).toBe("tok-123");
   });
 
   it("returns 400 when email is missing", async () => {
@@ -109,18 +105,14 @@ describe("POST /api/auth/login", () => {
     return POST(jsonRequest(body));
   }
 
-  it("logs in and returns 200 with session cookie", async () => {
+  it("logs in and returns 200 with user data", async () => {
     mockVerifyUser.mockResolvedValue({ id: "u1", email: "a@b.com" });
-    mockCreateSession.mockResolvedValue("tok-456");
 
     const res = await callLogin({ email: "a@b.com", password: "pass" });
     expect(res.status).toBe(200);
 
     const data = await res.json();
     expect(data.user).toEqual({ id: "u1", email: "a@b.com" });
-
-    const cookie = res.cookies.get("session_token");
-    expect(cookie?.value).toBe("tok-456");
   });
 
   it("returns 400 when email is missing", async () => {
@@ -158,8 +150,13 @@ describe("POST /api/auth/logout", () => {
 
     expect(mockDeleteSession).toHaveBeenCalledWith("tok-789");
 
+    // Legacy session cookie should be cleared
     const cookie = res.cookies.get("session_token");
     expect(cookie?.value).toBe("");
+
+    // NextAuth session cookies should also be cleared
+    const authjsCookie = res.cookies.get("authjs.session-token");
+    expect(authjsCookie?.value).toBe("");
   });
 
   it("returns ok even with no session cookie", async () => {

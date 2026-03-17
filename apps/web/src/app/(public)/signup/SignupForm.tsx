@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 
 export default function SignupForm() {
@@ -20,6 +21,7 @@ export default function SignupForm() {
     setLoading(true);
 
     try {
+      // Step 1: Create the user account
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -28,6 +30,19 @@ export default function SignupForm() {
       if (!res.ok) {
         const data = await res.json();
         setError(data.error || "Signup failed");
+        return;
+      }
+
+      // Step 2: Sign in via NextAuth to get a proper JWT session
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Account created but sign-in failed. Please log in manually.");
+        router.push("/login");
         return;
       }
 
