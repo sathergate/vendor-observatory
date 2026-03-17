@@ -1,4 +1,4 @@
-import type { EvidenceRef } from "@obs/shared/types";
+import type { EvidenceRef } from "@obs/shared";
 
 // ── Types ────────────────────────────────────────────────────────────
 

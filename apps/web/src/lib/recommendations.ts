@@ -1,5 +1,5 @@
 import type { VendorScorecard } from "./db";
-import type { EvidenceRef } from "@obs/shared/types";
+import type { EvidenceRef } from "@obs/shared";
 import { buildSessionEvidenceRef } from "./evidence";
 
 // ── Types ───────────────────────────────────────────────────────────
