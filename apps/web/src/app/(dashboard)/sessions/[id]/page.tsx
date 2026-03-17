@@ -1,4 +1,4 @@
-import { getSessionDetail } from "@/lib/db";
+import { getSessionDetail, getSessionTranscript } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { PlatformBadge } from "@/components/PlatformBadge";
@@ -13,6 +13,10 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
   if (!detail) return notFound();
 
   const { session, observations, toolActions } = detail;
+  const transcript = await getSessionTranscript(id);
+
+  // Collect vendor names for highlighting in transcript
+  const vendorNames = observations.map((o) => vendorDisplayName(o.vendor_canonical_id));
 
   return (
     <div>
@@ -27,6 +31,25 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
         <span>{new Date(session.started_at).toLocaleString()}</span>
         <span><span className="font-data">{Number(session.turn_count).toLocaleString()}</span> turns</span>
       </div>
+
+      {/* Transcript */}
+      {transcript.length > 0 && (
+        <>
+          <h3 className="section-header mb-3">Conversation (<span className="font-data">{transcript.length}</span> turns)</h3>
+          <div className="space-y-3 mb-8">
+            {transcript.map((turn, i) => (
+              <div key={i} className="bg-surface rounded-[6px] border border-border-subtle p-4">
+                <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-2">
+                  {turn.role === "user" ? "User" : "Assistant"}
+                </div>
+                <div className="text-[13px] text-primary whitespace-pre-wrap leading-relaxed">
+                  <HighlightedText text={turn.text_content} vendorNames={vendorNames} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Observations */}
       <h3 className="section-header mb-3">Vendor Detections (<span className="font-data">{observations.length}</span>)</h3>
@@ -94,5 +117,30 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
         </div>
       )}
     </div>
+  );
+}
+
+function HighlightedText({ text, vendorNames }: { text: string; vendorNames: string[] }) {
+  if (!text || vendorNames.length === 0) return <>{text}</>;
+
+  // Build a single regex matching all vendor names (case-insensitive)
+  const uniqueNames = [...new Set(vendorNames)].filter(Boolean).sort((a, b) => b.length - a.length);
+  if (uniqueNames.length === 0) return <>{text}</>;
+
+  const escaped = uniqueNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+
+  const parts = text.split(pattern);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const isMatch = uniqueNames.some((n) => n.toLowerCase() === part.toLowerCase());
+        return isMatch ? (
+          <span key={i} className="text-accent font-semibold">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        );
+      })}
+    </>
   );
 }

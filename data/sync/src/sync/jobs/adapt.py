@@ -108,6 +108,7 @@ def _sync_sessions(spark: SparkSession, src: str, tgt: str) -> None:
 def _sync_observations(spark: SparkSession, src: str, tgt: str) -> None:
     table = f"{tgt}.observations"
     _ensure_table(spark, table, """
+        id BIGINT GENERATED ALWAYS AS IDENTITY,
         session_id STRING NOT NULL,
         vendor_canonical_id STRING NOT NULL,
         vendor_raw STRING,
@@ -119,7 +120,7 @@ def _sync_observations(spark: SparkSession, src: str, tgt: str) -> None:
         timestamp TIMESTAMP
     """)
 
-    # Deduplicate on PK to avoid MERGE conflicts
+    # Stage source observations (no dedup — id column guarantees unique rows)
     spark.sql(f"""
         SELECT
             session_id,
@@ -151,14 +152,29 @@ def _sync_observations(spark: SparkSession, src: str, tgt: str) -> None:
         GROUP BY session_id, vendor_canonical_id, mention_type
     """).createOrReplaceTempView("observations_staging")
 
+    # Use composite match for MERGE to update existing rows, insert new ones.
+    # The id column is auto-generated on INSERT.
     spark.sql(f"""
         MERGE INTO {table} AS target
         USING observations_staging AS source
         ON target.session_id = source.session_id
             AND target.vendor_canonical_id = source.vendor_canonical_id
             AND target.mention_type = source.mention_type
-        WHEN MATCHED THEN UPDATE SET *
-        WHEN NOT MATCHED THEN INSERT *
+        WHEN MATCHED THEN UPDATE SET
+            vendor_raw = source.vendor_raw,
+            work_category = source.work_category,
+            confidence = source.confidence,
+            context_snippet = source.context_snippet,
+            user_prompt_snippet = source.user_prompt_snippet,
+            timestamp = source.timestamp
+        WHEN NOT MATCHED THEN INSERT (
+            session_id, vendor_canonical_id, vendor_raw, mention_type,
+            work_category, confidence, context_snippet, user_prompt_snippet, timestamp
+        ) VALUES (
+            source.session_id, source.vendor_canonical_id, source.vendor_raw, source.mention_type,
+            source.work_category, source.confidence, source.context_snippet, source.user_prompt_snippet,
+            source.timestamp
+        )
     """)
 
     count = spark.sql(f"SELECT COUNT(*) AS n FROM {table}").collect()[0]["n"]

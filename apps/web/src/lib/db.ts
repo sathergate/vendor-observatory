@@ -236,6 +236,7 @@ export interface SessionListRow {
   turn_count: number;
   observation_count: number;
   vendors: string;
+  has_selected_vendor?: boolean;
 }
 
 export async function getSessionList(limit = 50, offset = 0, vendorScope?: string | null): Promise<SessionListRow[]> {
@@ -258,7 +259,7 @@ export async function getSessionList(limit = 50, offset = 0, vendorScope?: strin
       FROM ${T_SESSIONS} s
       LEFT JOIN ${T_OBSERVATIONS} o ON s.id = o.session_id
       ${vendorWhere}
-      GROUP BY s.id
+      GROUP BY s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count
       ORDER BY s.started_at DESC
       LIMIT $${paramIdx++} OFFSET $${paramIdx++}
     `, params);
@@ -272,12 +273,15 @@ export async function getSessionList(limit = 50, offset = 0, vendorScope?: strin
       observation_count: Number(r.observation_count),
       vendors: (r.vendors as string) || "",
     }));
-  } catch { return []; }
+  } catch (err) {
+    console.error("[vendor-observatory] getSessionList error:", err);
+    return [];
+  }
 }
 
 export interface SessionDetail {
   session: { id: string; source_platform: string; model_id: string | null; started_at: string; ended_at: string | null; cwd: string | null; git_branch: string | null; turn_count: number };
-  observations: Array<{ vendor_canonical_id: string; vendor_raw: string; mention_type: string; work_category: string | null; confidence: number; context_snippet: string | null; timestamp: string }>;
+  observations: Array<{ vendor_canonical_id: string; vendor_raw: string; mention_type: string; work_category: string | null; confidence: number; context_snippet: string | null; user_prompt_snippet: string | null; timestamp: string }>;
   toolActions: Array<{ tool_name: string; command_or_path: string | null; vendor_canonical_id: string | null; action_type: string | null; success: number | null; timestamp: string }>;
 }
 
@@ -296,10 +300,73 @@ export async function getSessionDetail(id: string, vendorScope?: string | null):
     const sessionResult = await pool.query(`SELECT * FROM ${T_SESSIONS} WHERE id = $1`, [id]);
     const session = sessionResult.rows[0] as SessionDetail["session"] | undefined;
     if (!session) return null;
-    const obsResult = await pool.query(`SELECT vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, timestamp FROM ${T_OBSERVATIONS} WHERE session_id = $1 ORDER BY timestamp`, [id]);
+    const obsResult = await pool.query(`SELECT vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, user_prompt_snippet, timestamp FROM ${T_OBSERVATIONS} WHERE session_id = $1 ORDER BY timestamp`, [id]);
     const toolResult = await pool.query("SELECT tool_name, command_or_path, vendor_canonical_id, action_type, success, timestamp FROM tool_actions WHERE session_id = $1 ORDER BY timestamp", [id]);
     return { session, observations: obsResult.rows as SessionDetail["observations"], toolActions: toolResult.rows as SessionDetail["toolActions"] };
   } catch { return null; }
+}
+
+export async function getVendorScopedSessionList(
+  vendorId: string,
+  categoryVendorIds: string[],
+  vendorName: string,
+  limit = 50,
+  offset = 0,
+): Promise<SessionListRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    const params: (string | string[] | number)[] = [vendorId, categoryVendorIds, `%${vendorName}%`, limit, offset];
+    const { rows } = await pool.query(`
+      SELECT s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count,
+        COUNT(o.id) AS observation_count,
+        string_agg(DISTINCT o.vendor_canonical_id, ',') AS vendors,
+        BOOL_OR(o.vendor_canonical_id = $1) AS has_selected_vendor
+      FROM ${T_SESSIONS} s
+      JOIN ${T_OBSERVATIONS} o ON s.id = o.session_id
+      WHERE o.vendor_canonical_id = $1
+         OR o.vendor_canonical_id = ANY($2::text[])
+         OR o.user_prompt_snippet ILIKE $3
+      GROUP BY s.id, s.source_platform, s.model_id, s.started_at, s.cwd, s.turn_count
+      ORDER BY s.started_at DESC
+      LIMIT $4 OFFSET $5
+    `, params);
+    return rows.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      source_platform: r.source_platform as string,
+      model_id: r.model_id as string | null,
+      started_at: r.started_at as string,
+      cwd: r.cwd as string | null,
+      turn_count: Number(r.turn_count),
+      observation_count: Number(r.observation_count),
+      vendors: (r.vendors as string) || "",
+      has_selected_vendor: Boolean(r.has_selected_vendor),
+    }));
+  } catch (err) {
+    console.error("[vendor-observatory] getVendorScopedSessionList error:", err);
+    return [];
+  }
+}
+
+const T_RAW_TRANSCRIPTS = "raw_transcripts_synced";
+
+export interface TranscriptTurn {
+  role: string;
+  text_content: string;
+}
+
+export async function getSessionTranscript(sessionId: string): Promise<TranscriptTurn[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, T_RAW_TRANSCRIPTS))) return [];
+    const { rows } = await pool.query(
+      `SELECT raw_turns_json FROM ${T_RAW_TRANSCRIPTS} WHERE session_id = $1 LIMIT 1`,
+      [sessionId],
+    );
+    if (rows.length === 0) return [];
+    return safeJsonParse<TranscriptTurn[]>(rows[0].raw_turns_json as string, []);
+  } catch { return []; }
 }
 
 // ── Top Vendors (for dashboard) ─────────────────────────────────────

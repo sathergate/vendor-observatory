@@ -37,6 +37,7 @@ const NAV_GROUPS = [
 const VENDOR_NAV_LINKS = (vendorId: string) => [
   { href: `/benchmarks/vendors/${encodeURIComponent(vendorId)}`, label: "My Dashboard" },
   { href: "/rejections", label: "Rejections" },
+  { href: "/sessions", label: "Sessions" },
 ];
 
 export function Sidebar() {
