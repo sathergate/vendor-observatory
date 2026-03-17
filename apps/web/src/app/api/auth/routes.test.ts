@@ -17,6 +17,7 @@ vi.mock("@/lib/auth", () => ({
   getCurrentUser: () => mockGetCurrentUser(),
   hasActivePayment: (...args: unknown[]) => mockHasActivePayment(...args),
   getUserSubscription: (...args: unknown[]) => mockGetUserSubscription(...args),
+  isAdminEmail: () => false,
   sessionCookieOptions: (token: string) => ({
     name: "session_token",
     value: token,
