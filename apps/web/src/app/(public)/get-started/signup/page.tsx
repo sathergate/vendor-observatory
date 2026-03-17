@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 
 /** Freemail domains where we cannot infer a product URL. */
@@ -33,6 +34,7 @@ export default function GetStartedSignupPage() {
     setLoading(true);
 
     try {
+      // Step 1: Create the user account
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -41,6 +43,19 @@ export default function GetStartedSignupPage() {
       if (!res.ok) {
         const data = await res.json();
         setError(data.error || "Could not create account");
+        return;
+      }
+
+      // Step 2: Sign in via NextAuth to get a proper JWT session
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Account created but sign-in failed. Please log in manually.");
+        router.push("/login");
         return;
       }
 
@@ -136,7 +151,7 @@ export default function GetStartedSignupPage() {
           </div>
           <button
             onClick={() => {
-              window.location.href = "/api/auth/signin/google";
+              signIn("google", { callbackUrl: "/get-started/analyze" });
             }}
             className="w-full py-2 bg-surface border border-border hover:border-accent
                        rounded-[6px] text-[14px] text-secondary hover:text-primary transition-colors"

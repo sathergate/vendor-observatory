@@ -152,21 +152,29 @@ export async function createUser(email: string, password: string): Promise<AuthU
   if (!pool) return null;
   const id = crypto.randomUUID();
   const passwordHash = await bcrypt.hash(password, 10);
+  const normalizedEmail = email.toLowerCase().trim();
   try {
+    // Check if email already exists — reject duplicates to prevent account takeover
+    const existing = await pool.query(
+      "SELECT id FROM users WHERE email = $1",
+      [normalizedEmail],
+    );
+    if (existing.rows.length > 0) return null;
+
+    // Also check legacy table
+    const legacyExisting = await pool.query(
+      "SELECT id FROM auth_users WHERE email = $1",
+      [normalizedEmail],
+    );
+    if (legacyExisting.rows.length > 0) return null;
+
     // Insert into Auth.js users table (used by the adapter)
     await pool.query(
       `INSERT INTO users (id, email, "emailVerified", "passwordHash")
-       VALUES ($1, $2, NULL, $3)
-       ON CONFLICT (email) DO NOTHING`,
-      [id, email.toLowerCase().trim(), passwordHash],
+       VALUES ($1, $2, NULL, $3)`,
+      [id, normalizedEmail, passwordHash],
     );
-    // Check if insert succeeded (might conflict on duplicate email)
-    const { rows } = await pool.query(
-      "SELECT id, email FROM users WHERE email = $1",
-      [email.toLowerCase().trim()],
-    );
-    if (rows.length === 0) return null;
-    return { id: rows[0].id, email: rows[0].email };
+    return { id, email: normalizedEmail };
   } catch (err) {
     console.error("[auth] createUser failed:", err);
     return null;
@@ -279,17 +287,26 @@ export async function resetPassword(token: string, newPassword: string): Promise
 
   try {
     // Update password in Auth.js users table
-    await pool.query(
+    const result = await pool.query(
       'UPDATE users SET "passwordHash" = $1 WHERE id = $2',
       [passwordHash, user.id],
     );
-    // Also update legacy table if it exists
-    try {
-      await pool.query(
+    // If user only exists in legacy table, update there instead
+    if (result.rowCount === 0) {
+      const legacyResult = await pool.query(
         "UPDATE auth_users SET password = $1 WHERE id = $2",
         [passwordHash, user.id],
       );
-    } catch { /* legacy table may not exist */ }
+      if (legacyResult.rowCount === 0) return false; // user not found in either table
+    } else {
+      // Also update legacy table if it exists (best effort)
+      try {
+        await pool.query(
+          "UPDATE auth_users SET password = $1 WHERE id = $2",
+          [passwordHash, user.id],
+        );
+      } catch { /* legacy table may not exist */ }
+    }
     // Mark token as used
     await pool.query(
       "UPDATE password_reset_tokens SET used = TRUE WHERE token = $1",
@@ -574,6 +591,7 @@ export function sessionCookieOptions(token: string) {
     name: COOKIE_NAME,
     value: token,
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 24 * 30, // 30 days
     sameSite: "lax" as const,
