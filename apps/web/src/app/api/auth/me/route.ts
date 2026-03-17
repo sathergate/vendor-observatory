@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, hasActivePayment, getUserSubscription } from "@/lib/auth";
-
-/** Email that always bypasses payment checks. */
-const BYPASS_EMAIL = "test@test.com";
-const BYPASS_VENDOR = "neon";
+import { getCurrentUser, hasActivePayment, getUserSubscription, isAdminEmail } from "@/lib/auth";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -13,12 +9,25 @@ export async function GET() {
 
   const paymentActive = await hasActivePayment(user.id, user.email);
   const subscription = await getUserSubscription(user.id);
+  const admin = isAdminEmail(user.email);
 
-  // For the bypass user, always return a vendor even if no subscription row exists
-  const vendorCanonicalId =
-    user.email === BYPASS_EMAIL
-      ? (subscription?.vendor_canonical_id ?? BYPASS_VENDOR)
-      : (subscription?.vendor_canonical_id ?? null);
+  // Admin users get full access with no vendor restriction
+  if (admin) {
+    return NextResponse.json({
+      user,
+      paymentActive: true,
+      isAdmin: true,
+      subscription: subscription
+        ? {
+            plan: subscription.plan,
+            status: subscription.status,
+            vendorCanonicalId: subscription.vendor_canonical_id,
+          }
+        : { plan: "admin", status: "active", vendorCanonicalId: null },
+    });
+  }
+
+  const vendorCanonicalId = subscription?.vendor_canonical_id ?? null;
 
   return NextResponse.json({
     user,
@@ -29,8 +38,6 @@ export async function GET() {
           status: subscription.status,
           vendorCanonicalId,
         }
-      : user.email === BYPASS_EMAIL
-        ? { plan: "starter", status: "active", vendorCanonicalId: BYPASS_VENDOR }
-        : null,
+      : null,
   });
 }
