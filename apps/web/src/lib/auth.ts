@@ -51,6 +51,9 @@ async function ensureTables() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS "passwordHash" TEXT
     `);
     await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS "isAdmin" BOOLEAN DEFAULT FALSE
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS accounts (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
         "userId" TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -169,10 +172,11 @@ export async function createUser(email: string, password: string): Promise<AuthU
     if (legacyExisting.rows.length > 0) return null;
 
     // Insert into Auth.js users table (used by the adapter)
+    const admin = ADMIN_EMAILS.has(normalizedEmail);
     await pool.query(
-      `INSERT INTO users (id, email, "emailVerified", "passwordHash")
-       VALUES ($1, $2, NULL, $3)`,
-      [id, normalizedEmail, passwordHash],
+      `INSERT INTO users (id, email, "emailVerified", "passwordHash", "isAdmin")
+       VALUES ($1, $2, NULL, $3, $4)`,
+      [id, normalizedEmail, passwordHash, admin],
     );
     return { id, email: normalizedEmail };
   } catch (err) {
@@ -354,6 +358,12 @@ export async function deleteSession(token: string): Promise<void> {
 /** Email that always bypasses payment checks. */
 const BYPASS_EMAIL = "test@test.com";
 
+/** Emails with admin privileges — full access to all vendors, no payment required. */
+const ADMIN_EMAILS = new Set([
+  "test@test.com",
+  "james@panopticonos.com",
+]);
+
 export interface Subscription {
   id: string;
   user_id: string;
@@ -523,7 +533,7 @@ const BYPASS_VENDOR = "neon";
  * Returns true for the bypass email (test@test.com) unconditionally.
  */
 export async function hasActivePayment(userId: string, email: string): Promise<boolean> {
-  if (email === BYPASS_EMAIL) return true;
+  if (ADMIN_EMAILS.has(email)) return true;
   const sub = await getUserSubscription(userId);
   if (!sub) return false;
   return sub.status === "active" || sub.status === "trialing";
@@ -580,6 +590,11 @@ export async function setSubscriptionVendor(userId: string, vendorCanonicalId: s
   } catch {
     return "no_subscription";
   }
+}
+
+/** Check if an email has admin privileges. */
+export function isAdminEmail(email: string): boolean {
+  return ADMIN_EMAILS.has(email.toLowerCase().trim());
 }
 
 // ── Cookie helpers (legacy — kept for backward compat) ────────────
@@ -668,9 +683,9 @@ export async function requireActivePayment(): Promise<
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  // Bypass user gets a hardcoded vendor
-  if (user.email === BYPASS_EMAIL) {
-    return { user, vendorCanonicalId: BYPASS_VENDOR };
+  // Admin users get unrestricted access to all vendors
+  if (ADMIN_EMAILS.has(user.email)) {
+    return { user, vendorCanonicalId: null };
   }
 
   const sub = await getSubscriptionForUser(user.id);
