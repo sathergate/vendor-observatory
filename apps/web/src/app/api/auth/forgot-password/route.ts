@@ -18,6 +18,17 @@ export async function POST(req: Request) {
 
   const normalizedEmail = email.toLowerCase().trim();
 
+  // Check email service configuration early to avoid leaking email existence
+  // via different error responses when Resend is not configured
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("[auth] RESEND_API_KEY is not configured");
+    return NextResponse.json(
+      { error: "Email service is not configured. Please contact support." },
+      { status: 500 },
+    );
+  }
+
   let exists: boolean;
   try {
     exists = await emailExists(normalizedEmail);
@@ -45,15 +56,6 @@ export async function POST(req: Request) {
   }
 
   const resetUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/reset-password?token=${token}`;
-
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.error("[auth] RESEND_API_KEY is not configured");
-    return NextResponse.json(
-      { error: "Email service is not configured. Please contact support." },
-      { status: 500 },
-    );
-  }
 
   try {
     const resend = new Resend(apiKey);

@@ -7,11 +7,13 @@ import { getCurrentUser, hasActivePayment } from "@/lib/auth";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
 
-  if (user) {
-    const paid = await hasActivePayment(user.id, user.email);
-    if (!paid) {
-      redirect("/plans");
-    }
+  if (!user) {
+    redirect("/login");
+  }
+
+  const paid = await hasActivePayment(user.id, user.email);
+  if (!paid) {
+    redirect("/plans");
   }
 
   return (
