@@ -3,6 +3,7 @@ import { VendorProvider } from "@/context/VendorContext";
 import { Sidebar } from "@/components/Sidebar";
 import { AuthHeader } from "@/components/AuthHeader";
 import { getCurrentUser, hasActivePayment } from "@/lib/auth";
+import { FLAGS } from "@/lib/flags";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -19,7 +20,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <VendorProvider>
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Sidebar iaV2={FLAGS.IA_V2} />
         <main className="flex-1 overflow-auto min-w-0">
           <div className="fixed top-0 right-0 z-30 p-6">
             <AuthHeader />
