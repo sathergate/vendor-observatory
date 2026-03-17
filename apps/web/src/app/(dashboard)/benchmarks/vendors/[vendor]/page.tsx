@@ -7,6 +7,7 @@ import { TabbedView, TabPanel } from "@/components/TabbedView";
 import { VendorGuard } from "@/components/VendorGuard";
 import { loadCategoryMeta } from "../../categories";
 import { PROMPT_SUMMARIES } from "../../prompt-summaries";
+import { FLAGS } from "@/lib/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -184,13 +185,336 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
       </div>
 
       {/* Tabbed Navigation */}
-      <TabbedView sections={[
+      <TabbedView sections={FLAGS.VENDOR_SURFACE_V2 ? [
+        { id: "fixes", label: "Fixes Now" },
+        { id: "why-lose", label: "Why You Lose" },
+        { id: "where-win", label: "Where You Win" },
+        { id: "competitive", label: "Competitive Evidence" },
+        { id: "raw-evidence", label: "Raw Evidence" },
+      ] : [
         { id: "overview", label: "Overview" },
         { id: "signals", label: "Signals" },
         ...(recommendations.length > 0 ? [{ id: "actions", label: "Actions" }] : []),
       ]}>
 
-      {/* ── Overview: Profile + AI-Readiness + Trend ─────────────────── */}
+      {/* ── V2: Headline Diagnosis ────────────────────────────────────── */}
+      {FLAGS.VENDOR_SURFACE_V2 && (
+        <div className="bg-surface rounded-[6px] p-6 border border-border mb-6">
+          <p className="text-[15px] text-primary leading-relaxed">
+            {vendorDisplayName(vendorId)} is recommended in{" "}
+            <span className="font-data text-accent">{pct(scorecard.winRate)}</span> of
+            scenarios ({scorecard.totalRecommendations.toLocaleString()} of{" "}
+            {scorecard.totalMentions.toLocaleString()} conversations).
+            {scorecard.implementationRate > 0 && (
+              <> Implementation conversion is{" "}
+              <span className={`font-data ${scorecard.implementationRate > 0.6 ? "text-data-5" : scorecard.implementationRate > 0.3 ? "text-data-3" : "text-data-4"}`}>
+                {pct(scorecard.implementationRate)}
+              </span>.
+              </>
+            )}
+            {scorecard.competitorWins.length > 0 && (
+              <> Top competitor:{" "}
+              <Link href={`/benchmarks/vendors/${encodeURIComponent(scorecard.competitorWins[0].competitor)}`} className="text-accent hover:text-accent/80">
+                {vendorDisplayName(scorecard.competitorWins[0].competitor)}
+              </Link>{" "}
+              ({scorecard.competitorWins[0].count} wins).
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      {/* ── V2: Fixes Now (DEFAULT) ───────────────────────────────────── */}
+      {FLAGS.VENDOR_SURFACE_V2 && (
+        <TabPanel id="fixes">
+          <div>
+            <h2 className="section-header mb-3">Fixes Now</h2>
+            <p className="text-[12px] text-muted mb-4">
+              Prioritized by estimated impact. Based on {scorecard.totalMentions.toLocaleString()} benchmark responses.
+            </p>
+            {recommendations.length > 0 ? (
+              <div className="space-y-3">
+                {recommendations.map((rec, i) => (
+                  <RecommendationCard key={i} rec={rec} index={i} />
+                ))}
+              </div>
+            ) : (
+              <div className="quiet-signal">
+                <p className="text-secondary text-[14px]">No actionable fixes identified yet.</p>
+              </div>
+            )}
+          </div>
+        </TabPanel>
+      )}
+
+      {/* ── V2: Why You Lose ──────────────────────────────────────────── */}
+      {FLAGS.VENDOR_SURFACE_V2 && (
+        <TabPanel id="why-lose">
+          <div className="space-y-8">
+            {/* Competitive Landscape */}
+            {scorecard.competitorWins.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Competitors Winning Against You</h2>
+                <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+                  <table className="w-full text-[14px]">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="th-label text-left px-4 py-3">Competitor</th>
+                        <th className="th-label text-right px-4 py-3">Wins Over You</th>
+                        <th className="th-label text-left px-4 py-3">Scenarios</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scorecard.competitorWins.map((comp) => (
+                        <tr key={comp.competitor} className="border-b border-border-subtle hover:bg-raised">
+                          <td className="px-4 py-2">
+                            <Link href={`/benchmarks/vendors/${encodeURIComponent(comp.competitor)}`} className="text-accent hover:text-accent/80">
+                              {vendorDisplayName(comp.competitor)}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-2 text-right font-data text-data-4 font-medium">{comp.count.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-secondary text-[12px]">
+                            {comp.scenarios.map((s) => PROMPT_SUMMARIES[s]?.title || s).join(", ")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Scenarios Lost */}
+            {scorecard.promptsLost.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Scenarios Lost ({scorecard.promptsLost.length})</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-2">
+                  {scorecard.promptsLost.map((p, i) => (
+                    <div key={i} className="text-[14px]">
+                      <Link href={`/benchmarks/${p.category}`} className="text-primary hover:text-accent transition-colors">
+                        {PROMPT_SUMMARIES[p.prompt_id]?.title || p.prompt_id}
+                      </Link>
+                      <span className="text-[12px] text-muted ml-2">
+                        &rarr; lost to{" "}
+                        <Link href={`/benchmarks/vendors/${encodeURIComponent(p.winner)}`} className="text-data-4 hover:text-data-4/80">
+                          {vendorDisplayName(p.winner)}
+                        </Link>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Constraints missed */}
+            {scorecard.constraintsMissed.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Constraints When You Lose</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-2">
+                  {scorecard.constraintsMissed.map((c) => (
+                    <div key={c.constraint} className="flex justify-between text-[14px]">
+                      <span className="text-primary">{c.constraint.replace(/_/g, " ")}</span>
+                      <span className="font-data text-data-4">{c.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </TabPanel>
+      )}
+
+      {/* ── V2: Where You Win ─────────────────────────────────────────── */}
+      {FLAGS.VENDOR_SURFACE_V2 && (
+        <TabPanel id="where-win">
+          <div className="space-y-8">
+            {/* Scenarios Won */}
+            {scorecard.promptsWon.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Scenarios Won ({scorecard.promptsWon.length})</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-2">
+                  {scorecard.promptsWon.map((p, i) => {
+                    const catMeta = CATEGORY_META[p.category];
+                    return (
+                      <div key={i} className="text-[14px]">
+                        <Link href={`/benchmarks/${p.category}`} className="text-primary hover:text-accent transition-colors">
+                          {PROMPT_SUMMARIES[p.prompt_id]?.title || p.prompt_id}
+                        </Link>
+                        {catMeta && (
+                          <span className="text-[12px] text-muted ml-2">{catMeta.icon} {catMeta.label}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Constraints Addressed */}
+            {scorecard.constraintsAddressed.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Constraints You Address</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-2">
+                  {scorecard.constraintsAddressed.map((c) => (
+                    <div key={c.constraint} className="flex justify-between text-[14px]">
+                      <span className="text-primary">{c.constraint.replace(/_/g, " ")}</span>
+                      <span className="font-data text-data-5">{c.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Category Breakdown */}
+            {scorecard.categoryBreakdown.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Category Performance</h2>
+                <div className="bg-surface rounded-[6px] overflow-hidden border border-border">
+                  <table className="w-full text-[14px]">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="th-label text-left px-4 py-3">Category</th>
+                        <th className="th-label text-right px-4 py-3">Detected</th>
+                        <th className="th-label text-right px-4 py-3">Total</th>
+                        <th className="th-label text-right px-4 py-3">Win Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scorecard.categoryBreakdown.map((cat) => {
+                        const catMeta = CATEGORY_META[cat.category];
+                        const wr = cat.totalInCategory > 0 ? cat.recommendations / cat.totalInCategory : 0;
+                        return (
+                          <tr key={cat.category} className="border-b border-border-subtle hover:bg-raised">
+                            <td className="px-4 py-2">
+                              <Link href={`/benchmarks/${cat.category}`} className="hover:text-accent transition-colors text-primary">
+                                {catMeta ? `${catMeta.icon} ${catMeta.label}` : cat.category}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-2 text-right font-data text-accent">
+                              {cat.recommendations > 0 ? cat.recommendations.toLocaleString() : <span className="text-muted">-</span>}
+                            </td>
+                            <td className="px-4 py-2 text-right font-data text-secondary">{cat.totalInCategory.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right">
+                              <span className={`font-data font-medium ${wr > 0.6 ? "text-data-5" : wr > 0.3 ? "text-data-3" : "text-data-4"}`}>
+                                {pct(wr)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </TabPanel>
+      )}
+
+      {/* ── V2: Competitive Evidence ──────────────────────────────────── */}
+      {FLAGS.VENDOR_SURFACE_V2 && (
+        <TabPanel id="competitive">
+          <div className="space-y-8">
+            {h2h && h2h.scenarios.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">
+                  Head-to-Head: {vendorDisplayName(vendorId)} vs {vendorDisplayName(h2h.vendorB)}
+                </h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border">
+                  <div className="flex gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-data-1" />
+                      <span className="text-[14px] text-primary">{vendorDisplayName(vendorId)}: <span className="font-data">{h2h.aWins}</span></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-data-4" />
+                      <span className="text-[14px] text-primary">{vendorDisplayName(h2h.vendorB)}: <span className="font-data">{h2h.bWins}</span></span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {h2h.scenarios.map((s, i) => (
+                      <div key={i} className="flex items-start gap-3 text-[14px]">
+                        <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                          s.winner === vendorId ? "bg-data-1" : s.winner === h2h.vendorB ? "bg-data-4" : "bg-data-muted"
+                        }`} />
+                        <div>
+                          <Link href={`/benchmarks/${s.category}`} className="text-primary hover:text-accent transition-colors">
+                            {PROMPT_SUMMARIES[s.prompt_id]?.title || s.prompt_id}
+                          </Link>
+                          {s.winner && (
+                            <span className="text-[12px] text-muted ml-2">&rarr; {vendorDisplayName(s.winner)}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Platform presence */}
+            {Object.keys(scorecard.platformSplit).length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Platform Presence</h2>
+                <div className="flex gap-3">
+                  {Object.entries(scorecard.platformSplit)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([platform, count]) => (
+                    <div key={platform} className="bg-surface rounded-[6px] p-4 border border-border flex-1">
+                      <p className="text-[12px] text-muted">{platform.replace(/_/g, " ")}</p>
+                      <p className="font-data text-[20px] text-primary mt-1">{count}</p>
+                      <p className="text-[12px] text-muted">recommendations</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </TabPanel>
+      )}
+
+      {/* ── V2: Raw Evidence ──────────────────────────────────────────── */}
+      {FLAGS.VENDOR_SURFACE_V2 && (
+        <TabPanel id="raw-evidence">
+          <div className="space-y-8">
+            {scorecard.rationaleSnippets.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Why AI Detects This Vendor</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-3">
+                  {scorecard.rationaleSnippets.map((s, i) => (
+                    <p key={i} className="text-[14px] text-primary border-l-2 border-accent pl-3">{s}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {scorecard.tradeOffSnippets.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Trade-offs</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-3">
+                  {scorecard.tradeOffSnippets.map((s, i) => (
+                    <p key={i} className="text-[14px] text-primary border-l-2 border-data-3 pl-3">{s}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {scorecard.gotchaSnippets.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">Gotchas</h2>
+                <div className="bg-surface rounded-[6px] p-6 border border-border space-y-3">
+                  {scorecard.gotchaSnippets.map((s, i) => (
+                    <p key={i} className="text-[14px] text-primary border-l-2 border-data-4 pl-3">{s}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </TabPanel>
+      )}
+
+      {/* ── Legacy V1: Overview ───────────────────────────────────────── */}
+      {!FLAGS.VENDOR_SURFACE_V2 && (
       <TabPanel id="overview">
         <div className="space-y-8">
 
@@ -381,8 +705,10 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
         </div>
       </TabPanel>
+      )}
 
-      {/* ── Signals: Categories + Constraints + Competitive + Scenarios + Trade-offs + Rationale ── */}
+      {/* ── Legacy V1: Signals ────────────────────────────────────────── */}
+      {!FLAGS.VENDOR_SURFACE_V2 && (
       <TabPanel id="signals">
         <div className="space-y-8">
 
@@ -678,9 +1004,10 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
 
         </div>
       </TabPanel>
+      )}
 
-      {/* ── Actions: Actionable Recommendations ─────────────────────── */}
-      {recommendations.length > 0 && (
+      {/* ── Legacy V1: Actions ────────────────────────────────────────── */}
+      {!FLAGS.VENDOR_SURFACE_V2 && recommendations.length > 0 && (
         <TabPanel id="actions">
           <div>
             <h2 className="section-header mb-3">
@@ -710,6 +1037,7 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
           </div>
         </TabPanel>
       )}
+
       </TabbedView>
       </VendorGuard>
     </div>
