@@ -40,6 +40,8 @@ export type {
   RejectionReason,
   VendorRejection,
   VendorRejectionRow,
+  // Evidence linking
+  EvidenceRef,
 } from "./types.js";
 
 // ── Extractor ───────────────────────────────────────────────────────

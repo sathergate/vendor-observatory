@@ -1,4 +1,6 @@
 import type { VendorScorecard } from "./db";
+import type { EvidenceRef } from "@obs/shared/types";
+import { buildSessionEvidenceRef } from "./evidence";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -26,6 +28,7 @@ export interface Recommendation {
   title: string;
   detail: string;
   evidence: RecommendationEvidence;
+  evidenceRefs: EvidenceRef[];
   impact: "high" | "medium" | "low";
 }
 
@@ -333,6 +336,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
         title: "Increase visibility in AI assistant responses",
         detail: `You're mentioned ${scorecard.totalMentions} time${scorecard.totalMentions !== 1 ? "s" : ""} but never selected as the primary recommendation. Focus on improving documentation clarity, SDK simplicity, and getting included in common comparison discussions.`,
         evidence: { frequency: scorecard.totalMentions },
+        evidenceRefs: [],
         impact: "medium",
       });
     }
@@ -386,6 +390,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
         winRateDelta: scorecard.winRate - cwr.winRate,
         competitors: cwr.competitorWinners.map((c) => c.competitor),
       },
+      evidenceRefs: [],
       impact,
     });
   }
@@ -418,6 +423,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
         constraints: gap.differentiatingConstraints,
         frequency: gap.scenariosLost.length,
       },
+      evidenceRefs: [],
       impact,
     });
   }
@@ -439,6 +445,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
         evidence: {
           frequency: topBlindspots.length,
         },
+        evidenceRefs: [],
         impact: "low",
       });
     }
@@ -456,6 +463,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
         frequency: weak.totalScenarios,
         currentWinRate: weak.winRate,
       },
+      evidenceRefs: [],
       impact: "medium",
     });
   }
@@ -488,6 +496,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
         scenarios: implDiag.unimplementedPrompts.map((p) => p.prompt_id),
         frequency: implDiag.unimplementedPrompts.length,
       },
+      evidenceRefs: [],
       impact: "high",
     });
   }
@@ -508,6 +517,7 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
       evidence: {
         frequency: scorecard.totalRecommendations,
       },
+      evidenceRefs: [],
       impact: "medium",
     });
   }
@@ -526,8 +536,32 @@ export function generateRecommendations(scorecard: VendorScorecard): Recommendat
       evidence: {
         frequency: totalGotchas,
       },
+      evidenceRefs: [],
       impact: totalGotchas >= 3 ? "medium" : "low",
     });
+  }
+
+  // ── Post-process: attach evidence refs from loss/implementation context ──
+
+  // Build a map of session IDs from loss context for evidence linking
+  const lossSessionIds = new Set<string>();
+  for (const ctx of scorecard.lossContext) {
+    // prompt_id often encodes a session reference
+    lossSessionIds.add(ctx.prompt_id);
+  }
+  for (const ctx of scorecard.implementationContext) {
+    if (!ctx.isImplemented) {
+      lossSessionIds.add(ctx.prompt_id);
+    }
+  }
+
+  // Attach evidence refs to recommendations that reference specific scenarios
+  for (const rec of recs) {
+    if (rec.evidence.scenarios && rec.evidence.scenarios.length > 0) {
+      rec.evidenceRefs = rec.evidence.scenarios.slice(0, 5).map((scenarioId) =>
+        buildSessionEvidenceRef(scenarioId, scenarioId),
+      );
+    }
   }
 
   // Sort by priority (ascending = highest priority first), then by frequency

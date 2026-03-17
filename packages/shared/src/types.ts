@@ -352,3 +352,13 @@ export interface DashboardStats {
   platformBreakdown: Record<string, number>;
   lastIngestedAt: string | null;
 }
+
+// ── Evidence Linking ──────────────────────────────────────────────────
+
+export interface EvidenceRef {
+  type: "session" | "benchmark_case";
+  id: string;
+  label: string;
+  url: string;
+  anchor?: string;
+}
