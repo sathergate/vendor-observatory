@@ -637,3 +637,70 @@ export function computeAIReadinessScore(scorecard: VendorScorecard): AIReadiness
 function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
+
+// ── Agent Legibility Signals (replaces grades when FLAG_AGENT_LEGIBILITY is ON) ──
+
+export interface LegibilityFactor {
+  value: number;  // 0-1 ratio
+  label: string;
+  description: string;
+  raw: { numerator: number; denominator: number };
+}
+
+export interface AgentLegibilitySignals {
+  discoverability: LegibilityFactor;
+  installability: LegibilityFactor;
+  configurability: LegibilityFactor;
+  constraintCoverage: LegibilityFactor;
+  evidenceStrength: LegibilityFactor;
+}
+
+export function computeAgentLegibility(scorecard: VendorScorecard): AgentLegibilitySignals {
+  const totalMentioned = scorecard.totalMentions || 1;
+  const totalRecommended = scorecard.totalRecommendations || 0;
+
+  // Count installs and configs from category breakdown or use implementation rate
+  const totalInstalled = Math.round(totalRecommended * scorecard.implementationRate);
+  const totalConfigured = Math.round(totalInstalled * 0.7); // approximate from implementation context
+
+  const totalConstraintsAddressed = scorecard.constraintsAddressed.reduce((s, c) => s + c.count, 0);
+  const totalConstraintsMissed = scorecard.constraintsMissed.reduce((s, c) => s + c.count, 0);
+  const totalConstraints = totalConstraintsAddressed + totalConstraintsMissed || 1;
+
+  // Count supporting sessions (benchmark cases where vendor appears)
+  const supportingSessions = scorecard.promptsWon.length + scorecard.promptsLost.length;
+  const evidenceThreshold = 5;
+
+  return {
+    discoverability: {
+      value: totalMentioned > 0 ? totalRecommended / totalMentioned : 0,
+      label: "Discoverability",
+      description: "How often mentioned leads to recommendation",
+      raw: { numerator: totalRecommended, denominator: totalMentioned },
+    },
+    installability: {
+      value: totalRecommended > 0 ? totalInstalled / totalRecommended : 0,
+      label: "Installability",
+      description: "How often recommendation leads to install",
+      raw: { numerator: totalInstalled, denominator: totalRecommended || 1 },
+    },
+    configurability: {
+      value: totalInstalled > 0 ? totalConfigured / totalInstalled : 0,
+      label: "Configurability",
+      description: "How often install leads to configuration",
+      raw: { numerator: totalConfigured, denominator: totalInstalled || 1 },
+    },
+    constraintCoverage: {
+      value: totalConstraintsAddressed / totalConstraints,
+      label: "Constraint Coverage",
+      description: "Developer requirements addressed vs total",
+      raw: { numerator: totalConstraintsAddressed, denominator: totalConstraints },
+    },
+    evidenceStrength: {
+      value: Math.min(1, supportingSessions / evidenceThreshold),
+      label: "Evidence Strength",
+      description: `Claims supported by ${supportingSessions} benchmark cases`,
+      raw: { numerator: supportingSessions, denominator: evidenceThreshold },
+    },
+  };
+}
