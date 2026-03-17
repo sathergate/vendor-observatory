@@ -17,9 +17,13 @@ const VendorContext = createContext<VendorContextValue>({
 const STORAGE_KEY = "vendor-observatory:selected-vendor";
 
 export function VendorProvider({ children }: { children: React.ReactNode }) {
-  const [selectedVendor, setSelectedVendorState] = useState<string | null>(null);
+  const [selectedVendor, setSelectedVendorState] = useState<string | null>(
+    () => {
+      if (typeof window === "undefined") return null;
+      return localStorage.getItem(STORAGE_KEY);
+    },
+  );
   const [isAdmin, setIsAdmin] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -39,12 +43,7 @@ export function VendorProvider({ children }: { children: React.ReactNode }) {
           }
         }
       })
-      .catch(() => {})
-      .finally(() => setHydrated(true));
-
-    if (stored) {
-      setSelectedVendorState(stored);
-    }
+      .catch(() => {});
   }, []);
 
   const setSelectedVendor = useCallback((vendorId: string | null) => {
@@ -55,8 +54,6 @@ export function VendorProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
-
-  if (!hydrated) return <>{children}</>;
 
   return (
     <VendorContext.Provider value={{ selectedVendor, setSelectedVendor, isAdmin }}>
