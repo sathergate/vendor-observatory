@@ -6,11 +6,13 @@ import { VendorGuard } from "./VendorGuard";
 // ── Mocks ───────────────────────────────────────────────────────────
 
 let mockSelectedVendor: string | null = null;
+let mockIsAdmin = false;
 
 vi.mock("@/context/VendorContext", () => ({
   useVendor: () => ({
     selectedVendor: mockSelectedVendor,
     setSelectedVendor: vi.fn(),
+    isAdmin: mockIsAdmin,
   }),
 }));
 
@@ -79,6 +81,23 @@ describe("VendorGuard", () => {
     );
 
     expect(screen.getByText(/Datadog/)).toBeDefined();
+  });
+
+  it("renders children for admin users viewing any vendor profile", () => {
+    mockSelectedVendor = null;
+    mockIsAdmin = true;
+
+    render(
+      <VendorGuard vendorId="supabase">
+        <p>Scorecard content</p>
+      </VendorGuard>,
+    );
+
+    expect(screen.getByText("Scorecard content")).toBeDefined();
+    expect(screen.queryByText("Access restricted")).toBeNull();
+    expect(screen.queryByText("No vendor selected")).toBeNull();
+
+    mockIsAdmin = false;
   });
 
   it("encodes special characters in the profile link href", () => {
