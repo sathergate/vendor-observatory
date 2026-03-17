@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import type { JobStatus, StageStatus } from "@/lib/onboard";
+import { FLAGS } from "@/lib/flags";
 
 // ── Stage indicator sub-component ────────────────────────────────────
 
@@ -50,6 +51,101 @@ function StageCard({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Initial diagnosis (FLAG_ONBOARDING_DIAGNOSIS) ───────────────────
+
+function InitialDiagnosis({
+  status,
+  jobId,
+}: {
+  status: JobStatus;
+  jobId: string;
+}) {
+  const urlData = status.stages.url_analysis.data;
+  const balancedData = status.stages.balanced.data;
+
+  // Need at least URL analysis data for competitors
+  if (!urlData) return null;
+
+  const competitors = urlData.competitors.slice(0, 3);
+  const topRec = balancedData?.top_recommendation ?? null;
+
+  return (
+    <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+      <h2 className="section-header text-[13px] text-muted uppercase tracking-wider mb-4">
+        Initial Diagnosis
+      </h2>
+
+      {/* Top competitors */}
+      {competitors.length > 0 && (
+        <div className="mb-5">
+          <p className="text-[13px] font-medium text-primary mb-2">
+            Top competitors in {urlData.category}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {competitors.map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center px-2.5 py-1 bg-raised border border-border-subtle rounded-[6px] text-[12px] font-data text-secondary"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Top recommendation */}
+      {topRec && (
+        <div className="mb-5">
+          <p className="text-[13px] font-medium text-primary mb-2">
+            Top recommendation
+          </p>
+          <div className="bg-base border border-border rounded-[6px] p-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span
+                className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-[6px] font-data ${
+                  topRec.priority === "P1"
+                    ? "bg-signal-noise/15 text-signal-noise"
+                    : topRec.priority === "P2"
+                      ? "bg-data-3/15 text-data-3"
+                      : "bg-raised text-secondary"
+                }`}
+              >
+                {topRec.priority}
+              </span>
+              <span
+                className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-[6px] font-data ${
+                  topRec.impact === "HIGH"
+                    ? "bg-signal-strong/15 text-signal-strong"
+                    : topRec.impact === "MEDIUM"
+                      ? "bg-data-3/15 text-data-3"
+                      : "bg-raised text-secondary"
+                }`}
+              >
+                {topRec.impact} impact
+              </span>
+            </div>
+            <p className="text-[13px] font-medium text-primary">
+              {topRec.title}
+            </p>
+            <p className="text-[12px] text-secondary mt-0.5">
+              {topRec.description}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* CTA */}
+      <a
+        href={`/get-started/${jobId}/scorecard`}
+        className="block w-full text-center py-2.5 bg-accent hover:bg-accent/90 rounded-[6px] font-medium text-[13px] transition-colors"
+      >
+        See full scorecard
+      </a>
     </div>
   );
 }
@@ -153,6 +249,11 @@ export default function StatusPage() {
           }
         />
       </div>
+
+      {/* Initial diagnosis — show when flag is on and fast benchmark is done */}
+      {FLAGS.ONBOARDING_DIAGNOSIS && fastDone && (
+        <InitialDiagnosis status={status} jobId={jobId} />
+      )}
 
       {/* Email capture — show immediately, hide once submitted */}
       {!emailSubmitted && (
