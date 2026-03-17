@@ -7,6 +7,8 @@ import { NavLink } from "./NavLink";
 import { useVendor } from "@/context/VendorContext";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 
+// ── Legacy nav (used when FLAG_IA_V2 is OFF) ────────────────────────
+
 const NAV_GROUPS = [
   {
     label: "Benchmarks",
@@ -40,14 +42,86 @@ const VENDOR_NAV_LINKS = (vendorId: string) => [
   { href: "/sessions", label: "Sessions" },
 ];
 
-export function Sidebar() {
+// ── IA v2 canonical nav model ───────────────────────────────────────
+
+interface NavArea {
+  area: string;
+  href: string;
+  children?: Array<{ href: string; label: string }>;
+}
+
+const IA_V2_NAV: NavArea[] = [
+  { area: "Home", href: "/home" },
+  {
+    area: "Performance",
+    href: "/performance",
+    children: [
+      { href: "/performance/benchmarks", label: "Benchmarks" },
+      { href: "/performance/landscape", label: "Competitive Landscape" },
+    ],
+  },
+  {
+    area: "Reasons",
+    href: "/reasons",
+    children: [
+      { href: "/reasons/rejections", label: "Rejection Clusters" },
+      { href: "/reasons/constraints", label: "Constraint Sensitivity" },
+    ],
+  },
+  {
+    area: "Fixes",
+    href: "/fixes",
+    children: [
+      { href: "/fixes/issues", label: "Remediation Issues" },
+      { href: "/fixes/docs", label: "Docs/SDK Patches" },
+    ],
+  },
+  {
+    area: "Evidence",
+    href: "/evidence",
+    children: [
+      { href: "/evidence/sessions", label: "Sessions" },
+      { href: "/evidence/transcripts", label: "Transcripts" },
+    ],
+  },
+  {
+    area: "Advanced",
+    href: "/lab",
+    children: [
+      { href: "/lab/query", label: "Query Builder" },
+      { href: "/lab/search", label: "Search" },
+      { href: "/lab/insights", label: "Insights" },
+    ],
+  },
+];
+
+// ── Sidebar component ───────────────────────────────────────────────
+
+export function Sidebar({ iaV2 = false }: { iaV2?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const pathname = usePathname();
   const { selectedVendor } = useVendor();
 
   const handleLinkClick = () => setOpen(false);
 
-  const isHome = pathname === "/overview" || pathname === "/benchmarks";
+  const isHome = pathname === "/overview" || pathname === "/benchmarks" || pathname === "/home";
+
+  const toggleArea = (area: string) => {
+    setExpandedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(area)) next.delete(area);
+      else next.add(area);
+      return next;
+    });
+  };
+
+  const isAreaActive = (nav: NavArea) =>
+    pathname === nav.href ||
+    pathname.startsWith(nav.href + "/") ||
+    nav.children?.some(
+      (c) => pathname === c.href || pathname.startsWith(c.href + "/"),
+    );
 
   return (
     <>
@@ -85,7 +159,7 @@ export function Sidebar() {
         <div className="p-4 border-b border-border-subtle flex items-center justify-between">
           <div>
             <Link
-              href="/overview"
+              href={iaV2 ? "/home" : "/overview"}
               onClick={handleLinkClick}
               className={`text-[14px] font-semibold transition-colors ${
                 isHome ? "text-accent" : "text-primary hover:text-accent"
@@ -105,21 +179,88 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 p-3 overflow-y-auto" onClick={handleLinkClick}>
-          {selectedVendor ? (
-            <div className="space-y-0.5">
-              {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
-                <NavLink
-                  key={link.href}
-                  href={link.href}
-                  label={link.label}
-                  exact={link.label === "My Dashboard"}
-                />
-              ))}
+          {iaV2 ? (
+            /* IA v2 navigation */
+            <div className="space-y-1">
+              {IA_V2_NAV.map((nav) => {
+                const active = isAreaActive(nav);
+                const expanded = expandedAreas.has(nav.area) || active;
+
+                return (
+                  <div key={nav.area}>
+                    {nav.children ? (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleArea(nav.area);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-[6px] text-[13px] font-medium transition-colors ${
+                            active
+                              ? "text-primary"
+                              : "text-secondary hover:text-primary hover:bg-raised"
+                          }`}
+                        >
+                          <span>{nav.area}</span>
+                          <span
+                            className={`text-[10px] text-muted transition-transform ${
+                              expanded ? "rotate-90" : ""
+                            }`}
+                          >
+                            ▸
+                          </span>
+                        </button>
+                        {expanded && (
+                          <div className="ml-2 space-y-0.5">
+                            {nav.children.map((child) => (
+                              <NavLink
+                                key={child.href}
+                                href={child.href}
+                                label={child.label}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <NavLink href={nav.href} label={nav.area} exact />
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Vendor-scoped link when vendor selected */}
+              {selectedVendor && (
+                <div className="mt-4 pt-4 border-t border-border-subtle">
+                  <p className="px-3 text-[11px] text-muted mb-1 uppercase tracking-wider">
+                    {vendorDisplayName(selectedVendor)}
+                  </p>
+                  <NavLink
+                    href={`/benchmarks/vendors/${encodeURIComponent(selectedVendor)}`}
+                    label="Vendor Scorecard"
+                    exact
+                  />
+                </div>
+              )}
             </div>
           ) : (
-            <div className="px-3 pt-2 pb-1">
-              <span className="text-[13px] text-muted">Loading vendor...</span>
-            </div>
+            /* Legacy navigation */
+            selectedVendor ? (
+              <div className="space-y-0.5">
+                {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
+                  <NavLink
+                    key={link.href}
+                    href={link.href}
+                    label={link.label}
+                    exact={link.label === "My Dashboard"}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="px-3 pt-2 pb-1">
+                <span className="text-[13px] text-muted">Loading vendor...</span>
+              </div>
+            )
           )}
         </nav>
 

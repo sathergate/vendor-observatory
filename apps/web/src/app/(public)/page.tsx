@@ -1,35 +1,78 @@
-export default function LandingPage() {
+import { FLAGS } from "@/lib/flags";
+import { getExperimentAssignment } from "@/lib/experiments";
+
+export default async function LandingPage() {
+  const experiment = FLAGS.LANDING_AB
+    ? await getExperimentAssignment("landing_hero_v1")
+    : null;
+
+  const isTreatment = experiment?.variant === "treatment";
+
   return (
     <div className="min-h-[calc(100dvh-57px)] flex flex-col">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="flex-1 flex items-center justify-center px-6 py-24 sm:py-32">
         <div className="max-w-2xl">
-          <p className="font-mono text-[12px] uppercase tracking-widest text-muted mb-6">
-            Revealed preference, not stated preference
-          </p>
-          <h1 className="text-[2.25rem] sm:text-[3rem] font-medium tracking-tight leading-[1.1] text-primary mb-6">
-            See what AI coding assistants actually recommend
-          </h1>
-          <p className="text-[15px] text-secondary leading-relaxed max-w-lg mb-10">
-            We analyze real Claude Code, Codex CLI, and Cursor transcripts to
-            measure how often your product gets mentioned, installed, and
-            configured in developer sessions.
-          </p>
-          <div className="flex items-center gap-4">
-            <a
-              href="/get-started/signup"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent/90 rounded-full text-[14px] font-medium transition-colors"
-            >
-              Analyze your product
-              <span aria-hidden="true">&rarr;</span>
-            </a>
-            <a
-              href="/login"
-              className="text-[14px] text-secondary hover:text-primary transition-colors"
-            >
-              Sign in
-            </a>
-          </div>
+          {FLAGS.LANDING_AB && isTreatment ? (
+            <>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted mb-6">
+                From mention to implementation
+              </p>
+              <h1 className="text-[2.25rem] sm:text-[3rem] font-medium tracking-tight leading-[1.1] text-primary mb-6">
+                Turn AI recommendations into actual installs
+              </h1>
+              <p className="text-[15px] text-secondary leading-relaxed max-w-lg mb-10">
+                Vendor Observatory measures the full funnel — from when AI
+                assistants mention your product to when developers actually
+                install, configure, and ship with it. See where you lose
+                developers and fix it.
+              </p>
+              <div className="flex items-center gap-4">
+                <a
+                  href="/get-started/signup"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent/90 rounded-full text-[14px] font-medium transition-colors"
+                >
+                  Measure your conversion
+                  <span aria-hidden="true">&rarr;</span>
+                </a>
+                <a
+                  href="/login"
+                  className="text-[14px] text-secondary hover:text-primary transition-colors"
+                >
+                  Sign in
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="font-mono text-[12px] uppercase tracking-widest text-muted mb-6">
+                Revealed preference, not stated preference
+              </p>
+              <h1 className="text-[2.25rem] sm:text-[3rem] font-medium tracking-tight leading-[1.1] text-primary mb-6">
+                See what AI coding assistants actually recommend
+              </h1>
+              <p className="text-[15px] text-secondary leading-relaxed max-w-lg mb-10">
+                We analyze real Claude Code, Codex CLI, and Cursor transcripts to
+                measure how often your product gets mentioned, installed, and
+                configured in developer sessions.
+              </p>
+              <div className="flex items-center gap-4">
+                <a
+                  href="/get-started/signup"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent/90 rounded-full text-[14px] font-medium transition-colors"
+                >
+                  Analyze your product
+                  <span aria-hidden="true">&rarr;</span>
+                </a>
+                <a
+                  href="/login"
+                  className="text-[14px] text-secondary hover:text-primary transition-colors"
+                >
+                  Sign in
+                </a>
+              </div>
+            </>
+          )}
         </div>
       </section>
 

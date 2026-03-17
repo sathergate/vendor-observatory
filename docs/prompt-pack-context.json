@@ -1,0 +1,91 @@
+{
+  "router": {
+    "framework": "Next.js 15 App Router",
+    "routeDirectory": "apps/web/src/app",
+    "routeGroups": ["(public)", "(dashboard)"]
+  },
+  "routes": [
+    { "pathname": "/", "auth": false, "sourceFile": "apps/web/src/app/(public)/page.tsx", "area": "landing" },
+    { "pathname": "/login", "auth": false, "sourceFile": "apps/web/src/app/(public)/login/page.tsx", "area": "auth" },
+    { "pathname": "/signup", "auth": false, "sourceFile": "apps/web/src/app/(public)/signup/page.tsx", "area": "auth" },
+    { "pathname": "/forgot-password", "auth": false, "sourceFile": "apps/web/src/app/(public)/forgot-password/page.tsx", "area": "auth" },
+    { "pathname": "/plans", "auth": false, "sourceFile": "apps/web/src/app/(public)/plans/page.tsx", "area": "billing" },
+    { "pathname": "/get-started", "auth": false, "sourceFile": "apps/web/src/app/(public)/get-started/page.tsx", "area": "onboarding" },
+    { "pathname": "/get-started/signup", "auth": false, "sourceFile": "apps/web/src/app/(public)/get-started/signup/page.tsx", "area": "onboarding" },
+    { "pathname": "/get-started/analyze", "auth": false, "sourceFile": "apps/web/src/app/(public)/get-started/analyze/page.tsx", "area": "onboarding" },
+    { "pathname": "/get-started/[jobId]", "auth": false, "sourceFile": "apps/web/src/app/(public)/get-started/[jobId]/page.tsx", "area": "onboarding" },
+    { "pathname": "/get-started/[jobId]/scorecard", "auth": false, "sourceFile": "apps/web/src/app/(public)/get-started/[jobId]/scorecard/page.tsx", "area": "onboarding" },
+    { "pathname": "/payment", "auth": false, "sourceFile": "apps/web/src/app/(public)/payment/page.tsx", "area": "billing" },
+    { "pathname": "/payment/success", "auth": false, "sourceFile": "apps/web/src/app/(public)/payment/success/page.tsx", "area": "billing" },
+    { "pathname": "/benchmarks", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]/use-cases", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/use-cases/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]/implementation", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/implementation/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]/competitive", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/competitive/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]/reasoning", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/reasoning/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]/trends", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/trends/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/vendors/[vendor]/category-competition", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/vendors/[vendor]/category-competition/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/prompts", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/prompts/page.tsx", "area": "benchmarks" },
+    { "pathname": "/benchmarks/[category]", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/benchmarks/[category]/page.tsx", "area": "benchmarks" },
+    { "pathname": "/query", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/query/page.tsx", "area": "analytics" },
+    { "pathname": "/search", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/search/page.tsx", "area": "analytics" },
+    { "pathname": "/insights", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/insights/page.tsx", "area": "analytics" },
+    { "pathname": "/vendors", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/vendors/page.tsx", "area": "data" },
+    { "pathname": "/platforms", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/platforms/page.tsx", "area": "data" },
+    { "pathname": "/actions", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/actions/page.tsx", "area": "data" },
+    { "pathname": "/sessions", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/sessions/page.tsx", "area": "data" },
+    { "pathname": "/sessions/[id]", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/sessions/[id]/page.tsx", "area": "data" },
+    { "pathname": "/rejections", "auth": true, "sourceFile": "apps/web/src/app/(dashboard)/rejections/page.tsx", "area": "data" }
+  ],
+  "nav": {
+    "sidebarConfig": "apps/web/src/components/Sidebar.tsx",
+    "sidebarComponent": "apps/web/src/components/Sidebar.tsx",
+    "navLinkComponent": "apps/web/src/components/NavLink.tsx",
+    "contradiction": "NAV_GROUPS defines 3 groups (Benchmarks, Analytics, Data) with 9 links but they are NEVER rendered. Only VENDOR_NAV_LINKS (My Dashboard, Rejections, Sessions) is rendered when a vendor is selected. When no vendor is selected, 'Loading vendor...' text appears."
+  },
+  "data_model": {
+    "tables": {
+      "sessions": "Transcript session metadata (id, source_platform, model_id, started_at, ended_at, cwd, git_branch, turn_count, is_benchmark)",
+      "observations": "Vendor mentions per session (session_id, vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, user_prompt_snippet, timestamp)",
+      "vendor_rejections": "Rejection events (session_id, vendor_canonical_id, rejection_reason, rejection_reason_detail, chosen_alternative, timestamp)",
+      "tool_actions": "Tool invocations (session_id, tool_name, command_or_path, vendor_canonical_id, action_type, success, timestamp)",
+      "ingested_files": "File processing metadata (file_path, file_size, file_mtime, source_platform, ingested_at, session_count)",
+      "prompt_metadata": "Categorized prompt attributes (content_tags, pattern_tags, constraints, existing_stack, failure_mode)",
+      "response_context": "Extracted response analysis (primary_vendor, is_implemented, vendors_mentioned, trade_offs, gotchas, constraints_addressed)",
+      "prompt_intents": "Developer intent classification (intent, confidence, sub_intent, classifier)",
+      "search_index": "Full-text search index with TSVECTOR",
+      "cross_session_insights": "Analysis results (divergence, constraint influence, temporal drift)",
+      "categories": "Dynamic work categories (id, display_name, description, icon)"
+    },
+    "dbSchemaFile": "packages/ingest/src/db.ts"
+  },
+  "metrics": {
+    "mentionTypes": ["installed", "configured", "implemented", "recommended", "compared", "mentioned", "rejected"],
+    "aiReadinessScore": "apps/web/src/lib/recommendations.ts:computeAIReadinessScore",
+    "workerScore": "packages/worker/src/scorer.ts:computeScores",
+    "recommendations": "apps/web/src/lib/recommendations.ts:generateRecommendations"
+  },
+  "tests": {
+    "framework": "Vitest with jsdom",
+    "runCommand": "pnpm --filter web test",
+    "testFiles": [
+      "apps/web/src/components/AuthHeader.test.tsx",
+      "apps/web/src/components/Sidebar.test.tsx",
+      "apps/web/src/components/VendorGuard.test.tsx",
+      "apps/web/src/components/EmailAlertSignup.test.tsx",
+      "apps/web/src/context/VendorContext.test.tsx",
+      "apps/web/src/lib/auth.test.ts",
+      "apps/web/src/lib/db.test.ts",
+      "apps/web/src/lib/db-rejections.test.ts",
+      "apps/web/src/lib/onboard.test.ts",
+      "apps/web/src/middleware.test.ts",
+      "apps/web/src/app/api/auth/routes.test.ts",
+      "apps/web/src/app/api/onboard/analyze/route.test.ts",
+      "apps/web/src/app/api/onboard/analyze/[jobId]/route.test.ts",
+      "apps/web/src/app/api/onboard/analyze/[jobId]/email/route.test.ts",
+      "apps/web/src/app/api/onboard/email-alert/route.test.ts"
+    ]
+  },
+  "feature_flags": "none found"
+}
