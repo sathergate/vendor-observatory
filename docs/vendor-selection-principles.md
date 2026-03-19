@@ -117,14 +117,16 @@ Training data determines which tools are *eligible* for recommendation. It does 
 
 ### 5. Recency Gradient
 
-RLHF and training procedures amplify newer patterns over older ones, even when the older tool has more raw training data.
+Each model version has a distinct training composition — not just a different cutoff date, but different weightings of recent vs. archived content. This means tool preferences don't shift smoothly over time. They shift in discrete jumps at model version boundaries.
 
 **What matters:**
-- Whether the tool aligns with current best practices vs. legacy approaches
-- Developer community momentum (ascending vs. declining)
-- How recently the tool's patterns entered the training distribution
+- The model's training composition: how heavily it weights recent web crawls vs. older archived datasets
+- Whether the tool's documentation and community content falls inside or outside the high-weight window
+- Developer community momentum (ascending vs. declining) at the time of the training snapshot
 
-**Temporal collapses are the evidence.** Prisma's recommendation rate collapsed from 79% in Sonnet 4.5 to 0% in Opus 4.6 for Next.js ORM, replaced by Drizzle (33K stars, fewer downloads). Express and AWS went from dominant to near-absent between mid-2025 and early 2026, replaced by Hono and Vercel/Railway. The total volume of Express tutorials didn't decrease — but recency-weighted training shifted preferences toward newer patterns.
+**The mechanism is training composition, not just cutoff.** Prisma's recommendation rate collapsed from 79% in Sonnet 4.5 (training weighted toward pre-mid-2025 content) to 0% in Opus 4.6 (training weighted toward late-2025/early-2026 content where Drizzle dominates). The total volume of Prisma tutorials didn't decrease between these model versions. What changed is which slice of the web corpus the newer model weighted most heavily — and in that slice, Drizzle had overtaken Prisma. Express and AWS show the same pattern: dominant in older training compositions, near-absent in newer ones, replaced by Hono and Vercel/Railway.
+
+**This is discontinuous, not gradual.** A tool can go from 79% to 0% across a single model version. There is no smooth decline. The implication for vendors: what matters is not total historical content volume, but whether your content is well-represented in the training window that the current model weights most heavily.
 
 **Ascending tools:** Drizzle, Zustand, Hono, Railway, Resend
 **Declining tools:** Prisma (for new projects), Express, Redux, AWS (for MVP contexts)
