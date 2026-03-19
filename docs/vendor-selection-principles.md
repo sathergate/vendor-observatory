@@ -46,9 +46,11 @@ Corollary: your CLAUDE.md is extraordinarily powerful. An explicit vendor prefer
 
 ## The Distribution Factors (Ranked by Actual Influence)
 
+**A note on causal directness.** Factors 1–5 and 10 are *direct drivers* — they describe properties of the training data, model composition, or tool access that CC responds to mechanically. Factors 6–9, 11–13 are *mediated* — they describe properties of the tool that matter to developers and to generated code quality, but affect CC's recommendation rate only insofar as they shape training data, sentiment, and ecosystem position. The mediated factors are included because they are actionable for vendors and help explain why the direct drivers take the values they do. They are not independent causes of CC behavior.
+
 ### 1. Ecosystem Graph Position
 
-The factor that explains the largest variance in recommendation rates across vendors.
+Among the strongest candidates for explaining variance in recommendation rates across vendors.
 
 **What matters:**
 - Whether the tool sits at a hub in the Next.js / React / TypeScript / Vercel dependency chain
@@ -124,7 +126,7 @@ Each model version has a distinct training composition — not just a different 
 - Whether the tool's documentation and community content falls inside or outside the high-weight window
 - Developer community momentum (ascending vs. declining) at the time of the training snapshot
 
-**The mechanism is training composition, not just cutoff.** Prisma's recommendation rate collapsed from 79% in Sonnet 4.5 (training weighted toward pre-mid-2025 content) to 0% in Opus 4.6 (training weighted toward late-2025/early-2026 content where Drizzle dominates). The total volume of Prisma tutorials didn't decrease between these model versions. What changed is which slice of the web corpus the newer model weighted most heavily — and in that slice, Drizzle had overtaken Prisma. Express and AWS show the same pattern: dominant in older training compositions, near-absent in newer ones, replaced by Hono and Vercel/Railway.
+**The mechanism is training composition, not just cutoff.** Prisma's recommendation rate collapsed from 79% in Sonnet 4.5 (training weighted toward pre-mid-2025 content) to 0% in Opus 4.6 (training weighted toward late-2025/early-2026 content where Drizzle dominates). The total volume of Prisma tutorials likely didn't decrease materially between these model versions. What changed is which slice of the web corpus the newer model weighted most heavily — and in that slice, Drizzle had overtaken Prisma. Express and AWS show the same pattern: dominant in older training compositions, near-absent in newer ones, replaced by Hono and Vercel/Railway.
 
 **This is discontinuous, not gradual.** A tool can go from 79% to 0% across a single model version. There is no smooth decline. The implication for vendors: what matters is not total historical content volume, but whether your content is well-represented in the training window that the current model weights most heavily.
 
@@ -133,9 +135,9 @@ Each model version has a distinct training composition — not just a different 
 
 ---
 
-### 6. Serverless Compatibility
+### 6. Serverless Compatibility (Mediated)
 
-Most projects deploy to Vercel or similar. Tools assuming persistent connections or local filesystems get deprioritized.
+CC does not evaluate deployment architecture. But serverless-native tools correlate strongly with the direct drivers: they tend to be newer (recency), sit in the Vercel ecosystem (graph position), and generate positive developer sentiment. The independent effect of serverless compat — controlling for those factors — is hard to isolate. It is included because it is actionable for vendors and because within-category comparisons (Supabase/Neon/Turso vs. raw Postgres; Upstash vs. ioredis) suggest it has *some* independent signal through tutorial patterns.
 
 **What matters:**
 - HTTP/REST vs. persistent TCP connections
@@ -149,9 +151,9 @@ Most projects deploy to Vercel or similar. Tools assuming persistent connections
 
 ---
 
-### 7. Stack Fit (Next.js / React / TypeScript / Vercel)
+### 7. Stack Fit (Next.js / React / TypeScript / Vercel) (Mediated)
 
-The typical greenfield stack is Next.js + React + TypeScript + Tailwind + Vercel. Tools built natively for this stack produce better generated code.
+Overlaps significantly with Ecosystem Graph Position. The distinction: ecosystem position measures dependency-chain centrality (structural), while stack fit measures framework-specific integration depth (exported React components, App Router support, RSC compat). Tools scoring high on one usually score high on the other. The independent signal is narrow but real — a tool can sit at a graph hub without having React components, or have React components without being a dependency-chain hub.
 
 **What matters:**
 - First-class Next.js App Router integration
@@ -165,9 +167,9 @@ The typical greenfield stack is Next.js + React + TypeScript + Tailwind + Vercel
 
 ---
 
-### 8. Free Tier Generosity
+### 8. Free Tier Generosity (Mediated)
 
-Most projects Claude Code works on are MVPs or prototypes. If the free tier runs out before idea validation, the tool is a liability.
+CC does not check pricing pages. But free tier changes trigger strong community reactions that get encoded in training data as sentiment. PlanetScale's recommendation collapse is better explained by the *negative sentiment* from its free tier removal than by CC evaluating pricing. Stripe has no traditional free tier and dominates its category. The free tier factor affects CC indirectly — through adoption volume (more free users = more tutorials = more training data) and sentiment (free tier removal = negative signal).
 
 **What matters:**
 - Actual limits (requests, storage, MAUs, bandwidth)
@@ -189,9 +191,9 @@ Most projects Claude Code works on are MVPs or prototypes. If the free tier runs
 
 ---
 
-### 9. Documentation Quality
+### 9. Documentation Quality (Mediated)
 
-Claude Code generates code based on API knowledge embedded in training. Poor or inconsistent docs produce wrong code.
+Documentation quality affects the *accuracy* of training data, not just its volume. This factor is partially upstream of Training Data Presence — better docs produce more correct tutorials, which produce cleaner training signal. The independent contribution is to code *quality* more than recommendation *rate*: CC may still recommend a tool with mediocre docs, but the generated code will be worse.
 
 **What matters:**
 - Complete, copy-pasteable code examples
@@ -210,7 +212,7 @@ Claude Code generates code based on API knowledge embedded in training. Poor or 
 
 ### 10. MCP & Tool Integration
 
-Direct tool access through MCP creates an independent recommendation channel that bypasses training data patterns entirely.
+Direct tool access through MCP creates an independent recommendation channel that can bypass training data patterns.
 
 **What matters:**
 - Whether the vendor has an official MCP server
@@ -229,19 +231,19 @@ Direct tool access through MCP creates an independent recommendation channel tha
 
 ---
 
-### 11. Security Defaults
+### 11. Security Defaults (Mediated)
 
-Claude Code tends toward tools with secure-by-default APIs because training examples using them are cleaner and less error-prone. This affects recommendation patterns even when security isn't explicitly requested.
+Claude Code does not evaluate security posture directly. But tools with secure-by-default APIs produce cleaner, shorter tutorial code — fewer config steps, fewer edge cases, fewer "don't forget to add CSRF protection" warnings. This feeds back into training data quality and integration speed, both of which CC *does* respond to.
 
-**What matters:**
+**What matters (for generated code quality, not recommendation rate):**
 - Automatic CSRF, session rotation, token refresh
 - Parameterized queries by default (SQL injection prevention)
 - Scoped API keys (read-only vs. admin)
 - Enforced HTTPS
 
-**Example:** Clerk handles session tokens, CSRF, token rotation, and multi-device sessions automatically. Auth.js requires configuring session strategy, CSRF tokens, and cookie settings — more configuration = more ways to generate insecure code.
+**Example:** Clerk handles session tokens, CSRF, token rotation, and multi-device sessions automatically. Auth.js requires configuring session strategy, CSRF tokens, and cookie settings — more configuration = more surface area for incorrect generated code.
 
-**Example:** Drizzle and Prisma parameterize queries by default. Generated code using these ORMs is structurally resistant to injection vulnerabilities.
+**Example:** Drizzle and Prisma parameterize queries by default. Generated code using these ORMs is structurally resistant to injection vulnerabilities — not because CC evaluates injection risk, but because the parameterized API is the only API these tools expose.
 
 ---
 
