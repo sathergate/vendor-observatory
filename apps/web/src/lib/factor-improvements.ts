@@ -87,11 +87,11 @@ const SUGGESTION_TEMPLATES: Record<string, { title: string; descriptions: Record
     },
   },
   recency_gradient: {
-    title: "Align with current developer patterns",
+    title: "Ensure presence in current training composition window",
     descriptions: {
-      1: "Modernize your API surface to match current best practices. Publish content showing modern patterns (App Router, RSC, edge runtimes). Legacy approaches are actively deprioritized in newer models.",
-      2: "Update examples and tutorials to use current frameworks. Publish comparison content showing your tool with modern alternatives. Ensure your SDK follows current TypeScript and ESM conventions.",
-      3: "Keep examples current with latest framework versions. Publish content about modern integration patterns. Stay visible in current developer discourse.",
+      1: "Your content is absent from the training window current models weight most heavily. Publish fresh documentation, tutorials, and starter templates using current frameworks (App Router, RSC, edge runtimes). Model preferences shift discontinuously at version boundaries — tools can go from dominant to absent in a single model release.",
+      2: "Update examples and tutorials to use current frameworks. Publish comparison content showing your tool alongside modern alternatives. Ensure your SDK follows current TypeScript and ESM conventions. Continuous content publication matters because each model version snapshots a different window.",
+      3: "Keep examples current with latest framework versions. Publish content about modern integration patterns. Maintain steady content output — recency weighting means older content loses influence even if it remains accurate.",
     },
   },
   mcp_integration: {

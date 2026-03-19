@@ -40,7 +40,7 @@ factors:
     label: Recency Gradient
     short: Recency
     weight: high
-    description: Alignment with current patterns; RLHF amplifies newer tools over legacy
+    description: Presence in the training composition window the current model weights most heavily; shifts are discontinuous across model versions
 
   - id: serverless_compat
     label: Serverless Compatibility
