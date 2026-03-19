@@ -1039,6 +1039,72 @@ export class ObservatoryDB {
     ]);
   }
 
+  async listPrompts(opts?: {
+    kind?: string;
+    category?: string;
+    includeInactive?: boolean;
+  }): Promise<Array<{
+    id: string; kind: string; category: string | null; template: string | null;
+    text: string; metadata: Record<string, unknown>; is_active: boolean;
+    version: number; created_at: string; updated_at: string;
+  }>> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    let idx = 1;
+    if (opts?.kind) { conditions.push(`kind = $${idx++}`); params.push(opts.kind); }
+    if (opts?.category) { conditions.push(`category = $${idx++}`); params.push(opts.category); }
+    if (!opts?.includeInactive) { conditions.push("is_active = TRUE"); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const { rows } = await this.queryable.query(
+      `SELECT id, kind, category, template, text, metadata, is_active, version, created_at::text, updated_at::text FROM prompts ${where} ORDER BY kind, category, id`,
+      params,
+    );
+    return rows as Array<{
+      id: string; kind: string; category: string | null; template: string | null;
+      text: string; metadata: Record<string, unknown>; is_active: boolean;
+      version: number; created_at: string; updated_at: string;
+    }>;
+  }
+
+  async updatePromptFields(id: string, fields: {
+    text?: string;
+    kind?: string;
+    category?: string | null;
+    template?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
+    if (fields.text !== undefined) { sets.push(`text = $${idx++}`); params.push(fields.text); }
+    if (fields.kind !== undefined) { sets.push(`kind = $${idx++}`); params.push(fields.kind); }
+    if (fields.category !== undefined) { sets.push(`category = $${idx++}`); params.push(fields.category); }
+    if (fields.template !== undefined) { sets.push(`template = $${idx++}`); params.push(fields.template); }
+    if (fields.metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(fields.metadata)); }
+    if (sets.length === 0) return false;
+    sets.push(`version = version + 1`);
+    sets.push(`updated_at = NOW()`);
+    params.push(id);
+    const { rowCount } = await this.queryable.query(
+      `UPDATE prompts SET ${sets.join(", ")} WHERE id = $${idx}`,
+      params,
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async deletePrompt(id: string): Promise<boolean> {
+    const { rowCount } = await this.queryable.query("DELETE FROM prompts WHERE id = $1", [id]);
+    return (rowCount ?? 0) > 0;
+  }
+
+  async setPromptActive(id: string, active: boolean): Promise<boolean> {
+    const { rowCount } = await this.queryable.query(
+      "UPDATE prompts SET is_active = $1, updated_at = NOW() WHERE id = $2",
+      [active, id],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
   async getPromptsCount(kind?: string): Promise<number> {
     const sql = kind
       ? "SELECT COUNT(*) AS c FROM prompts WHERE kind = $1 AND is_active = TRUE"

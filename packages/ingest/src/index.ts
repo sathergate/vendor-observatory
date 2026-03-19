@@ -609,6 +609,227 @@ program
     }
   });
 
+// ── Prompts Command ─────────────────────────────────────────────────
+
+const promptsCmd = program
+  .command("prompts")
+  .description("Manage LLM prompts stored in the database");
+
+promptsCmd
+  .command("list")
+  .description("List prompts with optional filters")
+  .option("--kind <kind>", "Filter by kind: benchmark, fast, fast_generic, system")
+  .option("--category <category>", "Filter by category")
+  .option("--inactive", "Include inactive prompts", false)
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const prompts = await db.listPrompts({
+      kind: opts.kind,
+      category: opts.category,
+      includeInactive: opts.inactive,
+    });
+
+    if (prompts.length === 0) {
+      console.log(chalk.yellow("No prompts found."));
+      await db.close();
+      return;
+    }
+
+    console.log(chalk.blue(`\nFound ${prompts.length} prompts\n`));
+    console.log(
+      chalk.bold(
+        "ID".padEnd(30) +
+        "Kind".padEnd(14) +
+        "Category".padEnd(20) +
+        "Active".padEnd(8) +
+        "v".padEnd(4) +
+        "Text Preview",
+      ),
+    );
+    console.log("─".repeat(120));
+    for (const p of prompts) {
+      const preview = p.text.replace(/\n/g, " ").slice(0, 40);
+      console.log(
+        p.id.padEnd(30) +
+        p.kind.padEnd(14) +
+        (p.category ?? "—").padEnd(20) +
+        (p.is_active ? chalk.green("yes") : chalk.red("no ")).padEnd(8 + 10) + // +10 for chalk codes
+        String(p.version).padEnd(4) +
+        chalk.gray(preview + (p.text.length > 40 ? "…" : "")),
+      );
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("get <id>")
+  .description("Show full details of a prompt")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const prompt = await db.getPromptById(id);
+
+    if (!prompt) {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+      await db.close();
+      process.exit(1);
+    }
+
+    console.log(chalk.blue(`\nPrompt: ${prompt.id}\n`));
+    console.log(`  Kind:     ${prompt.kind}`);
+    console.log(`  Category: ${prompt.category ?? "—"}`);
+    console.log(`  Template: ${prompt.template ?? "—"}`);
+    console.log(`  Active:   ${prompt.is_active ? chalk.green("yes") : chalk.red("no")}`);
+    console.log(`  Version:  ${prompt.version}`);
+    console.log(`  Metadata: ${JSON.stringify(prompt.metadata)}`);
+    console.log(`\n  Text:\n${chalk.white(prompt.text)}`);
+    await db.close();
+  });
+
+promptsCmd
+  .command("add")
+  .description("Add a new prompt")
+  .requiredOption("--id <id>", "Prompt ID")
+  .requiredOption("--kind <kind>", "Prompt kind: benchmark, fast, fast_generic, system")
+  .requiredOption("--text <text>", "Prompt text")
+  .option("--category <category>", "Category")
+  .option("--template <template>", "Template name")
+  .option("--metadata <json>", "Metadata as JSON string", "{}")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+
+    let metadata: Record<string, unknown> = {};
+    try { metadata = JSON.parse(opts.metadata); } catch {
+      console.error(chalk.red("Invalid JSON for --metadata"));
+      await db.close();
+      process.exit(1);
+    }
+
+    await db.upsertPrompt({
+      id: opts.id,
+      kind: opts.kind,
+      category: opts.category ?? null,
+      template: opts.template ?? null,
+      text: opts.text,
+      metadata,
+    });
+
+    console.log(chalk.green(`Prompt "${opts.id}" added/updated.`));
+    await db.close();
+  });
+
+promptsCmd
+  .command("edit <id>")
+  .description("Edit an existing prompt (only provided fields are updated)")
+  .option("--text <text>", "New prompt text")
+  .option("--kind <kind>", "New kind")
+  .option("--category <category>", "New category")
+  .option("--template <template>", "New template")
+  .option("--metadata <json>", "New metadata as JSON string")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+
+    const existing = await db.getPromptById(id);
+    if (!existing) {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+      await db.close();
+      process.exit(1);
+    }
+
+    const fields: {
+      text?: string; kind?: string; category?: string | null;
+      template?: string | null; metadata?: Record<string, unknown>;
+    } = {};
+    if (opts.text !== undefined) fields.text = opts.text;
+    if (opts.kind !== undefined) fields.kind = opts.kind;
+    if (opts.category !== undefined) fields.category = opts.category;
+    if (opts.template !== undefined) fields.template = opts.template;
+    if (opts.metadata !== undefined) {
+      try { fields.metadata = JSON.parse(opts.metadata); } catch {
+        console.error(chalk.red("Invalid JSON for --metadata"));
+        await db.close();
+        process.exit(1);
+      }
+    }
+
+    if (Object.keys(fields).length === 0) {
+      console.log(chalk.yellow("No fields to update. Use --text, --kind, --category, --template, or --metadata."));
+      await db.close();
+      return;
+    }
+
+    const updated = await db.updatePromptFields(id, fields);
+    if (updated) {
+      console.log(chalk.green(`Prompt "${id}" updated (version bumped).`));
+    } else {
+      console.error(chalk.red(`Failed to update prompt "${id}".`));
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("delete <id>")
+  .description("Permanently delete a prompt")
+  .option("--confirm", "Confirm deletion (required)", false)
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+
+    if (!opts.confirm) {
+      console.error(chalk.red(`Pass --confirm to permanently delete prompt "${id}".`));
+      await db.close();
+      process.exit(1);
+    }
+
+    const deleted = await db.deletePrompt(id);
+    if (deleted) {
+      console.log(chalk.green(`Prompt "${id}" deleted.`));
+    } else {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("deactivate <id>")
+  .description("Soft-disable a prompt (set is_active = false)")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const ok = await db.setPromptActive(id, false);
+    if (ok) {
+      console.log(chalk.green(`Prompt "${id}" deactivated.`));
+    } else {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("activate <id>")
+  .description("Re-enable a deactivated prompt")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const ok = await db.setPromptActive(id, true);
+    if (ok) {
+      console.log(chalk.green(`Prompt "${id}" activated.`));
+    } else {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+    }
+    await db.close();
+  });
+
 // ── Helper ──────────────────────────────────────────────────────────
 
 function getCommandStr(toolUse: { toolName: string; input: Record<string, unknown> }): string | null {
