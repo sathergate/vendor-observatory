@@ -1,20 +1,22 @@
 # Vendor Factor Scores
-# Scores each vendor across the 10 AI-recommendation factors from vendor-selection-principles.md.
+# Scores each vendor across the 13 AI-recommendation factors from vendor-selection-principles.md.
+# Reflects the multi-causal model: training data is eligibility gate, not proportional driver.
 # Scores: 1 (poor) → 5 (excellent). null = not assessed.
 # Confidence: high = explicitly discussed in principles doc, medium = partially referenced, low = inferred.
 
 ---
-version: "1.0"
+version: "2.0"
 description: >
-  Vendor scores across the 10 AI-recommendation factors.
-  Used by the Factor Analysis visualization in the web dashboard.
+  Vendor scores across 13 AI-recommendation factors reflecting the multi-causal model.
+  Training data is an eligibility gate; ecosystem position, sentiment, recency, and MCP
+  integration independently shape recommendations. Used by the Factor Analysis visualization.
 
 factors:
-  - id: training_data_volume
-    label: Training Data Volume
-    short: Training Data
+  - id: ecosystem_graph_position
+    label: Ecosystem Graph Position
+    short: Ecosystem
     weight: very_high
-    description: GitHub repos, tutorials, SO answers using this tool
+    description: Position in the Next.js/React/TS dependency chain; hub tools amplified
 
   - id: integration_speed
     label: Integration Speed
@@ -22,11 +24,35 @@ factors:
     weight: very_high
     description: Lines of code to first working integration
 
+  - id: sentiment_polarity
+    label: Sentiment & Trust Signals
+    short: Sentiment
+    weight: high
+    description: Net developer sentiment; negative signals suppress recommendations regardless of volume
+
+  - id: training_data_volume
+    label: Training Data Presence
+    short: Training Data
+    weight: high
+    description: GitHub repos, tutorials, SO answers — eligibility gate, not proportional driver
+
+  - id: recency_gradient
+    label: Recency Gradient
+    short: Recency
+    weight: high
+    description: Alignment with current patterns; RLHF amplifies newer tools over legacy
+
   - id: serverless_compat
     label: Serverless Compatibility
     short: Serverless
     weight: high
     description: HTTP-based, edge support, connection pooling
+
+  - id: stack_fit
+    label: Stack Fit
+    short: Stack Fit
+    weight: high
+    description: Next.js App Router, React components, RSC compat
 
   - id: free_tier
     label: Free Tier Generosity
@@ -37,20 +63,14 @@ factors:
   - id: docs_quality
     label: Documentation Quality
     short: Docs
-    weight: high
+    weight: medium_high
     description: Copy-pasteable examples, TS types, error messages
 
-  - id: stack_fit
-    label: Stack Fit
-    short: Stack Fit
-    weight: high
-    description: Next.js App Router, React components, RSC compat
-
-  - id: reliability
-    label: Reliability & Trust
-    short: Reliability
-    weight: medium_high
-    description: Breaking changes, maintenance, pricing stability
+  - id: mcp_integration
+    label: MCP & Tool Integration
+    short: MCP
+    weight: medium
+    description: Official MCP server, Claude connector, Agent Skills rules
 
   - id: security_defaults
     label: Security Defaults
@@ -79,58 +99,70 @@ vendors:
   - vendor_id: neon
     confidence: high
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 4
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 4
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 4
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 5
-    notes: "Serverless Postgres with cold starts; 512 MB free tier"
+    notes: "Serverless Postgres with cold starts; 512 MB free tier; official MCP server with OAuth"
 
   - vendor_id: supabase
     confidence: high
     scores:
-      training_data_volume: 5
+      ecosystem_graph_position: 5
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 5
+      recency_gradient: 5
       serverless_compat: 3
+      stack_fit: 4
       free_tier: 3
       docs_quality: 4
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 5
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 5
-    notes: "Inactivity pausing is a known pain point in training data"
+    notes: "Bundles DB+auth+storage+realtime; official MCP server and Claude connector; inactivity pausing is a known pain point"
 
   - vendor_id: planetscale
     confidence: high
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 1
+      training_data_volume: 4
+      recency_gradient: 1
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 1
       docs_quality: 4
-      stack_fit: 3
-      reliability: 2
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
-    notes: "Free tier removed 2024 — strong negative trust signal in training data"
+    notes: "Free tier removed 2024 — strong negative trust signal; Claude has falsely claimed it shut down"
 
   - vendor_id: turso
     confidence: high
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 4
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 5
       docs_quality: 3
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 2
       security_defaults: 4
       cost_predictability: 5
       escape_hatch: 5
@@ -139,13 +171,16 @@ vendors:
   - vendor_id: cockroachdb
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 3
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 3
       escape_hatch: 4
@@ -154,13 +189,16 @@ vendors:
   - vendor_id: xata
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 3
@@ -169,13 +207,16 @@ vendors:
   - vendor_id: railway-postgres
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 3
       serverless_compat: 2
+      stack_fit: 3
       free_tier: 2
       docs_quality: 3
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 5
@@ -184,13 +225,16 @@ vendors:
   - vendor_id: vercel-postgres
     confidence: medium
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 5
       integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 5
       free_tier: 3
       docs_quality: 4
-      stack_fit: 5
-      reliability: 4
+      mcp_integration: 3
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -199,13 +243,16 @@ vendors:
   - vendor_id: tidb-serverless
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 4
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 3
@@ -214,13 +261,16 @@ vendors:
   - vendor_id: fauna
     confidence: medium
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 2
+      training_data_volume: 2
+      recency_gradient: 1
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 3
       docs_quality: 3
-      stack_fit: 3
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 1
@@ -229,13 +279,16 @@ vendors:
   - vendor_id: convex
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 4
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 5
       free_tier: 4
       docs_quality: 4
-      stack_fit: 5
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 2
@@ -244,13 +297,16 @@ vendors:
   - vendor_id: upstash
     confidence: high
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 5
       integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 5
       free_tier: 4
       docs_quality: 4
-      stack_fit: 5
-      reliability: 4
+      mcp_integration: 3
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 4
@@ -263,13 +319,16 @@ vendors:
   - vendor_id: github-actions
     confidence: medium
     scores:
-      training_data_volume: 5
+      ecosystem_graph_position: 4
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 5
+      recency_gradient: 3
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 4
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 4
       escape_hatch: 3
@@ -278,13 +337,16 @@ vendors:
   - vendor_id: circleci
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 3
       docs_quality: 3
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 3
       escape_hatch: 3
@@ -293,13 +355,16 @@ vendors:
   - vendor_id: gitlab-ci
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 4
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 4
@@ -308,13 +373,16 @@ vendors:
   - vendor_id: buildkite
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
       serverless_compat: 3
+      stack_fit: 2
       free_tier: 2
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -323,13 +391,16 @@ vendors:
   - vendor_id: dagger
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
       serverless_compat: 3
+      stack_fit: 2
       free_tier: 5
       docs_quality: 3
-      stack_fit: 2
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 5
       escape_hatch: 5
@@ -338,13 +409,16 @@ vendors:
   - vendor_id: railway-deployments
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 5
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 4
       serverless_compat: 3
+      stack_fit: 3
       free_tier: 2
       docs_quality: 3
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 3
       escape_hatch: 3
@@ -357,13 +431,16 @@ vendors:
   - vendor_id: datadog
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 2
       docs_quality: 4
-      stack_fit: 3
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 2
       escape_hatch: 2
@@ -372,13 +449,16 @@ vendors:
   - vendor_id: grafana
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 2
       integration_speed: 2
+      sentiment_polarity: 4
+      training_data_volume: 4
+      recency_gradient: 3
       serverless_compat: 3
+      stack_fit: 2
       free_tier: 4
       docs_quality: 3
-      stack_fit: 2
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 5
       escape_hatch: 5
@@ -387,13 +467,16 @@ vendors:
   - vendor_id: new-relic
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 4
       docs_quality: 3
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 2
@@ -402,13 +485,16 @@ vendors:
   - vendor_id: honeycomb
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 3
       docs_quality: 4
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -417,13 +503,16 @@ vendors:
   - vendor_id: axiom
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 4
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 3
@@ -432,13 +521,16 @@ vendors:
   - vendor_id: betterstack
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 3
       docs_quality: 3
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -451,13 +543,16 @@ vendors:
   - vendor_id: sentry
     confidence: high
     scores:
-      training_data_volume: 5
+      ecosystem_graph_position: 5
       integration_speed: 4
+      sentiment_polarity: 5
+      training_data_volume: 5
+      recency_gradient: 4
       serverless_compat: 4
+      stack_fit: 5
       free_tier: 4
       docs_quality: 5
-      stack_fit: 5
-      reliability: 5
+      mcp_integration: 2
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 4
@@ -466,13 +561,16 @@ vendors:
   - vendor_id: bugsnag
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 3
       docs_quality: 3
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -481,13 +579,16 @@ vendors:
   - vendor_id: rollbar
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 3
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -500,13 +601,16 @@ vendors:
   - vendor_id: launchdarkly
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 4
       free_tier: 2
       docs_quality: 4
-      stack_fit: 4
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 2
       escape_hatch: 2
@@ -515,13 +619,16 @@ vendors:
   - vendor_id: flagsmith
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 4
       docs_quality: 3
-      stack_fit: 3
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 4
       escape_hatch: 5
@@ -530,13 +637,16 @@ vendors:
   - vendor_id: unleash
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 3
       serverless_compat: 3
+      stack_fit: 3
       free_tier: 4
       docs_quality: 3
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 4
       escape_hatch: 5
@@ -545,13 +655,16 @@ vendors:
   - vendor_id: devcycle
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 3
@@ -560,13 +673,16 @@ vendors:
   - vendor_id: statsig
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 4
       serverless_compat: 4
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -579,13 +695,16 @@ vendors:
   - vendor_id: hashicorp-vault
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 2
       integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 3
       serverless_compat: 2
+      stack_fit: 2
       free_tier: 3
       docs_quality: 4
-      stack_fit: 2
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 3
       escape_hatch: 5
@@ -594,13 +713,16 @@ vendors:
   - vendor_id: doppler
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 4
       escape_hatch: 3
@@ -609,13 +731,16 @@ vendors:
   - vendor_id: infisical
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 4
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 4
       escape_hatch: 5
@@ -624,13 +749,16 @@ vendors:
   - vendor_id: aws-secrets-manager
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 2
       integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 2
       docs_quality: 3
-      stack_fit: 2
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 4
       escape_hatch: 3
@@ -643,13 +771,16 @@ vendors:
   - vendor_id: backstage
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 2
       integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
       serverless_compat: 2
+      stack_fit: 2
       free_tier: 5
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 5
       escape_hatch: 5
@@ -658,13 +789,16 @@ vendors:
   - vendor_id: port
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 3
       docs_quality: 3
-      stack_fit: 2
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 2
@@ -673,13 +807,16 @@ vendors:
   - vendor_id: cortex
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 2
       docs_quality: 3
-      stack_fit: 2
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 2
       escape_hatch: 2
@@ -688,13 +825,16 @@ vendors:
   - vendor_id: opslevel
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 2
       docs_quality: 3
-      stack_fit: 2
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 2
       escape_hatch: 2
@@ -707,13 +847,16 @@ vendors:
   - vendor_id: langfuse
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 5
       serverless_compat: 4
+      stack_fit: 4
       free_tier: 4
       docs_quality: 4
-      stack_fit: 4
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 5
@@ -722,13 +865,16 @@ vendors:
   - vendor_id: braintrust
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 3
       docs_quality: 3
-      stack_fit: 3
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -737,13 +883,16 @@ vendors:
   - vendor_id: helicone
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 5
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 4
       docs_quality: 3
-      stack_fit: 4
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 4
@@ -752,13 +901,16 @@ vendors:
   - vendor_id: langsmith
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 3
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 3
       docs_quality: 4
-      stack_fit: 3
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 2
@@ -767,13 +919,16 @@ vendors:
   - vendor_id: arize-phoenix
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
       serverless_compat: 3
+      stack_fit: 2
       free_tier: 5
       docs_quality: 3
-      stack_fit: 2
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 3
       cost_predictability: 5
       escape_hatch: 5
@@ -786,13 +941,16 @@ vendors:
   - vendor_id: pagerduty
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 2
       docs_quality: 4
-      stack_fit: 2
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 2
       escape_hatch: 2
@@ -801,13 +959,16 @@ vendors:
   - vendor_id: opsgenie
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
       serverless_compat: 4
+      stack_fit: 2
       free_tier: 3
       docs_quality: 3
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -816,13 +977,16 @@ vendors:
   - vendor_id: incident-io
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 3
       docs_quality: 4
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -831,13 +995,16 @@ vendors:
   - vendor_id: rootly
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 3
       docs_quality: 3
-      stack_fit: 3
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 3
@@ -850,13 +1017,16 @@ vendors:
   - vendor_id: sourcegraph
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 2
       integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
       serverless_compat: 3
+      stack_fit: 2
       free_tier: 3
       docs_quality: 4
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 4
@@ -865,13 +1035,16 @@ vendors:
   - vendor_id: github-code-search
     confidence: low
     scores:
-      training_data_volume: 5
+      ecosystem_graph_position: 4
       integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 5
+      recency_gradient: 3
       serverless_compat: 5
+      stack_fit: 4
       free_tier: 5
       docs_quality: 4
-      stack_fit: 4
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 5
       escape_hatch: 4
@@ -884,13 +1057,16 @@ vendors:
   - vendor_id: snyk
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 4
       docs_quality: 4
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 3
       escape_hatch: 3
@@ -899,13 +1075,16 @@ vendors:
   - vendor_id: sonarqube
     confidence: low
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 2
       integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
       serverless_compat: 2
+      stack_fit: 2
       free_tier: 3
       docs_quality: 3
-      stack_fit: 2
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 4
       escape_hatch: 5
@@ -914,13 +1093,16 @@ vendors:
   - vendor_id: semgrep
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 4
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 4
       docs_quality: 4
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 4
       escape_hatch: 5
@@ -929,13 +1111,16 @@ vendors:
   - vendor_id: github-advanced-security
     confidence: low
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 4
       integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 3
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 3
       docs_quality: 4
-      stack_fit: 3
-      reliability: 5
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 3
       escape_hatch: 3
@@ -944,13 +1129,16 @@ vendors:
   - vendor_id: socket
     confidence: low
     scores:
-      training_data_volume: 1
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 4
       docs_quality: 3
-      stack_fit: 3
-      reliability: 3
+      mcp_integration: 1
       security_defaults: 5
       cost_predictability: 4
       escape_hatch: 3
@@ -963,13 +1151,16 @@ vendors:
   - vendor_id: cloudflare-workers
     confidence: medium
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 4
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 3
       free_tier: 5
       docs_quality: 4
-      stack_fit: 3
-      reliability: 5
+      mcp_integration: 2
       security_defaults: 4
       cost_predictability: 5
       escape_hatch: 3
@@ -978,13 +1169,16 @@ vendors:
   - vendor_id: vercel-edge-functions
     confidence: medium
     scores:
-      training_data_volume: 4
+      ecosystem_graph_position: 5
       integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 4
+      recency_gradient: 4
       serverless_compat: 5
+      stack_fit: 5
       free_tier: 4
       docs_quality: 4
-      stack_fit: 5
-      reliability: 4
+      mcp_integration: 3
       security_defaults: 4
       cost_predictability: 3
       escape_hatch: 2
@@ -993,13 +1187,16 @@ vendors:
   - vendor_id: deno-deploy
     confidence: low
     scores:
-      training_data_volume: 2
+      ecosystem_graph_position: 2
       integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 3
       serverless_compat: 5
+      stack_fit: 2
       free_tier: 4
       docs_quality: 4
-      stack_fit: 2
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 3
@@ -1008,13 +1205,16 @@ vendors:
   - vendor_id: fly-io
     confidence: medium
     scores:
-      training_data_volume: 3
+      ecosystem_graph_position: 3
       integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
       serverless_compat: 4
+      stack_fit: 3
       free_tier: 3
       docs_quality: 4
-      stack_fit: 3
-      reliability: 4
+      mcp_integration: 1
       security_defaults: 4
       cost_predictability: 4
       escape_hatch: 4

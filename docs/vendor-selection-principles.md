@@ -6,14 +6,31 @@ A framework for understanding why certain tools get recommended over others in C
 
 ## Important: How This Framework Actually Works
 
-Claude Code does not run a decision rubric. It generates code based on statistical patterns in its training data. The factors below describe **why certain tools dominate that training distribution** — not an explicit scoring process happening at inference time.
+Claude Code does not run a decision rubric. It generates code based on patterns shaped by training data, RLHF tuning, ecosystem signals, and (increasingly) direct tool access via MCP. The factors below describe **why certain tools dominate recommendations** — not an explicit scoring process at inference time.
 
-This distinction matters for two reasons:
+This distinction matters for three reasons:
 
 1. **You can't reason your way to a different recommendation.** Explaining to Claude Code that Paddle is theoretically better than Stripe won't change much. What changes recommendations is explicit instruction (your CLAUDE.md) or already having Paddle in your codebase.
 2. **Recommendations reflect the past, not the present.** Claude Code's training has a cutoff. Its mental model of a tool reflects its status 12–24 months ago. The PlanetScale free tier removal is the canonical example — models trained before mid-2024 recommend it warmly despite it no longer having a free tier.
+3. **Training data volume does not predict recommendation rate.** MongoDB has 10.8 million weekly npm downloads and 200,000+ Stack Overflow questions — dwarfing Supabase's footprint — yet receives zero primary database picks. Training data determines which tools are *visible* to the model, but other factors determine which tools get *chosen*.
 
 With that framing established, here's what drives the distribution.
+
+---
+
+## Why Training Data Alone Doesn't Explain Recommendations
+
+Before the factor ranking, it's worth understanding what the data actually shows. The Amplifying.AI study (February 2026) tested 2,430 open-ended prompts to Claude Code across three models, four greenfield repos, and 20 tool categories. No tool names appeared in any prompt.
+
+| Vendor | npm Downloads (weekly) | SO Questions (est.) | Claude Code Primary Pick Rate | Ratio: Picks / M Downloads |
+|---|---|---|---|---|
+| Supabase | 5.2M | ~5–10K | 24% (database) | ~4.6 |
+| MongoDB | 10.8M | ~200K+ | 0% (database) | 0 |
+| Firebase | 3.1M (JS SDK) | ~250K+ | ~0% (database) | 0 |
+| Resend | ~200–500K | ~100–300 | 62.7% (email) | ~125–313 |
+| Drizzle ORM | 5.0M | ~1–3K | 61% (Next.js ORM) | ~12.2 |
+
+The ratio of recommendation rate to training data volume varies by orders of magnitude — from zero (MongoDB, Firebase) to triple digits (Resend). A single-factor model based on training data volume cannot explain this. The factors below reflect the actual multi-causal structure.
 
 ---
 
@@ -27,26 +44,26 @@ Corollary: your CLAUDE.md is extraordinarily powerful. An explicit vendor prefer
 
 ---
 
-## The 10 Distribution Factors (Ranked by Actual Influence)
+## The Distribution Factors (Ranked by Actual Influence)
 
-### 1. Training Data Volume & Community Representation
+### 1. Ecosystem Graph Position
 
-The most structurally significant factor, underappreciated in most discussions.
+The factor that explains the largest variance in recommendation rates across vendors.
 
 **What matters:**
-- Volume of GitHub repos, tutorials, blog posts, and Stack Overflow answers using this tool
-- How accurately and consistently the tool's API is represented across those sources
-- Whether training examples show correct, idiomatic usage vs. outdated or buggy patterns
+- Whether the tool sits at a hub in the Next.js / React / TypeScript / Vercel dependency chain
+- How many framework integration points the tool touches (database, auth, storage, realtime, edge functions)
+- Whether the tool has built upstream open-source libraries that create dependency chains
 
-**Why this ranks first:** Documentation quality, ecosystem fit, and integration speed (factors 3–5) are downstream of this. Clerk and Stripe generate high-quality, low-hallucination code partly because they have enormous tutorial surface area. Claude Code is more likely to produce *correct* Clerk code than correct Lucia code not because Lucia is worse, but because there's less training signal for Lucia. Community size was listed as "lower weight" in earlier versions of this framework — that was backwards.
+**Why this ranks first:** PocketBase has 56,800 GitHub stars — more than Prisma, Drizzle, or Hasura — yet receives near-zero Claude Code recommendations. The reason: PocketBase is a Go binary with minimal JavaScript SDK usage. It sits outside the ecosystem graph that Claude Code activates. Conversely, Supabase bundles database + auth + storage + realtime, occupying multiple graph nodes simultaneously and winning queries across multiple categories.
 
-**Implication for newer tools:** A tool that launched after the training cutoff, or that has thin GitHub/tutorial presence, will generate less confident and more error-prone integration code regardless of how good the tool actually is.
+**Ecosystem plays matter more than raw presence:** Resend captures 62.7% of email recommendations despite modest npm downloads because it built React Email (~15K GitHub stars), creating a dependency chain: Next.js → React → React Email → Resend. This embeds Resend's API patterns into thousands of repos. SendGrid, with far more training data, lacks this structural advantage.
 
 ---
 
 ### 2. Integration Speed
 
-The second dominant factor. Claude Code users want working code in minutes, and simpler APIs produce fewer hallucination failure modes.
+Claude Code users want working code in minutes, and simpler APIs produce fewer hallucination failure modes.
 
 **What matters:**
 - Lines of code to first working integration
@@ -61,7 +78,60 @@ The second dominant factor. Claude Code users want working code in minutes, and 
 
 ---
 
-### 3. Serverless Compatibility
+### 3. Sentiment & Trust Signals
+
+The *sign* of training data matters as much as volume. Negative developer sentiment actively suppresses recommendations regardless of how much training data exists.
+
+**What matters:**
+- Net developer experience sentiment (positive vs. negative signals in training data)
+- Breaking changes without major version bumps
+- Sudden pricing/tier changes (strong negative trust signal)
+- Active maintenance (commit frequency, issue response time)
+- Whether the tool is associated with complexity complaints or migration pain
+
+**Negative sentiment suppresses volume:** SendGrid has far more training data than Resend, but its training data contains complexity complaints, deprecated API references, and Twilio acquisition concerns. Claude Code recommends Resend instead. PlanetScale's free tier removal created such strongly negative training signal that Claude has falsely claimed PlanetScale "shut down."
+
+**Positive sentiment amplifies:** Stripe has never made a breaking API change (versioned since launch) — creating an unusually clean and consistent training signal. Supabase's open-source model and active community generate positive signals. Zustand wins 64.8% of state management picks over Redux (186K stars) partly because Redux training data is saturated with complexity complaints.
+
+**Red flags encoded in training:**
+- PlanetScale: Killed free tier suddenly (2024)
+- Heroku: Removed free tier (2022)
+- Firebase: Reliable, but Google's product deprecation history creates uncertainty
+
+---
+
+### 4. Training Data Presence (Eligibility Gate)
+
+Training data determines which tools are *eligible* for recommendation. It does not determine which tools get *chosen* among eligible candidates.
+
+**What matters:**
+- Volume of GitHub repos, tutorials, blog posts, and Stack Overflow answers using this tool
+- How accurately and consistently the tool's API is represented across those sources
+- Whether training examples show correct, idiomatic usage vs. outdated or buggy patterns
+
+**This is a gate, not a dial.** Past a threshold of sufficient presence, other factors dominate. MongoDB has 10.8M weekly npm downloads and 200K+ Stack Overflow questions — roughly 20–40× Supabase's SO footprint — yet receives zero primary database picks. Firebase has 250K+ SO questions and a decade of tutorials, yet barely registers. If training data volume were proportionally predictive, MongoDB and Firebase would dominate. They don't.
+
+**Where volume does matter:** Training data volume strongly affects *code quality*, even when it doesn't predict recommendation frequency. Claude Code is more likely to produce correct Clerk code than correct Lucia code not because Lucia is worse, but because there's more training signal for Clerk. A tool with thin presence will generate less confident and more error-prone integration code regardless of how good the tool actually is.
+
+---
+
+### 5. Recency Gradient
+
+RLHF and training procedures amplify newer patterns over older ones, even when the older tool has more raw training data.
+
+**What matters:**
+- Whether the tool aligns with current best practices vs. legacy approaches
+- Developer community momentum (ascending vs. declining)
+- How recently the tool's patterns entered the training distribution
+
+**Temporal collapses are the evidence.** Prisma's recommendation rate collapsed from 79% in Sonnet 4.5 to 0% in Opus 4.6 for Next.js ORM, replaced by Drizzle (33K stars, fewer downloads). Express and AWS went from dominant to near-absent between mid-2025 and early 2026, replaced by Hono and Vercel/Railway. The total volume of Express tutorials didn't decrease — but recency-weighted training shifted preferences toward newer patterns.
+
+**Ascending tools:** Drizzle, Zustand, Hono, Railway, Resend
+**Declining tools:** Prisma (for new projects), Express, Redux, AWS (for MVP contexts)
+
+---
+
+### 6. Serverless Compatibility
 
 Most projects deploy to Vercel or similar. Tools assuming persistent connections or local filesystems get deprioritized.
 
@@ -77,7 +147,23 @@ Most projects deploy to Vercel or similar. Tools assuming persistent connections
 
 ---
 
-### 4. Free Tier Generosity
+### 7. Stack Fit (Next.js / React / TypeScript / Vercel)
+
+The typical greenfield stack is Next.js + React + TypeScript + Tailwind + Vercel. Tools built natively for this stack produce better generated code.
+
+**What matters:**
+- First-class Next.js App Router integration
+- Exported React components (not just REST APIs)
+- React Server Component compatibility
+- Vercel-maintained or Vercel-optimized integration
+
+**Example:** Clerk exports `<SignIn>`, `<UserButton>`, `<SignUp>` components. Lucia is framework-agnostic — you build all UI yourself, which means more generated code and more surface area for errors.
+
+**Example:** Resend has `@react-email/components` — emails written in JSX. SendGrid uses Handlebars templates.
+
+---
+
+### 8. Free Tier Generosity
 
 Most projects Claude Code works on are MVPs or prototypes. If the free tier runs out before idea validation, the tool is a liability.
 
@@ -101,7 +187,7 @@ Most projects Claude Code works on are MVPs or prototypes. If the free tier runs
 
 ---
 
-### 5. Documentation Quality
+### 9. Documentation Quality
 
 Claude Code generates code based on API knowledge embedded in training. Poor or inconsistent docs produce wrong code.
 
@@ -120,44 +206,28 @@ Claude Code generates code based on API knowledge embedded in training. Poor or 
 
 ---
 
-### 6. Stack Fit (Next.js / React / TypeScript / Vercel)
+### 10. MCP & Tool Integration
 
-The typical greenfield stack is Next.js + React + TypeScript + Tailwind + Vercel. Tools built natively for this stack produce better generated code.
+Direct tool access through MCP creates an independent recommendation channel that bypasses training data patterns entirely.
 
 **What matters:**
-- First-class Next.js App Router integration
-- Exported React components (not just REST APIs)
-- React Server Component compatibility
-- Vercel-maintained or Vercel-optimized integration
+- Whether the vendor has an official MCP server
+- Whether the model can directly provision, configure, or query the vendor's service
+- Whether Agent Skills or similar rules are available for the vendor
 
-**Example:** Clerk exports `<SignIn>`, `<UserButton>`, `<SignUp>` components. Lucia is framework-agnostic — you build all UI yourself, which means more generated code and more surface area for errors.
+**This is a newer channel and its weight is increasing.** Supabase launched its official MCP server in March 2025, became an official Claude connector by mid-2025, and released a cloud-hosted MCP server in October 2025. Through MCP, Claude Code can directly provision Supabase databases, run migrations, and manage auth — making Supabase the path of least resistance regardless of training data.
 
-**Example:** Resend has `@react-email/components` — emails written in JSX. SendGrid uses Handlebars templates.
+**Each AI coding platform defaults to its integrated infrastructure:**
+- Claude Code → Supabase (official connector, MCP)
+- Firebase Studio → Firebase/Firestore (Google's own platform)
+- Replit → Built-in PostgreSQL on Neon (proprietary integration)
+- Lovable → Supabase (runs Supabase under the hood)
+
+**MCP-integrated vendors:** Supabase, Neon (OAuth + database branching), Stripe, Sentry
 
 ---
 
-### 7. Reliability & Maintenance Trust
-
-Avoid tools with frequent outages, surprise breaking changes, or abandoned maintenance. Claude Code's training encodes community sentiment about reliability, which shows up as recommendation patterns.
-
-**What matters:**
-- Breaking changes without major version bumps
-- Active maintenance (commit frequency, issue response time)
-- Sudden pricing/tier changes (negative trust signal)
-- Single maintainer vs. funded team
-
-**Trust signals in training data:**
-- Stripe: Never made a breaking API change (versioned APIs since launch)
-- Supabase: Open-source with large community — code survives even if company has issues
-
-**Red flags encoded in training:**
-- PlanetScale: Killed free tier suddenly (2024)
-- Heroku: Removed free tier (2022)
-- Firebase: Reliable, but Google's product deprecation history creates uncertainty — this sentiment is present in training data
-
----
-
-### 8. Security Defaults
+### 11. Security Defaults
 
 Claude Code tends toward tools with secure-by-default APIs because training examples using them are cleaner and less error-prone. This affects recommendation patterns even when security isn't explicitly requested.
 
@@ -173,7 +243,7 @@ Claude Code tends toward tools with secure-by-default APIs because training exam
 
 ---
 
-### 9. Cost Predictability at Scale
+### 12. Cost Predictability at Scale
 
 For users past MVP stage. Less relevant for greenfield recommendations, more relevant when the user explicitly asks about production architecture.
 
@@ -192,7 +262,7 @@ For users past MVP stage. Less relevant for greenfield recommendations, more rel
 
 ---
 
-### 10. Escape Hatch / Vendor Lock-in
+### 13. Escape Hatch / Vendor Lock-in
 
 Claude Code does not noticeably penalize lock-in risk unless the user explicitly raises it. However, it does favor tools built on open standards (Postgres, SQLite, Redis) over proprietary query languages.
 
@@ -210,14 +280,14 @@ Claude Code does not noticeably penalize lock-in risk unless the user explicitly
 ## The Recommended Stack (Greenfield, Serverless, MVP)
 
 ### Infrastructure & Hosting
-1. **Vercel** — Next.js deployment, serverless
+1. **Vercel** — Next.js deployment, serverless; strong ecosystem position
 2. **Netlify** — Static/JAMstack alternative
 3. **AWS** (S3, Lambda, CloudFront) — When you outgrow PaaS
 
 ### Databases
-4. **Supabase** — Postgres + auth + realtime + storage
+4. **Supabase** — Postgres + auth + realtime + storage; MCP-integrated
 5. **Turso** — SQLite at the edge
-6. **Neon** — Serverless Postgres
+6. **Neon** — Serverless Postgres; MCP-integrated
 7. **Upstash** — Serverless Redis/Kafka
 8. ~~PlanetScale~~ — **Removed: no free tier as of 2024**
 
@@ -226,8 +296,8 @@ Claude Code does not noticeably penalize lock-in risk unless the user explicitly
 10. **Auth.js (NextAuth)** — Open-source, self-managed (scale default)
 
 ### ORM
-11. **Drizzle** — Lightweight, type-safe
-12. **Prisma** — Heavier, great DX; favored if already in project
+11. **Drizzle** — Lightweight, type-safe; ascending in newer models
+12. **Prisma** — Heavier, great DX; declining in newer model recommendations but favored if already in project
 
 ### AI / LLM
 13. **OpenAI** — GPT models; highest training data volume
@@ -236,7 +306,7 @@ Claude Code does not noticeably penalize lock-in risk unless the user explicitly
 
 ### Payments & Email
 16. **Stripe** — Payments, subscriptions; gold standard for doc quality
-17. **Resend** — Transactional email (React components)
+17. **Resend** — Transactional email (React components); dominant via React Email ecosystem play
 
 ### Monitoring
 18. **Sentry** — Error tracking
@@ -253,18 +323,21 @@ Claude Code does not noticeably penalize lock-in risk unless the user explicitly
 |---|---|---|
 | Existing project context | **Dominant** | Whatever's already installed |
 | CLAUDE.md overrides | **Dominant** | Whatever you specify |
-| Training data volume | Very High | Stripe, Clerk, Supabase, Vercel, OpenAI |
+| Ecosystem graph position | Very High | Supabase, Clerk, Vercel, Resend |
 | Integration speed | Very High | Clerk, Supabase, Vercel, Drizzle |
+| Sentiment & trust signals | High | Stripe, Supabase, Drizzle, Resend, Zustand |
+| Training data presence | High (gate) | Stripe, Clerk, Supabase, Vercel, OpenAI |
+| Recency gradient | High | Drizzle, Zustand, Hono, Railway, Resend |
 | Serverless compat | High | Turso, Upstash, Neon, Vercel |
-| Free tier | High | Turso, Clerk, Fireworks |
-| Documentation quality | High | Stripe, Clerk, Sentry |
 | Stack fit | High | Clerk, Drizzle, Resend, Vercel |
-| Reliability | Medium-High | Stripe, Vercel, Supabase |
+| Free tier | High | Turso, Clerk, Fireworks |
+| Documentation quality | Medium-High | Stripe, Clerk, Sentry |
+| MCP / tool integration | Medium | Supabase, Neon, Stripe, Sentry |
 | Security defaults | Medium-High | Clerk, Drizzle, Prisma |
 | Cost at scale | Medium | Auth.js, Turso, self-hosted |
 | Escape hatch | Medium | Supabase, Auth.js, Drizzle |
 
-**TL;DR:** Optimized for "fastest path to working production code on a serverless stack with a generous free tier" — as of the model's training cutoff.
+**TL;DR:** Optimized for "fastest path to working production code on a serverless stack" — shaped by ecosystem position, sentiment, and recency as much as raw training data volume.
 
 ---
 
@@ -296,8 +369,9 @@ you know from training when making architecture recommendations.
 If you're evaluating whether Claude Code can reliably generate code for a tool you've chosen:
 - Search GitHub for `[tool-name] site:github.com` — high repo count = higher training signal
 - Look for Next.js App Router examples specifically (Pages Router examples produce subtly wrong code)
+- Check whether the tool has an MCP server — direct tool access increasingly boosts recommendations
 - If thin, plan to paste official docs into context on every session
 
 ### Using this framework for investment signal
 
-The tools highest on this list are disproportionately likely to be recommended to developers using AI coding assistants. Distribution through AI-generated code is an emerging acquisition channel worth tracking independently of traditional developer mindshare metrics.
+The tools highest on this list are disproportionately likely to be recommended to developers using AI coding assistants. Distribution through AI-generated code is an emerging acquisition channel. The key insight: **raw training data volume is a poor predictor of recommendation share**. Ecosystem position, sentiment trajectory, and tool integration matter more than Stack Overflow question count.

@@ -22,11 +22,19 @@ export interface ImprovementSuggestion {
 // ── Suggestion templates ─────────────────────────────────────────────
 
 const SUGGESTION_TEMPLATES: Record<string, { title: string; descriptions: Record<number, string> }> = {
-  training_data_volume: {
-    title: "Increase training data presence",
+  ecosystem_graph_position: {
+    title: "Strengthen ecosystem graph position",
     descriptions: {
-      1: "Publish open-source starter templates and tutorials on GitHub. Create Next.js App Router examples. Write blog posts and contribute SO answers to build training signal.",
-      2: "Expand tutorial coverage on GitHub and dev blogs. Ensure examples use current frameworks (Next.js 14+, App Router). Sponsor community content creation.",
+      1: "Build upstream open-source libraries that create dependency chains into the Next.js/React/TS ecosystem. Publish React hooks, Next.js middleware, or Vercel templates that embed your API patterns into other projects.",
+      2: "Expand framework integration points. Publish official React components and Next.js App Router utilities. Create starter templates that pair your tool with popular ecosystem tools (Vercel, Tailwind, etc.).",
+      3: "Deepen existing framework integrations. Add React Server Component support. Publish Vercel deployment templates. Consider building companion open-source libraries that extend your reach in the dependency graph.",
+    },
+  },
+  training_data_volume: {
+    title: "Cross the training data eligibility threshold",
+    descriptions: {
+      1: "Publish open-source starter templates and tutorials on GitHub. Create Next.js App Router examples. Write blog posts and contribute SO answers. Without sufficient training data presence, the tool is invisible to AI assistants.",
+      2: "Expand tutorial coverage on GitHub and dev blogs. Ensure examples use current frameworks (Next.js 14+, App Router). Sponsor community content creation. Volume matters for code quality, even though it doesn't proportionally drive recommendation rate.",
       3: "Maintain and grow community content. Ensure official examples stay current with latest framework versions. Consider publishing comparison guides.",
     },
   },
@@ -70,12 +78,28 @@ const SUGGESTION_TEMPLATES: Record<string, { title: string; descriptions: Record
       3: "Refine React component APIs. Ensure compatibility with latest Next.js features. Add Vercel deployment template.",
     },
   },
-  reliability: {
-    title: "Build reliability and trust signals",
+  sentiment_polarity: {
+    title: "Improve developer sentiment and trust signals",
     descriptions: {
-      1: "Stabilize the API — avoid breaking changes without major version bumps. Publish a public status page. Establish a clear deprecation policy. Address pricing concerns transparently.",
-      2: "Reduce breaking change frequency. Improve communication around maintenance and pricing changes. Publish uptime SLAs and incident reports.",
-      3: "Maintain consistent API versioning. Continue transparent communication. Build track record of stability.",
+      1: "Address negative community sentiment directly — respond to pricing concerns, fix trust-damaging decisions, publish transparent roadmaps. Negative training data actively suppresses AI recommendations regardless of volume.",
+      2: "Reduce breaking change frequency. Improve communication around maintenance and pricing changes. Publish uptime SLAs and incident reports. Actively engage with community concerns.",
+      3: "Maintain consistent API versioning. Continue transparent communication. Build track record of stability. Encourage positive developer experience content.",
+    },
+  },
+  recency_gradient: {
+    title: "Align with current developer patterns",
+    descriptions: {
+      1: "Modernize your API surface to match current best practices. Publish content showing modern patterns (App Router, RSC, edge runtimes). Legacy approaches are actively deprioritized in newer models.",
+      2: "Update examples and tutorials to use current frameworks. Publish comparison content showing your tool with modern alternatives. Ensure your SDK follows current TypeScript and ESM conventions.",
+      3: "Keep examples current with latest framework versions. Publish content about modern integration patterns. Stay visible in current developer discourse.",
+    },
+  },
+  mcp_integration: {
+    title: "Build MCP and tool integration",
+    descriptions: {
+      1: "Build an official MCP server that lets AI coding assistants directly provision, configure, and query your service. MCP creates an independent recommendation channel that bypasses training data patterns.",
+      2: "Expand MCP capabilities beyond basic CRUD. Add Agent Skills rules, OAuth support, and migration tooling. Register in MCP directories and Claude connector listings.",
+      3: "Refine MCP server reliability and capability coverage. Add advanced operations (branching, rollback, monitoring). Ensure the MCP experience matches or exceeds the dashboard experience.",
     },
   },
   security_defaults: {
