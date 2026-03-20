@@ -50,6 +50,30 @@ const pool = new Pool({ connectionString: dbUrl });
 // ── Ensure daily benchmark tables exist ──────────────────────────
 
 async function ensureDailyBenchmarkTables(): Promise<void> {
+  // worker_queue first — the databricks poller needs this immediately
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS worker_queue (
+      id              TEXT PRIMARY KEY,
+      run_id          TEXT,
+      prompt_id       TEXT NOT NULL,
+      agent           TEXT NOT NULL,
+      prompt_text     TEXT NOT NULL,
+      prompt_template TEXT,
+      prompt_category TEXT,
+      prompt_metadata_json TEXT,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      claimed_at      TIMESTAMPTZ,
+      worker_id       TEXT,
+      completed_at    TIMESTAMPTZ,
+      transcript_path TEXT,
+      cost_usd        FLOAT,
+      duration_ms     INT,
+      exit_code       INT,
+      error           TEXT
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_worker_queue_status ON worker_queue(status)`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS daily_benchmark_runs (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -237,10 +261,6 @@ async function markJobFailed(jobId: string, err: unknown): Promise<void> {
 async function mainLoop() {
   console.log(`[worker] ${WORKER_ID} starting polling loop`);
 
-  // Ensure DB schema is up to date before polling
-  await ensureDailyBenchmarkTables();
-  await ensureColumns();
-
   let iteration = 0;
 
   while (true) {
@@ -291,14 +311,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Start onboarding poll loop + Databricks benchmark poller
-mainLoop().catch((err) => {
-  console.error("[worker] Fatal error:", err);
-  process.exit(1);
-});
+// Ensure DB schema before starting any pollers
+(async () => {
+  await ensureDailyBenchmarkTables();
+  await ensureColumns();
 
-// Start Databricks poller for daily benchmark tasks (runs alongside onboarding loop)
-startDatabricksPoller(WORKER_ID).catch((err) => {
-  console.error("[databricks-poller] Fatal error:", err);
-  // Non-fatal — onboarding loop continues
+  // Start both pollers after schema is ready
+  mainLoop().catch((err) => {
+    console.error("[worker] Fatal error:", err);
+    process.exit(1);
+  });
+
+  startDatabricksPoller(WORKER_ID, pool).catch((err) => {
+    console.error("[databricks-poller] Fatal error:", err);
+    // Non-fatal — onboarding loop continues
+  });
+})().catch((err) => {
+  console.error("[worker] Fatal: schema setup failed:", err);
+  process.exit(1);
 });

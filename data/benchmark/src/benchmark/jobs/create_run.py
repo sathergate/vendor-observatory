@@ -9,6 +9,8 @@ import argparse
 import uuid
 from datetime import date, datetime, timezone
 
+import psycopg2
+from pyspark.dbutils import DBUtils
 from pyspark.sql import SparkSession
 
 
@@ -36,7 +38,7 @@ def main() -> None:
     run_date = date.today().isoformat()
     run_id = str(uuid.uuid4())
 
-    # Ensure tables exist before any queries
+    # Ensure Databricks tables exist (benchmark_runs, prompts — NOT worker_queue)
     _ensure_tables(spark, catalog, schema)
 
     # Check budget — cumulative cost for rolling 30-day window
@@ -65,7 +67,7 @@ def main() -> None:
     total_pairs = len(prompts) * len(assistants)
     now = datetime.now(timezone.utc).isoformat()
 
-    # Create benchmark_runs row
+    # Create benchmark_runs row (stays in Databricks)
     spark.sql(f"""
         INSERT INTO {catalog}.{schema}.benchmark_runs
         VALUES (
@@ -77,39 +79,43 @@ def main() -> None:
         )
     """)
 
-    # Generate all prompt × agent pairs → insert into worker_queue as pending
-    queue_values = []
-    for prompt in prompts:
-        for agent in assistants:
-            task_id = str(uuid.uuid4())
-            # Escape single quotes in text
-            prompt_text = (prompt["text"] or "").replace("'", "''")
-            prompt_metadata = (prompt["metadata"] or "{}").replace("'", "''")
-            prompt_template = (prompt["template"] or "").replace("'", "''")
-            prompt_category = (prompt["category"] or "").replace("'", "''")
-            queue_values.append(
-                f"('{task_id}', '{run_id}', '{prompt['id']}', '{agent}', "
-                f"'{prompt_text}', '{prompt_template}', '{prompt_category}', "
-                f"'{prompt_metadata}', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
-            )
+    # Insert queue rows into PostgreSQL
+    dbutils = DBUtils(spark)
+    database_url = dbutils.secrets.get(scope="benchmark", key="database_url")
 
-    # Insert in batches of 100
-    batch_size = 100
-    for i in range(0, len(queue_values), batch_size):
-        batch = queue_values[i : i + batch_size]
-        spark.sql(f"""
-            INSERT INTO {catalog}.{schema}.worker_queue
-            (id, run_id, prompt_id, agent, prompt_text, prompt_template, prompt_category,
-             prompt_metadata_json, status, claimed_at, completed_at, worker_id, transcript_path,
-             cost_usd, duration_ms, exit_code, error)
-            VALUES {', '.join(batch)}
-        """)
+    conn = psycopg2.connect(database_url)
+    try:
+        with conn.cursor() as cur:
+            for prompt in prompts:
+                for agent in assistants:
+                    task_id = str(uuid.uuid4())
+                    cur.execute(
+                        """
+                        INSERT INTO worker_queue
+                            (id, run_id, prompt_id, agent, prompt_text, prompt_template,
+                             prompt_category, prompt_metadata_json, status)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                        """,
+                        (
+                            task_id,
+                            run_id,
+                            prompt["id"],
+                            agent,
+                            prompt["text"] or "",
+                            prompt["template"] or "",
+                            prompt["category"] or "",
+                            prompt["metadata"] or "{}",
+                        ),
+                    )
+        conn.commit()
+    finally:
+        conn.close()
 
     print(f"Created benchmark run {run_id}: {total_pairs} pairs ({len(prompts)} prompts × {len(assistants)} agents)")
 
 
 def _ensure_tables(spark: SparkSession, catalog: str, schema: str) -> None:
-    """Ensure run management tables exist."""
+    """Ensure Databricks run management tables exist."""
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 
     spark.sql(f"""
@@ -126,29 +132,6 @@ def _ensure_tables(spark: SparkSession, catalog: str, schema: str) -> None:
             total_cost_usd DOUBLE,
             started_at STRING,
             completed_at STRING
-        )
-        USING DELTA
-    """)
-
-    spark.sql(f"""
-        CREATE TABLE IF NOT EXISTS {catalog}.{schema}.worker_queue (
-            id STRING NOT NULL,
-            run_id STRING,
-            prompt_id STRING,
-            agent STRING,
-            prompt_text STRING,
-            prompt_template STRING,
-            prompt_category STRING,
-            prompt_metadata_json STRING,
-            status STRING,
-            claimed_at STRING,
-            completed_at STRING,
-            worker_id STRING,
-            transcript_path STRING,
-            cost_usd DOUBLE,
-            duration_ms LONG,
-            exit_code INT,
-            error STRING
         )
         USING DELTA
     """)
