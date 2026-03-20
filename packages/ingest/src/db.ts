@@ -243,6 +243,11 @@ const SCHEMA_STATEMENTS = [
     UNIQUE(job_id, prompt_id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_fast_bench_job ON fast_benchmark_responses(job_id)`,
+
+  // Seed the uncategorized category for auto-discovered vendors
+  `INSERT INTO categories (id, display_name, description, icon)
+   VALUES ('uncategorized', 'Uncategorized', 'Auto-discovered vendors not yet categorized', '❓')
+   ON CONFLICT(id) DO NOTHING`,
 ];
 
 export class ObservatoryDB {

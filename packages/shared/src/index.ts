@@ -42,10 +42,13 @@ export type {
   VendorRejectionRow,
   // Evidence linking
   EvidenceRef,
+  // Unknown package discovery
+  UnknownPackage,
+  ExtractionResult,
 } from "./types.js";
 
 // ── Extractor ───────────────────────────────────────────────────────
-export { extractVendorMentions } from "./extractor.js";
+export { extractVendorMentions, extractVendorMentionsWithUnknowns } from "./extractor.js";
 export type { ExtractorOptions } from "./extractor.js";
 
 // ── Rejection Extractor ─────────────────────────────────────────────
@@ -65,7 +68,7 @@ export {
 export { classifyIntent, classifyIntents } from "./intent-classifier.js";
 
 // ── Package Map ─────────────────────────────────────────────────────
-export { PACKAGE_TO_VENDOR, resolvePackageToVendor } from "./package-map.js";
+export { PACKAGE_TO_VENDOR, resolvePackageToVendor, isBlocklistedPackage, deriveVendorFromPackageName } from "./package-map.js";
 
 // ── Normalizer ──────────────────────────────────────────────────────
 export { normalizeVendorName } from "./normalizer.js";

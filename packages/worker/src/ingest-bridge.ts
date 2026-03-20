@@ -1,14 +1,16 @@
 import { Pool } from "pg";
 import {
   extractVendorMentions,
+  extractVendorMentionsWithUnknowns,
   extractVendorRejections,
   extractResponseContext,
   classifyIntent,
   loadVendorTaxonomyFromDb,
   loadPackageMapFromDb,
   createPackageResolver,
+  deriveVendorFromPackageName,
 } from "@obs/shared";
-import type { VendorTaxonomy, ParsedSession } from "@obs/shared";
+import type { VendorTaxonomy, ParsedSession, UnknownPackage } from "@obs/shared";
 import type { BenchmarkResult } from "@obs/benchmark/lib";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +31,16 @@ async function getPackageResolver(pool: Pool): Promise<(pkg: string) => string |
   const packageMap = await loadPackageMapFromDb(pool);
   _packageResolver = createPackageResolver(packageMap);
   return _packageResolver;
+}
+
+/**
+ * Invalidate cached taxonomy and package resolver so the next call
+ * to getTaxonomy/getPackageResolver reloads from the database.
+ * Used after creating dynamic vendor entries during two-pass extraction.
+ */
+function invalidateTaxonomyCache(): void {
+  _taxonomy = null;
+  _packageResolver = null;
 }
 
 // ── Transcript parsers (inline, lightweight) ────────────────────────
@@ -199,14 +211,20 @@ export async function ingestResults(
       session.filePath,
     ]);
 
-    // Extract vendor mentions
+    // ── Pass 1: Extract vendor mentions + collect unknown packages ──
     let lastUserText: string | null = null;
+    const allUnknowns: UnknownPackage[] = [];
+
     for (const turn of session.turns) {
       if (turn.role === "user" && turn.textContent) {
         lastUserText = turn.textContent.slice(0, 300);
       }
 
-      const mentions = extractVendorMentions(turn, taxonomy, lastUserText, { packageResolver });
+      const { mentions, unknownPackages } = extractVendorMentionsWithUnknowns(
+        turn, taxonomy, lastUserText, { packageResolver },
+      );
+      allUnknowns.push(...unknownPackages);
+
       for (const mention of mentions) {
         await pool.query(`
           INSERT INTO observations
@@ -224,6 +242,79 @@ export async function ingestResults(
           mention.userPromptSnippet,
           mention.timestamp,
         ]);
+      }
+    }
+
+    // ── Create dynamic vendor entries for unknown packages ────────
+    if (allUnknowns.length > 0) {
+      // Deduplicate by package name
+      const uniqueUnknowns = new Map<string, UnknownPackage>();
+      for (const u of allUnknowns) {
+        if (!uniqueUnknowns.has(u.packageName)) {
+          uniqueUnknowns.set(u.packageName, u);
+        }
+      }
+
+      let createdCount = 0;
+      for (const [, unknown] of uniqueUnknowns) {
+        const derived = deriveVendorFromPackageName(unknown.packageName);
+
+        await pool.query(`
+          INSERT INTO vendors (canonical_id, display_name, category, synonyms, package_names, is_dynamic)
+          VALUES ($1, $2, 'uncategorized', $3, $4, TRUE)
+          ON CONFLICT(canonical_id) DO UPDATE SET
+            package_names = (
+              SELECT array_agg(DISTINCT elem)
+              FROM unnest(vendors.package_names || $4) AS elem
+            )
+        `, [
+          derived.canonicalId,
+          derived.displayName,
+          derived.synonyms,
+          [unknown.packageName],
+        ]);
+        createdCount++;
+      }
+
+      if (createdCount > 0) {
+        console.log(`[ingest-bridge] Created ${createdCount} dynamic vendor(s) — running pass 2`);
+
+        // Invalidate cache so pass 2 uses fresh taxonomy
+        invalidateTaxonomyCache();
+        const [freshTaxonomy, freshResolver] = await Promise.all([
+          getTaxonomy(pool),
+          getPackageResolver(pool),
+        ]);
+
+        // ── Pass 2: Re-extract with updated taxonomy ──────────────
+        lastUserText = null;
+        for (const turn of session.turns) {
+          if (turn.role === "user" && turn.textContent) {
+            lastUserText = turn.textContent.slice(0, 300);
+          }
+
+          const mentions = extractVendorMentions(
+            turn, freshTaxonomy, lastUserText, { packageResolver: freshResolver },
+          );
+          for (const mention of mentions) {
+            await pool.query(`
+              INSERT INTO observations
+                (session_id, vendor_canonical_id, vendor_raw, mention_type, work_category, confidence, context_snippet, user_prompt_snippet, timestamp)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              ON CONFLICT DO NOTHING
+            `, [
+              session.id,
+              mention.vendorCanonicalId,
+              mention.vendorRaw,
+              mention.mentionType,
+              mention.workCategory,
+              mention.confidence,
+              mention.contextSnippet,
+              mention.userPromptSnippet,
+              mention.timestamp,
+            ]);
+          }
+        }
       }
     }
 

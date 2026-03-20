@@ -17,6 +17,7 @@ import {
   uploadTranscript,
 } from "./databricks-client.js";
 import { createWorkspace } from "@obs/benchmark/workspace";
+import { ingestResults } from "./ingest-bridge.js";
 
 type AdapterResult = {
   exitCode: number;
@@ -222,6 +223,29 @@ async function runTask(
       } catch (err) {
         console.warn(`[databricks-poller] Log upload failed (non-fatal):`, err);
       }
+    }
+
+    // Ingest vendor observations from the benchmark transcript (non-fatal)
+    try {
+      await ingestResults(
+        [{
+          promptId: task.prompt_id,
+          assistant: task.agent as "claude_code" | "codex_cli" | "cursor",
+          transcriptPath: adapterResult.transcriptPath,
+          stdout: adapterResult.stdout,
+          stderr: adapterResult.stderr,
+          exitCode: adapterResult.exitCode,
+          costUsd: adapterResult.costUsd,
+          durationMs,
+          startedAt: new Date(start).toISOString(),
+          endedAt: new Date().toISOString(),
+          error: adapterResult.error,
+        }],
+        task.run_id,
+        pool,
+      );
+    } catch (err) {
+      console.warn(`[databricks-poller] Ingest failed (non-fatal):`, err);
     }
 
     return {

@@ -28,4 +28,5 @@ export const DEFAULT_CATEGORIES: Record<string, CategoryMeta> = {
   code_search:         { displayName: "Code Search",         icon: "🔍", description: "Code search engines, repository indexing" },
   "cross-category":    { displayName: "Cross-Category",      icon: "🔀", description: "Multi-domain prompts spanning several tool categories" },
   other:               { displayName: "Other",               icon: "📦", description: "Vendors that don't fit into a specific category" },
+  uncategorized:       { displayName: "Uncategorized",       icon: "❓", description: "Auto-discovered vendors not yet categorized" },
 };

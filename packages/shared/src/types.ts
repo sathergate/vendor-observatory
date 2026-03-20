@@ -353,6 +353,20 @@ export interface DashboardStats {
   lastIngestedAt: string | null;
 }
 
+// ── Unknown Package Discovery ────────────────────────────────────────
+
+export interface UnknownPackage {
+  packageName: string;       // e.g., "@tanstack/query"
+  installCommand: string;    // full command context
+  timestamp: string;
+  contextSnippet: string;
+}
+
+export interface ExtractionResult {
+  mentions: VendorMention[];
+  unknownPackages: UnknownPackage[];
+}
+
 // ── Evidence Linking ──────────────────────────────────────────────────
 
 export interface EvidenceRef {
