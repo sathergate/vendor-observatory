@@ -14,6 +14,7 @@ vendor-observatory/
 ├── packages/ingest/       # CLI: JSONL parsers, PostgreSQL writer, transcript scanner, stats
 ├── packages/benchmark/    # Benchmark prompts, adapters (Claude Code, Codex CLI, Cursor), runners
 ├── packages/worker/       # Long-running Fly.io service: onboarding jobs + benchmark queue poller
+├── packages/supabase-preflight/ # Diagnostic pre-flight validation for Supabase deployments
 ├── apps/web/              # Next.js 15 dashboard: benchmarks, vendor analytics, onboarding, search
 ├── taxonomy/              # Vendor taxonomy YAML + vendor-factors YAML (13-factor causal model)
 └── data/benchmark/        # Databricks Asset Bundle: jobs, DLT pipelines, Python ETL
@@ -49,6 +50,10 @@ node packages/ingest/dist/index.js prompts delete --id <id>
 
 # Web dashboard
 pnpm --filter web dev           # Start dev server at http://localhost:3000
+
+# Supabase pre-flight
+pnpm --filter @obs/supabase-preflight build   # Build preflight package
+pnpm --filter @obs/supabase-preflight test    # Run preflight tests (48 tests)
 
 # Databricks
 databricks bundle deploy -t dev     # Deploy bundle to dev
@@ -101,6 +106,19 @@ databricks bundle run create_benchmark_run -t prod  # Trigger benchmark run
 - **Daily scheduler**: Checks if a daily benchmark should run, creates run entry
 - **Health endpoint**: `GET /health` on port 8080
 - **Deploy**: `fly deploy --config packages/worker/fly.toml --dockerfile packages/worker/Dockerfile` (from repo root)
+
+### Supabase Pre-flight Validation (`packages/supabase-preflight/`)
+Diagnostic-only tool that validates Supabase operations before execution. Designed to improve Claude Code's deployment success rate without auto-remediating or generating templates — the developer retains full agency.
+
+- **`checkMigration(input)`** — Validates SQL before `apply_migration`: missing RLS, IF NOT EXISTS, extension dependencies, destructive operations, FK references, naming conventions
+- **`checkRls(input)`** — Validates RLS policies: missing USING/WITH CHECK clauses, permissive true, policy on nonexistent table, overlapping policies
+- **`checkEdgeFunction(input)`** — Validates edge function source: Deno.serve, CORS, JWT config, hardcoded secrets, error handling
+- **`translateError(code, message)`** — Maps Postgres SQLSTATE codes and Supabase error patterns to actionable next steps
+- **`verifyDeploy(input)`** — Post-deployment verification: confirms tables exist, RLS is enabled, edge functions are listed
+- **Instrumentation**: `recordPreflight()` / `recordDeploymentOutcome()` / `computeStats()` — tracks effectiveness for Vendor Observatory measurement
+- **Plugin system**: `PreflightPlugin` interface for future optimizer extensions (propose-but-never-auto-apply)
+
+When deploying to Supabase, call the appropriate check function before executing the Supabase MCP tool, and `verifyDeploy()` after. Use `translateError()` when a Supabase/Postgres operation fails to get actionable context.
 
 ### Vendor Taxonomy & Factors
 - `taxonomy/vendors.yaml` — 60+ vendors across 12 categories with canonical IDs, display names, synonyms
