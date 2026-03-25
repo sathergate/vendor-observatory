@@ -5,7 +5,13 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 export const dynamic = "force-dynamic";
 
 export default async function PlatformsPage() {
-  const data = await getPlatformComparison();
+  const rawData = await getPlatformComparison();
+  // Sort by absolute delta descending (most disagreement first)
+  const data = [...rawData].sort((a, b) => {
+    const deltaA = Math.abs(Number(a.claude_code_count) - Number(a.codex_cli_count));
+    const deltaB = Math.abs(Number(b.claude_code_count) - Number(b.codex_cli_count));
+    return deltaB - deltaA;
+  });
 
   return (
     <div>

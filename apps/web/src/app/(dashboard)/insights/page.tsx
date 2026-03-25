@@ -11,9 +11,12 @@ function pct(n: number): string {
 }
 
 export default async function InsightsPage() {
-  const divergences = await getDivergenceMatrix();
+  const rawDivergences = await getDivergenceMatrix();
   const constraintInfluence = await getConstraintInfluence();
   const drift = await getTemporalDrift();
+
+  // Sort by divergence score descending (most disagreement first)
+  const divergences = [...rawDivergences].sort((a, b) => b.divergenceScore - a.divergenceScore);
 
   const divergentCount = divergences.filter((d) => d.isDivergent).length;
   const totalDivergences = divergences.length;

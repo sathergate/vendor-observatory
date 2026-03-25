@@ -11,7 +11,8 @@ export type MentionType =
   | "recommended"
   | "compared"
   | "mentioned"
-  | "rejected";
+  | "rejected"
+  | "custom_diy";
 
 /**
  * Work category for a vendor mention. Now dynamic — categories are stored
@@ -189,7 +190,8 @@ export type VendorDisposition =
   | "compared"
   | "rejected"
   | "mentioned"
-  | "implemented";
+  | "implemented"
+  | "custom_diy";
 
 // ── Enrichment: DB Row Types ────────────────────────────────────────
 
@@ -211,6 +213,7 @@ export interface ResponseContextRow {
   prompt_id: string;
   primary_vendor: string | null;
   is_implemented: boolean;
+  is_custom_diy: boolean;
   rationale_snippet: string | null;
   vendors_mentioned: string;    // JSON array of { vendor, disposition }
   trade_offs_snippet: string | null;
@@ -248,6 +251,7 @@ export interface DisqualificationReason {
 export interface ExtractedResponseContext {
   primaryVendor: string | null;
   isImplemented: boolean;
+  isCustomDiy: boolean;
   rationaleSnippet: string | null;
   vendorsMentioned: VendorDispositionEntry[];
   tradeOffsSnippet: string | null;
@@ -312,6 +316,7 @@ export interface VendorStats {
   compared: number;
   mentioned: number;
   rejected: number;
+  custom_diy: number;
   platforms: string;
 }
 

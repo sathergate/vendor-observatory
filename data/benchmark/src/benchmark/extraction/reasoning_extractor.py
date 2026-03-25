@@ -132,15 +132,21 @@ def extract_response_context(
 
     primary_vendor = _extract_primary_vendor(assistant_text, taxonomy)
     is_implemented = any(p.search(assistant_text) for p in IMPLEMENTATION_MARKERS)
+    is_custom_diy = is_implemented and primary_vendor is None
     rationale_snippet = _extract_first_match(assistant_text, RATIONALE_PATTERNS)
     vendors_mentioned = _extract_vendor_dispositions(assistant_text, taxonomy, primary_vendor)
     trade_offs_snippet = _extract_first_match(assistant_text, TRADE_OFF_SECTION_PATTERNS)
     gotchas_snippet = _extract_first_match(assistant_text, GOTCHA_SECTION_PATTERNS)
     constraints_addressed = _check_constraint_coverage(assistant_text, prompt_constraints)
 
+    # When Custom/DIY detected, set primary_vendor to the pseudo-vendor
+    if is_custom_diy:
+        primary_vendor = "custom-diy"
+
     return ExtractedResponseContext(
         primary_vendor=primary_vendor,
         is_implemented=is_implemented,
+        is_custom_diy=is_custom_diy,
         rationale_snippet=rationale_snippet[:500] if rationale_snippet else None,
         vendors_mentioned=vendors_mentioned,
         trade_offs_snippet=trade_offs_snippet[:500] if trade_offs_snippet else None,

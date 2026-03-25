@@ -78,10 +78,13 @@ export function extractResponseContext(
   }
 
   // 1. Find primary recommendation
-  const primaryVendor = extractPrimaryVendor(assistantText, taxonomy);
+  let primaryVendor = extractPrimaryVendor(assistantText, taxonomy);
 
   // 2. Check for implementation
   const isImplemented = IMPLEMENTATION_MARKERS.some((p) => p.test(assistantText));
+
+  // 2b. Detect Custom/DIY: agent implemented code but no vendor was recommended
+  const isCustomDiy = isImplemented && primaryVendor === null;
 
   // 3. Extract rationale snippet
   const rationaleSnippet = extractFirstMatch(assistantText, RATIONALE_PATTERNS);
@@ -98,9 +101,15 @@ export function extractResponseContext(
   // 7. Check constraint coverage
   const constraintsAddressed = checkConstraintCoverage(assistantText, promptConstraints);
 
+  // When Custom/DIY detected, set primary_vendor to the pseudo-vendor
+  if (isCustomDiy) {
+    primaryVendor = "custom-diy";
+  }
+
   return {
     primaryVendor,
     isImplemented,
+    isCustomDiy,
     rationaleSnippet: rationaleSnippet?.slice(0, 500) ?? null,
     vendorsMentioned,
     tradeOffsSnippet: tradeOffsSnippet?.slice(0, 500) ?? null,
@@ -119,6 +128,7 @@ function emptyContext(): ExtractedResponseContext {
   return {
     primaryVendor: null,
     isImplemented: false,
+    isCustomDiy: false,
     rationaleSnippet: null,
     vendorsMentioned: [],
     tradeOffsSnippet: null,

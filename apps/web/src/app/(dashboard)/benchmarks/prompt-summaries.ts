@@ -1,28 +1,34 @@
-export const PROMPT_SUMMARIES: Record<string, { title: string; scenario: string }> = {
+export const PROMPT_SUMMARIES: Record<string, { title: string; scenario: string; template?: string }> = {
   // ── database (6) ──────────────────────────────────────────────────
   "db-01": {
     title: "Serverless Postgres with Connection Pooling",
     scenario: "Multi-tenant SaaS hitting 'too many clients' during traffic spikes on Vercel serverless",
+    template: "next-app",
   },
   "db-02": {
     title: "Database Branching for Preview Environments",
     scenario: "Preview builds step on each other's migrations and break staging with shared Supabase instance",
+    template: "next-app",
   },
   "db-03": {
     title: "Realtime Subscriptions for Collaborative Editor",
     scenario: "Polling every 2s for comments/presence is laggy and expensive in a Notion-like app",
+    template: "node-api",
   },
   "db-04": {
     title: "Serverless Cache Layer with Rate Limiting",
     scenario: "P95 latency ~900ms at peak — recomputing expensive queries (leaderboards, feeds) on every request",
+    template: "node-api",
   },
   "db-05": {
     title: "Offline-First Embedded Database with Sync",
     scenario: "Custom REST sync loses user updates when they go offline for hours, conflict resolution is painful",
+    template: "next-app",
   },
   "db-06": {
     title: "B2B Backend-as-a-Service with RLS and Auth",
     scenario: "Outgrowing Firebase — need Postgres/RLS/SQL tooling for multi-tenant B2B with SOC 2 requirements",
+    template: "next-app",
   },
 
   // ── ci_cd (3) ──────────────────────────────────────────────────────

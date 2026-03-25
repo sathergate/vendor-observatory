@@ -6,9 +6,14 @@ import {
   getCategorySummaries,
   getIntentDistribution,
   getLatestDigests,
+  getBuildVsBuyRates,
+  getBuildVsBuyOverall,
+  getAgentSplits,
 } from "@/lib/db";
 import { vendorDisplayName } from "@/lib/vendor-taxonomy";
 import { PlatformBadge } from "@/components/PlatformBadge";
+import { BuildVsBuyTable } from "@/components/BuildVsBuyTable";
+import { FindingCallout, generateFindings } from "@/components/FindingCallout";
 import { loadCategoryMeta } from "./categories";
 import { PROMPT_COUNTS } from "./prompt-summaries";
 
@@ -21,6 +26,9 @@ export default async function BenchmarksPage() {
   const dbCategories = await getCategorySummaries();
   const intentDist = await getIntentDistribution();
   const digests = await getLatestDigests(3);
+  const buildVsBuyCategories = await getBuildVsBuyRates();
+  const buildVsBuyOverall = await getBuildVsBuyOverall();
+  const agentSplits = await getAgentSplits();
 
   // Load categories dynamically from DB (falls back to defaults if DB unavailable)
   const CATEGORY_META = await loadCategoryMeta();
@@ -201,6 +209,26 @@ export default async function BenchmarksPage() {
           ))}
         </div>
       </div>
+
+      {/* Agent Split / Consensus Findings */}
+      {agentSplits.length > 0 && (() => {
+        const findings = generateFindings(agentSplits);
+        return findings.length > 0 ? (
+          <div className="space-y-3">
+            {findings.map((f, i) => (
+              <FindingCallout key={i} finding={f.text} variant={f.variant} />
+            ))}
+          </div>
+        ) : null;
+      })()}
+
+      {/* Build vs Buy */}
+      {(buildVsBuyCategories.length > 0 || Object.keys(buildVsBuyOverall).length > 0) && (
+        <BuildVsBuyTable
+          categories={buildVsBuyCategories}
+          overall={buildVsBuyOverall}
+        />
+      )}
 
       {/* Cross-assistant vendor comparison */}
       {vendorComp.length > 0 && (
