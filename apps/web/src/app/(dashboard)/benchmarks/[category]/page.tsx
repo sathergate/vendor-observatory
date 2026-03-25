@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getEnrichmentByCategory, safeJsonParse } from "@/lib/db";
+import { getEnrichmentByCategory, getSideBySideResponses, safeJsonParse } from "@/lib/db";
 import { Breadcrumb } from "@/components/Breadcrumb";
+import { SideBySideComparison } from "@/components/SideBySideComparison";
 import { loadCategoryMeta } from "../categories";
 import { PROMPT_SUMMARIES, PROMPTS_BY_CATEGORY } from "../prompt-summaries";
 import { CONTENT_TAG_LABELS, PATTERN_TAG_LABELS } from "../tag-labels";
@@ -19,6 +20,7 @@ export default async function CategoryDetailPage({
   if (!meta) notFound();
 
   const data = await getEnrichmentByCategory(category);
+  const sideBySideData = await getSideBySideResponses(category);
   const promptIds = PROMPTS_BY_CATEGORY[category] ?? [];
   const hasResponses = data.responses.length > 0;
   const totalRecs = data.vendorCounts.reduce((sum, v) => sum + v.count, 0);
@@ -127,6 +129,33 @@ export default async function CategoryDetailPage({
         </div>
       )}
 
+      {/* Side-by-Side Agent Comparison */}
+      {sideBySideData.size > 0 && (
+        <div>
+          <h2 className="section-header mb-3">Side-by-Side Agent Comparison</h2>
+          <p className="text-secondary text-[13px] mb-4">
+            Same prompt, different agents — compare primary picks and reasoning.
+          </p>
+          <div className="space-y-6">
+            {[...sideBySideData.entries()]
+              .filter(([, responses]) => responses.length >= 2)
+              .slice(0, 5)
+              .map(([promptId, responses]) => {
+                const summary = PROMPT_SUMMARIES[promptId];
+                return (
+                  <SideBySideComparison
+                    key={promptId}
+                    promptId={promptId}
+                    responses={responses}
+                    promptText={summary?.title}
+                    template={summary?.template}
+                  />
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Prompt Breakdown */}
       <div>
         <h2 className="section-header mb-3">Prompt Breakdown</h2>
@@ -161,7 +190,14 @@ export default async function CategoryDetailPage({
                     {summary?.scenario && (
                       <p className="text-[13px] text-secondary mt-0.5">{summary.scenario}</p>
                     )}
-                    <span className="text-muted font-mono text-[12px] mt-1 inline-block">{prompt.prompt_id}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-muted font-mono text-[12px]">{prompt.prompt_id}</span>
+                      {summary?.template && (
+                        <span className="inline-block rounded-[4px] bg-raised px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                          {summary.template}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {responses.length > 0 && (
                     <div className="flex-shrink-0 text-right">

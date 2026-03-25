@@ -38,10 +38,11 @@ interface LLMExtractionResult {
   primary_vendor: string | null;
   confidence: number;
   is_implemented: boolean;
+  is_custom_diy: boolean;
   reasoning_chain: string;
   vendors: Array<{
     vendor: string;
-    disposition: "recommended" | "compared" | "rejected" | "mentioned" | "implemented";
+    disposition: "recommended" | "compared" | "rejected" | "mentioned" | "implemented" | "custom_diy";
   }>;
   disqualification_reasons: Array<{
     vendor: string;
@@ -175,8 +176,9 @@ export async function extractResponseContextWithLLM(
       .filter((c) => promptConstraints.includes(c));
 
     return {
-      primaryVendor: resolvedPrimary,
+      primaryVendor: result.is_custom_diy ? "custom-diy" : resolvedPrimary,
       isImplemented: result.is_implemented,
+      isCustomDiy: result.is_custom_diy ?? false,
       rationaleSnippet: result.rationale?.slice(0, 500) ?? null,
       vendorsMentioned,
       tradeOffsSnippet: result.trade_offs?.slice(0, 500) ?? null,

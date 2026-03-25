@@ -12,6 +12,16 @@ description: >
 vendors:
 
   # ─────────────────────────────────────────────
+  # PSEUDO-VENDOR: Custom/DIY (agent built from scratch)
+  # ─────────────────────────────────────────────
+
+  - canonical_id: custom-diy
+    display_name: Custom/DIY
+    synonyms: [custom, diy, from-scratch, hand-rolled, built-in, roll-your-own]
+    category: _meta
+    website: null
+
+  # ─────────────────────────────────────────────
   # CATEGORY: database
   # ─────────────────────────────────────────────
 

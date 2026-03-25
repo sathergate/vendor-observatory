@@ -89,6 +89,7 @@ const SCHEMA_STATEMENTS = [
     prompt_id TEXT NOT NULL,
     primary_vendor TEXT,
     is_implemented BOOLEAN NOT NULL DEFAULT FALSE,
+    is_custom_diy BOOLEAN NOT NULL DEFAULT FALSE,
     rationale_snippet TEXT,
     vendors_mentioned TEXT NOT NULL DEFAULT '[]',
     trade_offs_snippet TEXT,
@@ -306,6 +307,9 @@ export class ObservatoryDB {
     if (!rcColNames.has("confidence_score")) {
       await this.queryable.query("ALTER TABLE response_context ADD COLUMN confidence_score REAL");
     }
+    if (!rcColNames.has("is_custom_diy")) {
+      await this.queryable.query("ALTER TABLE response_context ADD COLUMN is_custom_diy BOOLEAN NOT NULL DEFAULT FALSE");
+    }
   }
 
   async getIngestedFile(filePath: string): Promise<IngestedFileRow | null> {
@@ -422,6 +426,7 @@ export class ObservatoryDB {
         SUM(CASE WHEN o.mention_type = 'compared' THEN 1 ELSE 0 END) AS compared,
         SUM(CASE WHEN o.mention_type = 'mentioned' THEN 1 ELSE 0 END) AS mentioned,
         SUM(CASE WHEN o.mention_type = 'rejected' THEN 1 ELSE 0 END) AS rejected,
+        SUM(CASE WHEN o.mention_type = 'custom_diy' THEN 1 ELSE 0 END) AS custom_diy,
         string_agg(DISTINCT s.source_platform, ',') AS platforms
       FROM observations o JOIN sessions s ON o.session_id = s.id WHERE ${whereClause}
       GROUP BY o.vendor_canonical_id, o.work_category ORDER BY total DESC
@@ -431,7 +436,7 @@ export class ObservatoryDB {
       category: (r.category as string) || "other", total: Number(r.total), installed: Number(r.installed),
       configured: Number(r.configured), implemented: Number(r.implemented), recommended: Number(r.recommended),
       compared: Number(r.compared), mentioned: Number(r.mentioned), rejected: Number(r.rejected),
-      platforms: (r.platforms as string) || "",
+      custom_diy: Number(r.custom_diy), platforms: (r.platforms as string) || "",
     }));
   }
 
@@ -567,6 +572,7 @@ export class ObservatoryDB {
     promptId: string;
     primaryVendor: string | null;
     isImplemented: boolean;
+    isCustomDiy?: boolean;
     rationaleSnippet: string | null;
     vendorsMentioned: Array<{ vendor: string; disposition: string }>;
     tradeOffsSnippet: string | null;
@@ -577,13 +583,14 @@ export class ObservatoryDB {
     confidenceScore?: number | null;
   }): Promise<void> {
     await this.queryable.query(`
-      INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, rationale_snippet,
-        vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed,
+      INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, is_custom_diy,
+        rationale_snippet, vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed,
         reasoning_chain, disqualification_reasons, confidence_score, extracted_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()::text)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()::text)
       ON CONFLICT(session_id, prompt_id) DO UPDATE SET
         primary_vendor = EXCLUDED.primary_vendor,
         is_implemented = EXCLUDED.is_implemented,
+        is_custom_diy = EXCLUDED.is_custom_diy,
         rationale_snippet = EXCLUDED.rationale_snippet,
         vendors_mentioned = EXCLUDED.vendors_mentioned,
         trade_offs_snippet = EXCLUDED.trade_offs_snippet,
@@ -598,6 +605,7 @@ export class ObservatoryDB {
       ctx.promptId,
       ctx.primaryVendor,
       ctx.isImplemented,
+      ctx.isCustomDiy ?? false,
       ctx.rationaleSnippet,
       JSON.stringify(ctx.vendorsMentioned),
       ctx.tradeOffsSnippet,

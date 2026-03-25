@@ -2514,3 +2514,203 @@ export async function getAlternativeFlows(vendorScope?: string | null): Promise<
     }));
   } catch { return []; }
 }
+
+// ── Build vs Buy (Custom/DIY Rates) ────────────────────────────────
+
+export interface BuildVsBuyRow {
+  category: string;
+  platform: string;
+  total_responses: number;
+  custom_diy_count: number;
+  diy_rate: number;
+}
+
+export interface BuildVsBuyCategoryRow {
+  category: string;
+  platforms: Record<string, { total: number; diyCount: number; diyRate: number }>;
+  delta: number;
+}
+
+export async function getBuildVsBuyRates(): Promise<BuildVsBuyCategoryRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "response_context"))) return [];
+    const { rows } = await pool.query(`
+      SELECT
+        COALESCE(pm.category, 'other') AS category,
+        s.source_platform AS platform,
+        COUNT(*)::int AS total_responses,
+        COUNT(*) FILTER (WHERE rc.is_custom_diy = true)::int AS custom_diy_count,
+        ROUND(COUNT(*) FILTER (WHERE rc.is_custom_diy = true) * 100.0 / NULLIF(COUNT(*), 0), 1) AS diy_rate
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      WHERE s.is_benchmark = true
+      GROUP BY COALESCE(pm.category, 'other'), s.source_platform
+      HAVING COUNT(*) >= 2
+      ORDER BY category, platform
+    `);
+
+    const byCategory = new Map<string, Record<string, { total: number; diyCount: number; diyRate: number }>>();
+    for (const r of rows as BuildVsBuyRow[]) {
+      if (!byCategory.has(r.category)) byCategory.set(r.category, {});
+      byCategory.get(r.category)![r.platform] = {
+        total: Number(r.total_responses),
+        diyCount: Number(r.custom_diy_count),
+        diyRate: Number(r.diy_rate),
+      };
+    }
+
+    const result: BuildVsBuyCategoryRow[] = [];
+    for (const [category, platforms] of byCategory) {
+      const rates = Object.values(platforms).map((p) => p.diyRate);
+      const delta = rates.length >= 2
+        ? Math.max(...rates) - Math.min(...rates)
+        : 0;
+      result.push({ category, platforms, delta });
+    }
+
+    result.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    return result;
+  } catch { return []; }
+}
+
+export async function getBuildVsBuyOverall(): Promise<Record<string, { total: number; diyCount: number; diyRate: number }>> {
+  const pool = getPool();
+  if (!pool) return {};
+  try {
+    if (!(await hasTable(pool, "response_context"))) return {};
+    const { rows } = await pool.query(`
+      SELECT
+        s.source_platform AS platform,
+        COUNT(*)::int AS total_responses,
+        COUNT(*) FILTER (WHERE rc.is_custom_diy = true)::int AS custom_diy_count,
+        ROUND(COUNT(*) FILTER (WHERE rc.is_custom_diy = true) * 100.0 / NULLIF(COUNT(*), 0), 1) AS diy_rate
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      WHERE s.is_benchmark = true
+      GROUP BY s.source_platform
+    `);
+    const result: Record<string, { total: number; diyCount: number; diyRate: number }> = {};
+    for (const r of rows as BuildVsBuyRow[]) {
+      result[r.platform] = {
+        total: Number(r.total_responses),
+        diyCount: Number(r.custom_diy_count),
+        diyRate: Number(r.diy_rate),
+      };
+    }
+    return result;
+  } catch { return {}; }
+}
+
+// ── Agent Splits & Consensus Signals ────────────────────────────────
+
+export interface AgentSplitRow {
+  category: string;
+  prompt_id: string;
+  platforms: Record<string, string>;
+  is_consensus: boolean;
+}
+
+export async function getAgentSplits(): Promise<AgentSplitRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    if (!(await hasTable(pool, "response_context"))) return [];
+    const { rows } = await pool.query(`
+      SELECT
+        COALESCE(pm.category, 'other') AS category,
+        rc.prompt_id,
+        s.source_platform AS platform,
+        rc.primary_vendor
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      WHERE s.is_benchmark = true AND rc.primary_vendor IS NOT NULL
+      ORDER BY rc.prompt_id, s.source_platform
+    `);
+
+    const byPrompt = new Map<string, { category: string; platforms: Record<string, string> }>();
+    for (const r of rows as Array<{ category: string; prompt_id: string; platform: string; primary_vendor: string }>) {
+      if (!byPrompt.has(r.prompt_id)) {
+        byPrompt.set(r.prompt_id, { category: r.category, platforms: {} });
+      }
+      byPrompt.get(r.prompt_id)!.platforms[r.platform] = r.primary_vendor;
+    }
+
+    const result: AgentSplitRow[] = [];
+    for (const [prompt_id, data] of byPrompt) {
+      const vendors = Object.values(data.platforms);
+      if (vendors.length < 2) continue;
+      const uniqueVendors = new Set(vendors);
+      result.push({
+        category: data.category,
+        prompt_id,
+        platforms: data.platforms,
+        is_consensus: uniqueVendors.size === 1,
+      });
+    }
+    return result;
+  } catch { return []; }
+}
+
+// ── Side-by-Side Responses (grouped by prompt) ──────────────────────
+
+export interface SideBySideResponse {
+  prompt_id: string;
+  category: string;
+  platform: string;
+  model_id: string | null;
+  primary_vendor: string | null;
+  is_custom_diy: boolean;
+  rationale_snippet: string | null;
+  reasoning_chain: string | null;
+  trade_offs_snippet: string | null;
+  constraints_addressed: string[];
+}
+
+export async function getSideBySideResponses(category: string): Promise<Map<string, SideBySideResponse[]>> {
+  const pool = getPool();
+  if (!pool) return new Map();
+  try {
+    if (!(await hasTable(pool, "response_context"))) return new Map();
+    const { rows } = await pool.query(`
+      SELECT
+        rc.prompt_id,
+        COALESCE(pm.category, 'other') AS category,
+        s.source_platform AS platform,
+        s.model_id,
+        rc.primary_vendor,
+        COALESCE(rc.is_custom_diy, false) AS is_custom_diy,
+        rc.rationale_snippet,
+        rc.reasoning_chain,
+        rc.trade_offs_snippet,
+        rc.constraints_addressed
+      FROM response_context rc
+      JOIN sessions s ON rc.session_id = s.id
+      LEFT JOIN prompt_metadata pm ON rc.prompt_id = pm.prompt_id
+      WHERE s.is_benchmark = true AND COALESCE(pm.category, 'other') = $1
+      ORDER BY rc.prompt_id, s.source_platform
+    `, [category]);
+
+    const grouped = new Map<string, SideBySideResponse[]>();
+    for (const r of rows as Array<Record<string, unknown>>) {
+      const promptId = r.prompt_id as string;
+      if (!grouped.has(promptId)) grouped.set(promptId, []);
+      grouped.get(promptId)!.push({
+        prompt_id: promptId,
+        category: r.category as string,
+        platform: r.platform as string,
+        model_id: r.model_id as string | null,
+        primary_vendor: r.primary_vendor as string | null,
+        is_custom_diy: r.is_custom_diy as boolean,
+        rationale_snippet: r.rationale_snippet as string | null,
+        reasoning_chain: r.reasoning_chain as string | null,
+        trade_offs_snippet: r.trade_offs_snippet as string | null,
+        constraints_addressed: safeJsonParse<string[]>(r.constraints_addressed as string, []),
+      });
+    }
+    return grouped;
+  } catch { return new Map(); }
+}
