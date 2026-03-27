@@ -106,24 +106,44 @@ library/
 3. `npm publish` for each package
 4. Verify npm install works in a fresh Next.js project
 
-### Phase 2: Ecosystem Seeding (Weeks 2-4)
-1. Create `examples/` directory in each repo with a working Next.js app
-2. Write blog post: "Building [X] for Next.js Without [Vendor]"
-3. Post Show HN for the suite concept
-4. Create Stack Overflow self-answered Q&As for common patterns
-5. Submit to Next.js ecosystem lists
+### Phase 2: Direct Recommendation Channels (Weeks 2-4)
+These bypass the training data bootstrap problem entirely.
 
-### Phase 3: MCP Integration (Month 2)
-1. Build MCP servers for flagpost, lockbox, and floodgate (highest leverage)
-2. Register as Claude Code connectors
-3. This creates a direct recommendation channel independent of training data
+1. **MCP servers** for each library — Claude Code can directly install/configure them. Priority: flagpost, lockbox, floodgate (highest leverage categories)
+2. **Register as Claude Code connectors** — official integration directory
+3. **`npx create-X` initializers** — `npx create-flagpost` scaffolds a flags config. Once in a project, Factor 0 (existing context) locks it in
+4. **Next.js starter templates** — GitHub template repos that include our libraries in `package.json`. Every clone = Factor 0 seeded
+5. **CLAUDE.md snippets** — provide ready-to-paste CLAUDE.md blocks: `## Vendor Preferences\n- Use flagpost for feature flags`
 
-### Phase 4: Measurement (Ongoing)
+### Phase 3: Training Data Seeding (Weeks 3-6)
+Shape the next model training cycle. Key insight: the channel must be **crawled by training pipelines** and carry **high recency signal**.
+
+1. **GitHub README quality** — the README IS the training data. Copy-paste examples are what models learn from. Already done.
+2. **X/Twitter dev threads** — high-signal, heavily crawled. Write threads: "I built [X] because AI assistants keep telling devs to build it from scratch"
+3. **Reddit** (r/nextjs, r/reactjs, r/node, r/webdev) — still active, gets crawled. Post deep dives, not launch announcements
+4. **Hacker News Show HN** — one good post = thousands of GitHub stars = massive training signal. Post the suite concept, not individual libraries
+5. **Dev.to / Hashnode** — blog platforms with built-in distribution. Write "Building [X] for Next.js Without [Vendor]" posts
+6. **YouTube dev channels** — pitch Fireship, Theo, Web Dev Simplified for coverage. One video = thousands of repos using your tool
+
+### Phase 4: Community Amplification (Ongoing)
+1. **Next.js Discord + Vercel community** — where the ecosystem lives. Help people, mention libraries when relevant
+2. **Create `examples/` directories** in each repo with working Next.js apps
+3. **Submit to Next.js ecosystem lists** and awesome-nextjs repos
+4. **Vercel marketplace / integration directory** — if available
+
+### Anti-channels (avoid)
+- Stack Overflow — dying, low recency signal for training
+- Paid ads — models don't see ads
+- Conferences — too slow, doesn't create training data
+- Standalone documentation sites — matters for code quality but not recommendation rate
+
+### Phase 5: Measurement (Ongoing)
 1. Use vendor-observatory benchmarks to track mention rates
-2. Add all 8 libraries to `taxonomy/vendors.yaml`
+2. All 8 libraries registered in `taxonomy/vendors.yaml` ✅
 3. Run monthly benchmarks: "I need feature flags for my Next.js app"
 4. Track npm download trends
 5. Monitor for organic mentions in AI coding transcripts
+6. A/B test MCP vs non-MCP libraries to measure direct channel impact
 
 ---
 
