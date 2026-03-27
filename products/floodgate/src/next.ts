@@ -35,8 +35,8 @@ export interface RateLimitMiddlewareOptions {
  *
  * @example
  * // middleware.ts
- * import { createFloodgate } from "floodgate";
- * import { createRateLimitMiddleware } from "floodgate/next";
+ * import { createFloodgate } from "ratelimit-next";
+ * import { createRateLimitMiddleware } from "ratelimit-next/next";
  *
  * const gate = createFloodgate({ rules: { api: { limit: 100, window: "1m" } } });
  * export default createRateLimitMiddleware(gate, { rule: "api", paths: ["/api/"] });
@@ -103,7 +103,7 @@ export function createRateLimitMiddleware(
  * Returns a 429 response if the limit is exceeded.
  *
  * @example
- * import { rateLimit } from "floodgate/next";
+ * import { rateLimit } from "ratelimit-next/next";
  *
  * export async function GET(request: Request) {
  *   const limited = await rateLimit(gate, "api", request);
@@ -148,7 +148,7 @@ type RouteHandler = (
  * Higher-order function that wraps a Next.js route handler with rate limiting.
  *
  * @example
- * import { withRateLimit } from "floodgate/next";
+ * import { withRateLimit } from "ratelimit-next/next";
  *
  * export const GET = withRateLimit(gate, "api", async (request) => {
  *   return Response.json({ data: "hello" });

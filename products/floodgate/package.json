@@ -1,5 +1,5 @@
 {
-  "name": "floodgate",
+  "name": "ratelimit-next",
   "version": "0.1.0",
   "description": "Rate limiting for Next.js. Zero dependencies.",
   "type": "module",
@@ -9,6 +9,9 @@
     "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" },
     "./adapters/redis": { "types": "./dist/adapters/redis.d.ts", "import": "./dist/adapters/redis.js" },
     "./adapters/vercel-kv": { "types": "./dist/adapters/vercel-kv.d.ts", "import": "./dist/adapters/vercel-kv.js" }
+  },
+  "bin": {
+    "ratelimit-next": "./dist/cli.js"
   },
   "files": ["dist"],
   "scripts": {

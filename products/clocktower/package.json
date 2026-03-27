@@ -1,11 +1,14 @@
 {
-  "name": "clocktower",
+  "name": "croncall",
   "version": "0.1.0",
   "description": "Cron jobs for Next.js. Serverless-native.",
   "type": "module",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" }
+  },
+  "bin": {
+    "croncall": "./dist/cli.js"
   },
   "files": ["dist"],
   "scripts": {

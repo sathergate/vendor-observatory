@@ -1,5 +1,5 @@
 {
-  "name": "herald",
+  "name": "notifykit",
   "version": "0.1.0",
   "description": "Unified notifications for Next.js. Any provider.",
   "type": "module",
@@ -28,6 +28,9 @@
       "types": "./dist/adapters/resend.d.ts",
       "import": "./dist/adapters/resend.js"
     }
+  },
+  "bin": {
+    "notifykit": "./dist/cli.js"
   },
   "files": [
     "dist"

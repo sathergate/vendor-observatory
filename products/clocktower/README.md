@@ -1,4 +1,4 @@
-# clocktower
+# croncall
 
 Cron jobs for Next.js. Serverless-native.
 
@@ -7,7 +7,7 @@ Zero runtime dependencies. TypeScript-first. Works with Vercel Cron out of the b
 ## Install
 
 ```bash
-npm install clocktower
+npm install croncall
 ```
 
 ## Quick Start
@@ -16,7 +16,7 @@ npm install clocktower
 
 ```ts
 // lib/jobs.ts
-import { createClockTower } from "clocktower";
+import { createClockTower } from "croncall";
 
 export const tower = createClockTower({
   jobs: {
@@ -51,7 +51,7 @@ export const tower = createClockTower({
 
 ```ts
 // app/api/cron/route.ts
-import { createCronHandler } from "clocktower/next";
+import { createCronHandler } from "croncall/next";
 import { tower } from "@/lib/jobs";
 
 export const GET = createCronHandler(tower);
@@ -74,7 +74,7 @@ Add cron schedules to `vercel.json`:
 Or generate it programmatically:
 
 ```ts
-import { generateVercelCron } from "clocktower/next";
+import { generateVercelCron } from "croncall/next";
 import { tower } from "./lib/jobs";
 
 console.log(JSON.stringify(generateVercelCron(tower, "/api/cron"), null, 2));
@@ -143,7 +143,7 @@ If no secret is configured, requests are allowed without authentication.
 ### Generating vercel.json
 
 ```ts
-import { generateVercelCron } from "clocktower/next";
+import { generateVercelCron } from "croncall/next";
 import { tower } from "./lib/jobs";
 
 const crons = generateVercelCron(tower, "/api/cron");
@@ -232,7 +232,7 @@ import type {
   JobExecution,
   ScheduleEntry,
   RetryConfig,
-} from "clocktower";
+} from "croncall";
 ```
 
 Job names are fully typed:

@@ -29,7 +29,7 @@ export interface Darkroom {
  * Create a configured Darkroom instance.
  *
  * ```ts
- * import { createDarkroom } from "darkroom";
+ * import { createDarkroom } from "shutterbox";
  *
  * const dr = createDarkroom({
  *   breakpoints: [640, 1024, 1536],

@@ -42,7 +42,7 @@ function positional(index: number): string | undefined {
 
 const env = flag("env") ?? "development";
 const secretsDir = ".secrets";
-const keyPath = ".lockbox-key";
+const keyPath = ".vaultbox-key";
 
 // ---------------------------------------------------------------------------
 // Store helpers
@@ -71,7 +71,7 @@ function loadKeyOrDie(): string {
   const envKey = process.env["LOCKBOX_KEY"];
   if (envKey) return envKey.trim();
   if (!existsSync(keyPath)) {
-    console.error(`Error: No key found. Run "lockbox init" first.`);
+    console.error(`Error: No key found. Run "vaultbox init" first.`);
     process.exit(1);
   }
   return readFileSync(keyPath, "utf8").trim();
@@ -97,20 +97,80 @@ function cmdInit(): void {
     console.log(`Created secrets directory: ${secretsDir}/`);
   }
 
-  // Add .lockbox-key to .gitignore
+  // Add .vaultbox-key to .gitignore
   const gitignorePath = ".gitignore";
   if (existsSync(gitignorePath)) {
     const content = readFileSync(gitignorePath, "utf8");
-    if (!content.includes(".lockbox-key")) {
-      appendFileSync(gitignorePath, "\n.lockbox-key\n");
-      console.log(`Added .lockbox-key to .gitignore`);
+    if (!content.includes(".vaultbox-key")) {
+      appendFileSync(gitignorePath, "\n.vaultbox-key\n");
+      console.log(`Added .vaultbox-key to .gitignore`);
     }
   } else {
-    writeFileSync(gitignorePath, ".lockbox-key\n");
-    console.log(`Created .gitignore with .lockbox-key`);
+    writeFileSync(gitignorePath, ".vaultbox-key\n");
+    console.log(`Created .gitignore with .vaultbox-key`);
   }
 
-  console.log("\nReady. Run `lockbox set <name> <value>` to store a secret.");
+  // --- Ecosystem detection ---
+  const hints: string[] = [];
+
+  // Detect package.json
+  const pkgPath = "package.json";
+  let pkg: Record<string, unknown> | undefined;
+  if (existsSync(pkgPath)) {
+    try {
+      pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
+      console.log(`\nDetected package.json (${(pkg["name"] as string) ?? "unnamed project"})`);
+    } catch {
+      // Malformed package.json — skip ecosystem detection
+    }
+  }
+
+  // Detect .env file
+  if (existsSync(".env")) {
+    hints.push(`Run "vaultbox import .env" to encrypt your existing .env secrets`);
+  }
+
+  if (pkg) {
+    const allDeps: Record<string, string> = {
+      ...((pkg["dependencies"] as Record<string, string>) ?? {}),
+      ...((pkg["devDependencies"] as Record<string, string>) ?? {}),
+    };
+
+    // Detect Vercel (vercel or @vercel/* packages, or vercel scripts)
+    const hasVercel =
+      "vercel" in allDeps ||
+      Object.keys(allDeps).some((d) => d.startsWith("@vercel/")) ||
+      JSON.stringify(pkg["scripts"] ?? {}).includes("vercel");
+
+    if (hasVercel) {
+      hints.push(
+        `Vercel detected. Add LOCKBOX_KEY as an environment variable in your Vercel project settings:` +
+        `\n    vercel env add LOCKBOX_KEY`,
+      );
+    }
+
+    // Detect dotenv
+    if ("dotenv" in allDeps || "dotenv-expand" in allDeps) {
+      hints.push(
+        `You can replace dotenv with lockbox. ` +
+        `lockbox encrypts secrets at rest and loads them the same way.`,
+      );
+    }
+  }
+
+  // --- Success message with next steps ---
+  console.log("\n--- lockbox initialized successfully ---\n");
+  console.log("Next steps:");
+  console.log("  1. lockbox set <NAME> <VALUE>     Store a secret");
+  console.log("  2. lockbox env                     Print secrets as .env format");
+  console.log("  3. Add `import 'lockbox/auto'` to load secrets at runtime");
+
+  if (hints.length > 0) {
+    console.log("\nHints:");
+    for (const hint of hints) {
+      console.log(`  - ${hint}`);
+    }
+  }
 }
 
 function cmdSet(): void {

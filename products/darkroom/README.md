@@ -1,4 +1,4 @@
-# darkroom
+# shutterbox
 
 Image processing pipeline for Next.js.
 
@@ -7,7 +7,7 @@ Complements `next/image` with processing capabilities: resize, crop, format conv
 ## Install
 
 ```bash
-npm install darkroom sharp
+npm install shutterbox sharp
 ```
 
 `sharp` is a peer dependency used for actual image processing. The pipeline builder and types work without it.
@@ -15,7 +15,7 @@ npm install darkroom sharp
 ## Quick Start
 
 ```ts
-import { createDarkroom } from "darkroom";
+import { createDarkroom } from "shutterbox";
 
 const darkroom = createDarkroom();
 
@@ -36,7 +36,7 @@ const result = await darkroom.process("./photo.jpg", pipe);
 The fluent builder produces a serializable array of transforms. No sharp dependency at definition time.
 
 ```ts
-import { pipeline } from "darkroom";
+import { pipeline } from "shutterbox";
 
 const config = pipeline()
   .resize({ width: 1200, height: 630, fit: "cover" })
@@ -119,7 +119,7 @@ const placeholder = await darkroom.placeholder("./photo.jpg");
 ## React Components
 
 ```tsx
-import { Picture, BlurImage, DarkroomProvider, useDarkroom } from "darkroom/react";
+import { Picture, BlurImage, DarkroomProvider, useDarkroom } from "shutterbox/react";
 
 // Wrap your app with DarkroomProvider for useDarkroom() access
 <DarkroomProvider darkroom={darkroom}>
@@ -144,8 +144,8 @@ Create an API route that processes images on-the-fly:
 
 ```ts
 // app/api/image/route.ts
-import { createImageHandler } from "darkroom/next";
-import { createDarkroom } from "darkroom";
+import { createImageHandler } from "shutterbox/next";
+import { createDarkroom } from "shutterbox";
 
 const darkroom = createDarkroom();
 export const GET = createImageHandler(darkroom, {
@@ -165,7 +165,7 @@ Then use query parameters:
 Process all images in a directory during your build:
 
 ```ts
-import { optimizeStaticImages } from "darkroom/next";
+import { optimizeStaticImages } from "shutterbox/next";
 
 await optimizeStaticImages("./public/images", {
   formats: ["webp", "avif"],

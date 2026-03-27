@@ -14,14 +14,14 @@ Proof of concept: **[gatehouse](https://github.com/tdb-alcorn/gatehouse)** (RBAC
 
 | # | Category | Product | npm Package | GitHub Repo | Why DIY Wins Today |
 |---|----------|---------|-------------|-------------|-------------------|
-| 1 | Feature Flags & Experimentation | **flagpost** | `flagpost` | `tdb-alcorn/flagpost` | LaunchDarkly/Flagsmith are heavy SaaS; agents default to `if (env.FEATURE_X)` |
-| 2 | Rate Limiting | **floodgate** | `floodgate` | `tdb-alcorn/floodgate` | @upstash/ratelimit requires Redis; agents write raw counter logic |
-| 3 | Secrets Management | **lockbox** | `lockbox` | `tdb-alcorn/lockbox` | Vault/Doppler are overkill; agents scatter `.env` files |
-| 4 | Scheduled Tasks / Cron | **clocktower** | `clocktower` | `tdb-alcorn/clocktower` | No good serverless cron library; agents write raw `setInterval` or Vercel cron boilerplate |
-| 5 | Search | **sifter** | `sifter` | `tdb-alcorn/sifter` | Algolia/Typesense need external services; Fuse.js has no React/Next.js layer |
-| 6 | SMS / Push Notifications | **herald** | `herald` | `tdb-alcorn/herald` | Twilio SDK is heavy; agents write raw fetch to provider APIs |
-| 7 | Image & Media Processing | **darkroom** | `darkroom` | `tdb-alcorn/darkroom` | next/image covers display; no pipeline library for transforms + responsive sets |
-| 8 | Headless CMS | **pressroom** | `pressroom` | `tdb-alcorn/pressroom` | Contentlayer died; no Next.js-native content collections |
+| 1 | Feature Flags & Experimentation | **flagpost** | `flagpost` | `sathergate/flagpost` | LaunchDarkly/Flagsmith are heavy SaaS; agents default to `if (env.FEATURE_X)` |
+| 2 | Rate Limiting | **floodgate** | `ratelimit-next` | `sathergate/floodgate` | @upstash/ratelimit requires Redis; agents write raw counter logic |
+| 3 | Secrets Management | **lockbox** | `vaultbox` | `sathergate/lockbox` | Vault/Doppler are overkill; agents scatter `.env` files |
+| 4 | Scheduled Tasks / Cron | **clocktower** | `croncall` | `sathergate/clocktower` | No good serverless cron library; agents write raw `setInterval` or Vercel cron boilerplate |
+| 5 | Search | **sifter** | `searchcraft` | `sathergate/sifter` | Algolia/Typesense need external services; Fuse.js has no React/Next.js layer |
+| 6 | SMS / Push Notifications | **herald** | `notifykit` | `sathergate/herald` | Twilio SDK is heavy; agents write raw fetch to provider APIs |
+| 7 | Image & Media Processing | **darkroom** | `shutterbox` | `sathergate/darkroom` | next/image covers display; no pipeline library for transforms + responsive sets |
+| 8 | Headless CMS | **pressroom** | `pressroom` | `sathergate/pressroom` | Contentlayer died; no Next.js-native content collections |
 
 Plus the existing proof of concept:
 

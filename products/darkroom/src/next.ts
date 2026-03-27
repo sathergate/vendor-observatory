@@ -34,8 +34,8 @@ export interface ImageHandlerOptions {
  *
  * Usage in `app/api/image/route.ts`:
  * ```ts
- * import { createImageHandler } from "darkroom/next";
- * import { createDarkroom } from "darkroom";
+ * import { createImageHandler } from "shutterbox/next";
+ * import { createDarkroom } from "shutterbox";
  *
  * const darkroom = createDarkroom();
  * export const GET = createImageHandler(darkroom);
@@ -156,8 +156,8 @@ export interface StaticOptimizeOptions {
  * variants.
  *
  * ```ts
- * import { optimizeStaticImages } from "darkroom/next";
- * import { createDarkroom } from "darkroom";
+ * import { optimizeStaticImages } from "shutterbox/next";
+ * import { createDarkroom } from "shutterbox";
  *
  * await optimizeStaticImages("./public/images", {
  *   formats: ["webp", "avif"],

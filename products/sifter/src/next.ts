@@ -6,7 +6,7 @@ import type { Sifter, SearchOptions } from "./core/types.js";
  * @example
  * ```ts
  * // app/api/search/route.ts
- * import { createSearchHandler } from "sifter/next";
+ * import { createSearchHandler } from "searchcraft/next";
  * import { sifter } from "@/lib/search";
  *
  * export const GET = createSearchHandler(sifter);

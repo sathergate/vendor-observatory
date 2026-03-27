@@ -1,4 +1,4 @@
-# floodgate
+# ratelimit-next
 
 Rate limiting for Next.js. Zero dependencies.
 
@@ -7,7 +7,7 @@ Declarative rules, type-safe API, pluggable stores. Works in Edge Runtime, Node.
 ## Install
 
 ```bash
-npm install floodgate
+npm install ratelimit-next
 ```
 
 ## Quick Start
@@ -16,7 +16,7 @@ npm install floodgate
 
 ```ts
 // lib/rate-limit.ts
-import { createFloodgate } from "floodgate";
+import { createFloodgate } from "ratelimit-next";
 
 export const gate = createFloodgate({
   rules: {
@@ -31,7 +31,7 @@ export const gate = createFloodgate({
 
 ```ts
 // app/api/data/route.ts
-import { withRateLimit } from "floodgate/next";
+import { withRateLimit } from "ratelimit-next/next";
 import { gate } from "@/lib/rate-limit";
 
 export const GET = withRateLimit(gate, "api", async (request) => {
@@ -79,8 +79,8 @@ Apply rate limiting globally via Next.js middleware:
 
 ```ts
 // middleware.ts
-import { createFloodgate } from "floodgate";
-import { createRateLimitMiddleware } from "floodgate/next";
+import { createFloodgate } from "ratelimit-next";
+import { createRateLimitMiddleware } from "ratelimit-next/next";
 
 const gate = createFloodgate({
   rules: { api: { limit: 100, window: "1m" } },
@@ -101,7 +101,7 @@ Three styles to choose from:
 ### `withRateLimit` (HOF)
 
 ```ts
-import { withRateLimit } from "floodgate/next";
+import { withRateLimit } from "ratelimit-next/next";
 
 export const GET = withRateLimit(gate, "api", async (request) => {
   return Response.json({ ok: true });
@@ -111,7 +111,7 @@ export const GET = withRateLimit(gate, "api", async (request) => {
 ### `rateLimit` (guard)
 
 ```ts
-import { rateLimit } from "floodgate/next";
+import { rateLimit } from "ratelimit-next/next";
 
 export async function GET(request: Request) {
   const limited = await rateLimit(gate, "api", request);
@@ -125,7 +125,7 @@ export async function GET(request: Request) {
 
 ```ts
 import { gate } from "@/lib/rate-limit";
-import { RateLimitError } from "floodgate";
+import { RateLimitError } from "ratelimit-next";
 
 export async function GET(request: Request) {
   try {
@@ -145,7 +145,7 @@ export async function GET(request: Request) {
 Client-side components for rate-limit-aware UIs:
 
 ```tsx
-import { RateLimited, useRateLimit, RateLimitProvider } from "floodgate/react";
+import { RateLimited, useRateLimit, RateLimitProvider } from "ratelimit-next/react";
 
 // Wrap your app (optional — configures the check endpoint)
 <RateLimitProvider endpoint="/api/rate-limit">
@@ -187,7 +187,7 @@ export async function GET(request: Request) {
 Zero-config, works everywhere. State is lost on restart. Good for development and single-instance deployments.
 
 ```ts
-import { createFloodgate, MemoryStore } from "floodgate";
+import { createFloodgate, MemoryStore } from "ratelimit-next";
 
 const gate = createFloodgate({
   rules: { api: { limit: 100, window: "1m" } },
@@ -201,8 +201,8 @@ For multi-instance deployments. Requires `ioredis`.
 
 ```ts
 import Redis from "ioredis";
-import { createFloodgate } from "floodgate";
-import { createRedisStore } from "floodgate/adapters/redis";
+import { createFloodgate } from "ratelimit-next";
+import { createRedisStore } from "ratelimit-next/adapters/redis";
 
 const gate = createFloodgate({
   rules: { api: { limit: 100, window: "1m" } },
@@ -216,8 +216,8 @@ For Vercel deployments. Requires `@vercel/kv`.
 
 ```ts
 import { kv } from "@vercel/kv";
-import { createFloodgate } from "floodgate";
-import { createVercelKVStore } from "floodgate/adapters/vercel-kv";
+import { createFloodgate } from "ratelimit-next";
+import { createVercelKVStore } from "ratelimit-next/adapters/vercel-kv";
 
 const gate = createFloodgate({
   rules: { api: { limit: 100, window: "1m" } },

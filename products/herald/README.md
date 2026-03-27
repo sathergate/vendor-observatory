@@ -1,4 +1,4 @@
-# herald
+# notifykit
 
 Unified notifications for Next.js. Any provider.
 
@@ -7,15 +7,15 @@ Send SMS, email, and push notifications through a single API. Provider-agnostic 
 ## Install
 
 ```bash
-npm install herald
+npm install notifykit
 ```
 
 ## Quick Start
 
 ```ts
-import { createHerald } from "herald";
-import { createTwilioProvider } from "herald/adapters/twilio";
-import { createResendProvider } from "herald/adapters/resend";
+import { createHerald } from "notifykit";
+import { createTwilioProvider } from "notifykit/adapters/twilio";
+import { createResendProvider } from "notifykit/adapters/resend";
 
 const herald = createHerald({
   providers: [
@@ -52,7 +52,7 @@ await herald.send({
 ### Twilio (SMS)
 
 ```ts
-import { createTwilioProvider } from "herald/adapters/twilio";
+import { createTwilioProvider } from "notifykit/adapters/twilio";
 
 const twilio = createTwilioProvider({
   accountSid: "AC...",
@@ -67,7 +67,7 @@ Uses the Twilio REST API directly via `fetch`. No SDK dependency.
 
 ```ts
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
-import { createSNSProvider } from "herald/adapters/sns";
+import { createSNSProvider } from "notifykit/adapters/sns";
 
 const sns = createSNSProvider(
   { region: "us-east-1" },
@@ -80,7 +80,7 @@ You provide the AWS SDK classes. Herald stays lightweight.
 ### Resend (Email)
 
 ```ts
-import { createResendProvider } from "herald/adapters/resend";
+import { createResendProvider } from "notifykit/adapters/resend";
 
 const resend = createResendProvider({
   apiKey: "re_...",
@@ -93,7 +93,7 @@ Uses the Resend REST API directly via `fetch`. No SDK dependency.
 ### Custom Provider
 
 ```ts
-import type { NotificationProvider } from "herald";
+import type { NotificationProvider } from "notifykit";
 
 const myProvider: NotificationProvider = {
   channel: "sms",
@@ -133,7 +133,7 @@ await herald.notify("order-shipped", {
 ## React Hooks
 
 ```tsx
-import { HeraldProvider, useHerald, useNotification } from "herald/react";
+import { HeraldProvider, useHerald, useNotification } from "notifykit/react";
 
 function App() {
   return (
@@ -182,7 +182,7 @@ function StatusAwareButton() {
 
 ```ts
 // app/api/notify/route.ts
-import { createNotificationHandler } from "herald/next";
+import { createNotificationHandler } from "notifykit/next";
 import { herald } from "@/lib/herald";
 
 export const POST = createNotificationHandler(herald);
@@ -190,7 +190,7 @@ export const POST = createNotificationHandler(herald);
 
 ```ts
 // app/api/webhooks/notifications/route.ts
-import { createWebhookHandler } from "herald/next";
+import { createWebhookHandler } from "notifykit/next";
 
 export const POST = createWebhookHandler({
   verify: (request, body) => {
@@ -208,7 +208,7 @@ export const POST = createWebhookHandler({
 Implement the `NotificationProvider` interface:
 
 ```ts
-import type { NotificationProvider, Notification, SendResult } from "herald";
+import type { NotificationProvider, Notification, SendResult } from "notifykit";
 
 export function createMyProvider(config: MyConfig): NotificationProvider {
   return {

@@ -17,12 +17,12 @@ export interface RedisClient {
  *
  * @example
  * import Redis from "ioredis";
- * import { createRedisStore } from "floodgate/adapters/redis";
+ * import { createRedisStore } from "ratelimit-next/adapters/redis";
  *
  * const store = createRedisStore(new Redis());
  */
 export function createRedisStore(client: RedisClient): Store {
-  const PREFIX = "floodgate:";
+  const PREFIX = "ratelimit-next:";
 
   return {
     async get(key: string): Promise<string | null> {

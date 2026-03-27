@@ -1,4 +1,4 @@
-# sifter
+# searchcraft
 
 Full-text search for Next.js. No external service.
 
@@ -7,13 +7,13 @@ Sifter is a zero-dependency, in-process full-text search library built for Next.
 ## Install
 
 ```bash
-npm install sifter
+npm install searchcraft
 ```
 
 ## Quick Start
 
 ```ts
-import { createSifter } from "sifter";
+import { createSifter } from "searchcraft";
 
 const sifter = createSifter({
   schema: {
@@ -119,7 +119,7 @@ interface MatchInfo {
 ## React Components
 
 ```bash
-import { SifterProvider, SearchBox, SearchResults, useSearch, useSifter } from "sifter/react";
+import { SifterProvider, SearchBox, SearchResults, useSearch, useSifter } from "searchcraft/react";
 ```
 
 ### SifterProvider
@@ -127,8 +127,8 @@ import { SifterProvider, SearchBox, SearchResults, useSearch, useSifter } from "
 Wrap your search UI in a provider:
 
 ```tsx
-import { createSifter } from "sifter";
-import { SifterProvider, SearchBox, SearchResults } from "sifter/react";
+import { createSifter } from "searchcraft";
+import { SifterProvider, SearchBox, SearchResults } from "searchcraft/react";
 
 const sifter = createSifter({ schema, documents });
 
@@ -181,7 +181,7 @@ Create a search endpoint with zero boilerplate:
 
 ```ts
 // app/api/search/route.ts
-import { createSearchHandler } from "sifter/next";
+import { createSearchHandler } from "searchcraft/next";
 import { sifter } from "@/lib/search";
 
 export const GET = createSearchHandler(sifter);

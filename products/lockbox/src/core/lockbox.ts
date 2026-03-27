@@ -17,7 +17,7 @@ import type {
   EncryptedEnvelope,
 } from "./types.js";
 
-const DEFAULT_KEY_PATH = ".lockbox-key";
+const DEFAULT_KEY_PATH = ".vaultbox-key";
 const DEFAULT_SECRETS_DIR = ".secrets";
 
 function resolveConfig(config?: LockboxConfig) {
@@ -46,7 +46,7 @@ function getEnvFilePath(secretsDir: string, environment: string): string {
 /**
  * Create a lockbox instance for reading encrypted secrets.
  *
- * Loads the encryption key from `.lockbox-key` or `LOCKBOX_KEY` env var,
+ * Loads the encryption key from `.vaultbox-key` or `LOCKBOX_KEY` env var,
  * then reads encrypted secrets from `.secrets/{NODE_ENV}.json`.
  */
 export function createLockbox(config?: LockboxConfig): LockboxInstance {

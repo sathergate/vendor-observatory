@@ -59,7 +59,7 @@ export interface ImageVariant {
 export interface DarkroomConfig {
   /** Named sets of transforms that can be referenced by name. */
   variants?: Record<string, ImageVariant>;
-  /** Directory used for on-disk caching. Defaults to `.darkroom-cache/`. */
+  /** Directory used for on-disk caching. Defaults to `.shutterbox-cache/`. */
   cacheDir?: string;
   /** Breakpoint widths used for responsive image generation. */
   breakpoints?: number[];

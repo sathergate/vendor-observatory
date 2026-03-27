@@ -1,4 +1,4 @@
-# lockbox
+# vaultbox
 
 Encrypted secrets for Next.js. No vault needed.
 
@@ -7,7 +7,7 @@ Store encrypted secrets in your repo. Decrypt them at runtime with a single key.
 ## Install
 
 ```bash
-npm install lockbox
+npm install vaultbox
 ```
 
 ## Quick Start
@@ -24,7 +24,7 @@ npx lockbox set API_KEY "sk-secret-key" --env production
 ```
 
 ```typescript
-import { createLockbox } from "lockbox";
+import { createLockbox } from "vaultbox";
 
 const box = createLockbox();
 
@@ -103,7 +103,7 @@ lockbox import .env.production --env production
 Creates a lockbox instance that reads secrets for the current `NODE_ENV`.
 
 ```typescript
-import { createLockbox } from "lockbox";
+import { createLockbox } from "vaultbox";
 
 const box = createLockbox();
 // Or with custom paths:
@@ -129,7 +129,7 @@ const box = createLockbox({
 Generate a random 256-bit encryption key as a hex string.
 
 ```typescript
-import { generateKey } from "lockbox";
+import { generateKey } from "vaultbox";
 const key = generateKey(); // 64-char hex string
 ```
 

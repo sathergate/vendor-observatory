@@ -5,7 +5,7 @@ import type { Herald, Notification } from "./core/types.js";
  *
  * Usage in app/api/notify/route.ts:
  * ```ts
- * import { createNotificationHandler } from "herald/next";
+ * import { createNotificationHandler } from "notifykit/next";
  * export const POST = createNotificationHandler(herald);
  * ```
  */
@@ -87,7 +87,7 @@ export interface WebhookEvent {
  *
  * Usage in app/api/webhooks/notifications/route.ts:
  * ```ts
- * import { createWebhookHandler } from "herald/next";
+ * import { createWebhookHandler } from "notifykit/next";
  * export const POST = createWebhookHandler({ onStatus: async (event) => { ... } });
  * ```
  */

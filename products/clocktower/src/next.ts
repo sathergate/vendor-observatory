@@ -24,7 +24,7 @@ interface NextRequest {
  * @example
  * ```ts
  * // app/api/cron/route.ts
- * import { createCronHandler } from "clocktower/next";
+ * import { createCronHandler } from "croncall/next";
  * import { tower } from "@/lib/jobs";
  *
  * export const GET = createCronHandler(tower);
@@ -141,7 +141,7 @@ export interface VercelCronEntry {
  *
  * @example
  * ```ts
- * import { generateVercelCron } from "clocktower/next";
+ * import { generateVercelCron } from "croncall/next";
  * import { tower } from "./jobs";
  *
  * // Output: [{ path: "/api/cron?job=syncUsers", schedule: "0 * * * *" }]

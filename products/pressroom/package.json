@@ -8,6 +8,9 @@
     "./react": { "types": "./dist/react.d.ts", "import": "./dist/react.js" },
     "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" }
   },
+  "bin": {
+    "pressroom": "./dist/cli.js"
+  },
   "files": ["dist"],
   "scripts": {
     "build": "tsup",

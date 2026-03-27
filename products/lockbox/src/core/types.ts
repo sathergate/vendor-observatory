@@ -1,6 +1,6 @@
 /** Configuration for a lockbox instance. */
 export interface LockboxConfig {
-  /** Path to the encryption key file. Default: ".lockbox-key" */
+  /** Path to the encryption key file. Default: ".vaultbox-key" */
   keyPath?: string;
   /** Directory where encrypted secret files are stored. Default: ".secrets/" */
   secretsDir?: string;

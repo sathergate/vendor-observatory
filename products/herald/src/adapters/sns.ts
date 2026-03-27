@@ -21,7 +21,7 @@ export interface SNSProviderConfig {
  * Usage:
  * ```ts
  * import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
- * import { createSNSProvider } from "herald/adapters/sns";
+ * import { createSNSProvider } from "notifykit/adapters/sns";
  *
  * const provider = createSNSProvider(
  *   { region: "us-east-1" },

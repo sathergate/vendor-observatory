@@ -1,5 +1,5 @@
 {
-  "name": "sifter",
+  "name": "searchcraft",
   "version": "0.1.0",
   "description": "Full-text search for Next.js. No external service.",
   "type": "module",
@@ -8,6 +8,7 @@
     "./react": { "types": "./dist/react.d.ts", "import": "./dist/react.js" },
     "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" }
   },
+  "bin": { "sifter": "./dist/cli.js" },
   "files": ["dist"],
   "scripts": {
     "build": "tsup",

@@ -1,5 +1,5 @@
 {
-  "name": "lockbox",
+  "name": "vaultbox",
   "version": "0.1.0",
   "description": "Encrypted secrets for Next.js. No vault needed.",
   "type": "module",
@@ -10,7 +10,7 @@
     }
   },
   "bin": {
-    "lockbox": "./dist/cli.js"
+    "vaultbox": "./dist/cli.js"
   },
   "files": [
     "dist"

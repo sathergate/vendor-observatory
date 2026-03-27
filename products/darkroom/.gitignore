@@ -1,4 +1,4 @@
 node_modules/
 dist/
 *.tgz
-.darkroom-cache/
+.shutterbox-cache/

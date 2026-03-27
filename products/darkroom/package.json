@@ -1,5 +1,5 @@
 {
-  "name": "darkroom",
+  "name": "shutterbox",
   "version": "0.1.0",
   "description": "Image processing pipeline for Next.js.",
   "type": "module",
@@ -7,6 +7,9 @@
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./react": { "types": "./dist/react.d.ts", "import": "./dist/react.js" },
     "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" }
+  },
+  "bin": {
+    "shutterbox": "./dist/cli.js"
   },
   "files": ["dist"],
   "scripts": {

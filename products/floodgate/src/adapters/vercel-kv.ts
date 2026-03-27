@@ -16,12 +16,12 @@ export interface VercelKVClient {
  *
  * @example
  * import { kv } from "@vercel/kv";
- * import { createVercelKVStore } from "floodgate/adapters/vercel-kv";
+ * import { createVercelKVStore } from "ratelimit-next/adapters/vercel-kv";
  *
  * const store = createVercelKVStore(kv);
  */
 export function createVercelKVStore(client: VercelKVClient): Store {
-  const PREFIX = "floodgate:";
+  const PREFIX = "ratelimit-next:";
 
   return {
     async get(key: string): Promise<string | null> {

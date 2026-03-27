@@ -17,6 +17,9 @@
       "import": "./dist/next.js"
     }
   },
+  "bin": {
+    "flagpost": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
