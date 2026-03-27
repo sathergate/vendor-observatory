@@ -404,7 +404,7 @@ program
 program
   .command("stats")
   .description("Show statistics from the observation database")
-  .option("--by <dimension>", "Group by: vendor, platform, category, action", "vendor")
+  .option("--by <dimension>", "Group by: vendor, platform, category, action, downloads", "vendor")
   .option("--db <url>", "PostgreSQL connection string")
   .action(async (opts) => {
     const dbUrl = getDbUrl(opts);
@@ -510,8 +510,59 @@ program
         break;
       }
 
+      case "downloads": {
+        const { PACKAGE_TO_VENDOR, fetchVendorNpmDownloads } = await import("@obs/shared");
+        console.log(chalk.dim("Fetching npm download counts for all tracked vendors...\n"));
+        const vendorDownloads = await fetchVendorNpmDownloads(PACKAGE_TO_VENDOR);
+        if (vendorDownloads.size === 0) {
+          console.log(chalk.yellow("No download data retrieved."));
+          break;
+        }
+
+        // Optionally cross-reference with mention stats
+        const vendorStats = await db.getVendorStats();
+        const mentionMap = new Map(vendorStats.map(s => [s.vendor_canonical_id, s.total]));
+
+        const rows = [...vendorDownloads.entries()]
+          .map(([vendor, dl]) => ({
+            vendor,
+            packages: dl.package,
+            weekly: dl.weekly,
+            monthly: dl.monthly,
+            mentions: mentionMap.get(vendor) ?? 0,
+            ratio: mentionMap.get(vendor)
+              ? Math.round(dl.weekly / mentionMap.get(vendor)!)
+              : null,
+          }))
+          .sort((a, b) => b.weekly - a.weekly);
+
+        console.log(
+          chalk.bold(
+            "Vendor".padEnd(22) +
+            "Weekly".padStart(10) +
+            "Monthly".padStart(10) +
+            "Mentions".padStart(10) +
+            "DL/Mention".padStart(12) +
+            "  Packages",
+          ),
+        );
+        console.log("─".repeat(90));
+        for (const r of rows) {
+          console.log(
+            r.vendor.padEnd(22) +
+            String(r.weekly.toLocaleString()).padStart(10) +
+            String(r.monthly.toLocaleString()).padStart(10) +
+            String(r.mentions).padStart(10) +
+            (r.ratio !== null ? String(r.ratio.toLocaleString()) : "—").padStart(12) +
+            "  " + r.packages.slice(0, 40),
+          );
+        }
+        console.log(chalk.dim(`\n  ${rows.length} vendors with npm packages tracked.`));
+        break;
+      }
+
       default:
-        console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, or action.`));
+        console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, action, or downloads.`));
         process.exit(1);
     }
 

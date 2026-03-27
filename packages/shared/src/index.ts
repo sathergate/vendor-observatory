@@ -85,6 +85,15 @@ export {
 } from "./prompt-store.js";
 export type { PromptKind, PromptRow } from "./prompt-store.js";
 
+// ── npm Downloads ──────────────────────────────────────────────────
+export {
+  fetchNpmDownloads,
+  fetchBulkNpmDownloads,
+  fetchVendorNpmDownloads,
+  buildVendorToPackagesMap,
+} from "./npm-downloads.js";
+export type { NpmDownloadPoint, NpmDownloadComparison } from "./npm-downloads.js";
+
 // ── Loaders ─────────────────────────────────────────────────────────
 export { loadVendorTaxonomy } from "./taxonomy-loader.js";
 
