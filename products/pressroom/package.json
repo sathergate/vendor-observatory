@@ -1,0 +1,38 @@
+{
+  "name": "pressroom",
+  "version": "0.1.0",
+  "description": "Type-safe content collections for Next.js.",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./react": { "types": "./dist/react.d.ts", "import": "./dist/react.js" },
+    "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "next": ">=14"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "next": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/node": "^22.0.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["cms", "content", "mdx", "markdown", "collections", "nextjs", "headless", "blog"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/sathergate/pressroom" },
+  "homepage": "https://github.com/sathergate/pressroom#readme"
+}

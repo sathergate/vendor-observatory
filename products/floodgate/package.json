@@ -1,0 +1,40 @@
+{
+  "name": "floodgate",
+  "version": "0.1.0",
+  "description": "Rate limiting for Next.js. Zero dependencies.",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./react": { "types": "./dist/react.d.ts", "import": "./dist/react.js" },
+    "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js" },
+    "./adapters/redis": { "types": "./dist/adapters/redis.d.ts", "import": "./dist/adapters/redis.js" },
+    "./adapters/vercel-kv": { "types": "./dist/adapters/vercel-kv.d.ts", "import": "./dist/adapters/vercel-kv.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "next": ">=14"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "next": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/node": "^22.0.0",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": ["rate-limit", "rate-limiting", "throttle", "nextjs", "middleware", "api", "edge"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/sathergate/floodgate" },
+  "homepage": "https://github.com/sathergate/floodgate#readme"
+}

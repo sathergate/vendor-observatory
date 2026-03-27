@@ -1,0 +1,45 @@
+{
+  "name": "lockbox",
+  "version": "0.1.0",
+  "description": "Encrypted secrets for Next.js. No vault needed.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "lockbox": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "secrets",
+    "encryption",
+    "env",
+    "environment",
+    "vault",
+    "config",
+    "dotenv",
+    "security"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sathergate/lockbox"
+  },
+  "homepage": "https://github.com/sathergate/lockbox#readme"
+}
