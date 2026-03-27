@@ -561,11 +561,68 @@ program
         break;
       }
 
+      case "downloads-history": {
+        const history = await db.getNpmDownloadHistory(undefined, 30);
+        if (history.length === 0) {
+          console.log(chalk.yellow("No download history found. Run `obs downloads-snapshot` first."));
+          break;
+        }
+        console.log(
+          chalk.bold(
+            "Date".padEnd(12) +
+            "Vendor".padEnd(22) +
+            "Weekly".padStart(10) +
+            "Monthly".padStart(10) +
+            "  Package",
+          ),
+        );
+        console.log("─".repeat(80));
+        for (const h of history) {
+          const date = h.recorded_at.slice(0, 10);
+          console.log(
+            date.padEnd(12) +
+            h.vendor_canonical_id.padEnd(22) +
+            String(h.weekly_downloads.toLocaleString()).padStart(10) +
+            String(h.monthly_downloads.toLocaleString()).padStart(10) +
+            "  " + h.npm_package.slice(0, 30),
+          );
+        }
+        console.log(chalk.dim(`\n  ${history.length} snapshots in last 30 days.`));
+        break;
+      }
+
       default:
-        console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, action, or downloads.`));
+        console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, action, downloads, or downloads-history.`));
         process.exit(1);
     }
 
+    await db.close();
+  });
+
+// ── Downloads Snapshot Command ──────────────────────────────────────
+
+program
+  .command("downloads-snapshot")
+  .description("Capture npm download counts for all tracked vendors and save to database")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const { PACKAGE_TO_VENDOR, fetchBulkNpmDownloads } = await import("@obs/shared");
+
+    console.log(chalk.blue("\nCapturing npm download snapshot...\n"));
+    const allPackages = Object.keys(PACKAGE_TO_VENDOR);
+    const downloads = await fetchBulkNpmDownloads(allPackages);
+
+    const snapshots = downloads.map((dl) => ({
+      vendorId: PACKAGE_TO_VENDOR[dl.package],
+      npmPackage: dl.package,
+      weekly: dl.weekly,
+      monthly: dl.monthly,
+    }));
+
+    const saved = await db.saveNpmDownloadBatch(snapshots);
+    console.log(chalk.green(`  Saved ${saved} download snapshots for ${new Set(snapshots.map(s => s.vendorId)).size} vendors.`));
     await db.close();
   });
 

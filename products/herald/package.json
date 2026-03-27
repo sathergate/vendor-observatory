@@ -27,6 +27,10 @@
     "./adapters/resend": {
       "types": "./dist/adapters/resend.d.ts",
       "import": "./dist/adapters/resend.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "import": "./dist/mcp.js"
     }
   },
   "bin": {

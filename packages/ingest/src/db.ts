@@ -245,6 +245,19 @@ const SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_fast_bench_job ON fast_benchmark_responses(job_id)`,
 
+  // npm download snapshots for historical tracking
+  `CREATE TABLE IF NOT EXISTS npm_download_snapshots (
+    id SERIAL PRIMARY KEY,
+    vendor_canonical_id TEXT NOT NULL,
+    npm_package TEXT NOT NULL,
+    weekly_downloads INTEGER NOT NULL DEFAULT 0,
+    monthly_downloads INTEGER NOT NULL DEFAULT 0,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(vendor_canonical_id, npm_package, (recorded_at::date))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_npm_snapshots_vendor ON npm_download_snapshots(vendor_canonical_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_npm_snapshots_date ON npm_download_snapshots(recorded_at)`,
+
   // Seed the uncategorized category for auto-discovered vendors
   `INSERT INTO categories (id, display_name, description, icon)
    VALUES ('uncategorized', 'Uncategorized', 'Auto-discovered vendors not yet categorized', '❓')
@@ -492,6 +505,50 @@ export class ObservatoryDB {
         mentioned_total: Number(r.mentioned_total), recommended_total: rec, installed_total: inst,
         conversion_rate: rec > 0 ? inst / rec : 0 };
     });
+  }
+
+  // ── npm Download Snapshots ──────────────────────────────────────────
+
+  async saveNpmDownloadSnapshot(
+    vendorId: string,
+    npmPackage: string,
+    weekly: number,
+    monthly: number,
+  ): Promise<void> {
+    await this.queryable.query(
+      `INSERT INTO npm_download_snapshots (vendor_canonical_id, npm_package, weekly_downloads, monthly_downloads)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (vendor_canonical_id, npm_package, (recorded_at::date)) DO UPDATE
+       SET weekly_downloads = EXCLUDED.weekly_downloads, monthly_downloads = EXCLUDED.monthly_downloads`,
+      [vendorId, npmPackage, weekly, monthly],
+    );
+  }
+
+  async saveNpmDownloadBatch(
+    snapshots: Array<{ vendorId: string; npmPackage: string; weekly: number; monthly: number }>,
+  ): Promise<number> {
+    let saved = 0;
+    for (const s of snapshots) {
+      await this.saveNpmDownloadSnapshot(s.vendorId, s.npmPackage, s.weekly, s.monthly);
+      saved++;
+    }
+    return saved;
+  }
+
+  async getNpmDownloadHistory(
+    vendorId?: string,
+    days = 30,
+  ): Promise<Array<{ vendor_canonical_id: string; npm_package: string; weekly_downloads: number; monthly_downloads: number; recorded_at: string }>> {
+    let sql = `SELECT vendor_canonical_id, npm_package, weekly_downloads, monthly_downloads, recorded_at::text
+       FROM npm_download_snapshots WHERE recorded_at >= NOW() - INTERVAL '${days} days'`;
+    const params: string[] = [];
+    if (vendorId) {
+      sql += ` AND vendor_canonical_id = $1`;
+      params.push(vendorId);
+    }
+    sql += ` ORDER BY recorded_at DESC, weekly_downloads DESC`;
+    const { rows } = await this.queryable.query(sql, params);
+    return rows as Array<{ vendor_canonical_id: string; npm_package: string; weekly_downloads: number; monthly_downloads: number; recorded_at: string }>;
   }
 
   async getSessions(limit = 50, offset = 0, platform?: string): Promise<SessionRow[]> {
