@@ -61,12 +61,32 @@ export const PACKAGE_TO_VENDOR: Record<string, string> = {
   "@devcycle/nodejs-server-sdk": "devcycle",
   "statsig-node": "statsig",
   "statsig-js": "statsig",
+  "flagpost": "flagpost",
 
   // ── Secrets Management ────────────────────────────────────────────
   "@doppler/sdk": "doppler",
   "infisical-node": "infisical",
   "@infisical/sdk": "infisical",
   "@aws-sdk/client-secrets-manager": "aws-secrets-manager",
+  "vaultbox": "lockbox",
+
+  // ── Rate Limiting ─────────────────────────────────────────────────
+  "ratelimit-next": "floodgate",
+
+  // ── Scheduled Tasks ───────────────────────────────────────────────
+  "croncall": "clocktower",
+
+  // ── Search ────────────────────────────────────────────────────────
+  "searchcraft": "sifter",
+
+  // ── Notifications ─────────────────────────────────────────────────
+  "notifykit": "herald",
+
+  // ── Image Processing ──────────────────────────────────────────────
+  "shutterbox": "darkroom",
+
+  // ── Content Collections ───────────────────────────────────────────
+  "pressroom": "pressroom",
 
   // ── LLM Observability ─────────────────────────────────────────────
   "langfuse": "langfuse",
