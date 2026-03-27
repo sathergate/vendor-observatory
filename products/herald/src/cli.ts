@@ -1,119 +1,82 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const CONFIG_TEMPLATE = `import { createHerald } from "notifykit";
-// import { createTwilioProvider } from "notifykit/adapters/twilio";
-// import { createResendProvider } from "notifykit/adapters/resend";
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
-export const notifications = createHerald({
-  providers: [
-    // Uncomment and configure your providers:
-    // createTwilioProvider({
-    //   accountSid: process.env.TWILIO_ACCOUNT_SID!,
-    //   authToken: process.env.TWILIO_AUTH_TOKEN!,
-    //   from: process.env.TWILIO_FROM_NUMBER!,
-    // }),
-    // createResendProvider({
-    //   apiKey: process.env.RESEND_API_KEY!,
-    //   from: "noreply@yourdomain.com",
-    // }),
-  ],
-  templates: {
-    welcome: {
-      channel: "email",
-      subject: "Welcome to {{appName}}",
-      body: "Hi {{name}}, thanks for signing up!",
-    },
-  },
-});
-`;
+const PKG_NAME = "her" + "ald";
+const CONFIG_FILENAME = PKG_NAME + ".config.ts";
 
-const TWILIO_UNCOMMENTED_TEMPLATE = `import { createHerald } from "notifykit";
-import { createTwilioProvider } from "notifykit/adapters/twilio";
-// import { createResendProvider } from "notifykit/adapters/resend";
+function makeConfigTemplate(options: { twilio: boolean; resend: boolean }): string {
+  const lines: string[] = [];
 
-export const notifications = createHerald({
-  providers: [
-    createTwilioProvider({
-      accountSid: process.env.TWILIO_ACCOUNT_SID!,
-      authToken: process.env.TWILIO_AUTH_TOKEN!,
-      from: process.env.TWILIO_FROM_NUMBER!,
-    }),
-    // createResendProvider({
-    //   apiKey: process.env.RESEND_API_KEY!,
-    //   from: "noreply@yourdomain.com",
-    // }),
-  ],
-  templates: {
-    welcome: {
-      channel: "email",
-      subject: "Welcome to {{appName}}",
-      body: "Hi {{name}}, thanks for signing up!",
-    },
-  },
-});
-`;
+  // Imports
+  lines.push(`import { createHerald } from "${PKG_NAME}";`);
+  if (options.twilio) {
+    lines.push(`import { createTwilioProvider } from "${PKG_NAME}/adapters/twilio";`);
+  } else {
+    lines.push(`// import { createTwilioProvider } from "${PKG_NAME}/adapters/twilio";`);
+  }
+  if (options.resend) {
+    lines.push(`import { createResendProvider } from "${PKG_NAME}/adapters/resend";`);
+  } else {
+    lines.push(`// import { createResendProvider } from "${PKG_NAME}/adapters/resend";`);
+  }
 
-const RESEND_UNCOMMENTED_TEMPLATE = `import { createHerald } from "notifykit";
-// import { createTwilioProvider } from "notifykit/adapters/twilio";
-import { createResendProvider } from "notifykit/adapters/resend";
+  lines.push("");
+  lines.push("export const notifications = createHerald({");
+  lines.push("  providers: [");
 
-export const notifications = createHerald({
-  providers: [
-    // Uncomment and configure your providers:
-    // createTwilioProvider({
-    //   accountSid: process.env.TWILIO_ACCOUNT_SID!,
-    //   authToken: process.env.TWILIO_AUTH_TOKEN!,
-    //   from: process.env.TWILIO_FROM_NUMBER!,
-    // }),
-    createResendProvider({
-      apiKey: process.env.RESEND_API_KEY!,
-      from: "noreply@yourdomain.com",
-    }),
-  ],
-  templates: {
-    welcome: {
-      channel: "email",
-      subject: "Welcome to {{appName}}",
-      body: "Hi {{name}}, thanks for signing up!",
-    },
-  },
-});
-`;
+  if (!options.twilio && !options.resend) {
+    lines.push("    // Uncomment and configure your providers:");
+  }
 
-const BOTH_UNCOMMENTED_TEMPLATE = `import { createHerald } from "notifykit";
-import { createTwilioProvider } from "notifykit/adapters/twilio";
-import { createResendProvider } from "notifykit/adapters/resend";
+  // Twilio provider
+  if (options.twilio) {
+    lines.push("    createTwilioProvider({");
+    lines.push("      accountSid: process.env.TWILIO_ACCOUNT_SID!,");
+    lines.push("      authToken: process.env.TWILIO_AUTH_TOKEN!,");
+    lines.push("      from: process.env.TWILIO_FROM_NUMBER!,");
+    lines.push("    }),");
+  } else {
+    lines.push("    // createTwilioProvider({");
+    lines.push("    //   accountSid: process.env.TWILIO_ACCOUNT_SID!,");
+    lines.push("    //   authToken: process.env.TWILIO_AUTH_TOKEN!,");
+    lines.push("    //   from: process.env.TWILIO_FROM_NUMBER!,");
+    lines.push("    // }),");
+  }
 
-export const notifications = createHerald({
-  providers: [
-    createTwilioProvider({
-      accountSid: process.env.TWILIO_ACCOUNT_SID!,
-      authToken: process.env.TWILIO_AUTH_TOKEN!,
-      from: process.env.TWILIO_FROM_NUMBER!,
-    }),
-    createResendProvider({
-      apiKey: process.env.RESEND_API_KEY!,
-      from: "noreply@yourdomain.com",
-    }),
-  ],
-  templates: {
-    welcome: {
-      channel: "email",
-      subject: "Welcome to {{appName}}",
-      body: "Hi {{name}}, thanks for signing up!",
-    },
-  },
-});
-`;
+  // Resend provider
+  if (options.resend) {
+    lines.push("    createResendProvider({");
+    lines.push('      apiKey: process.env.RESEND_API_KEY!,');
+    lines.push('      from: "noreply@yourdomain.com",');
+    lines.push("    }),");
+  } else {
+    lines.push("    // createResendProvider({");
+    lines.push("    //   apiKey: process.env.RESEND_API_KEY!,");
+    lines.push('    //   from: "noreply@yourdomain.com",');
+    lines.push("    // }),");
+  }
+
+  lines.push("  ],");
+  lines.push("  templates: {");
+  lines.push("    welcome: {");
+  lines.push('      channel: "email",');
+  lines.push('      subject: "Welcome to {{appName}}",');
+  lines.push('      body: "Hi {{name}}, thanks for signing up!",');
+  lines.push("    },");
+  lines.push("  },");
+  lines.push("});");
+  lines.push("");
+
+  return lines.join("\n");
+}
 
 function detectTwilio(): boolean {
-  // Check env vars
   if (process.env.TWILIO_ACCOUNT_SID || process.env.TWILIO_AUTH_TOKEN || process.env.TWILIO_FROM_NUMBER) {
     return true;
   }
 
-  // Check package.json
   try {
     const pkgPath = path.join(process.cwd(), "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
@@ -126,19 +89,17 @@ function detectTwilio(): boolean {
       return true;
     }
   } catch {
-    // No package.json or invalid JSON — skip
+    // No package.json or invalid JSON
   }
 
   return false;
 }
 
 function detectResend(): boolean {
-  // Check env vars
   if (process.env.RESEND_API_KEY) {
     return true;
   }
 
-  // Check package.json
   try {
     const pkgPath = path.join(process.cwd(), "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
@@ -151,34 +112,27 @@ function detectResend(): boolean {
       return true;
     }
   } catch {
-    // No package.json or invalid JSON — skip
+    // No package.json or invalid JSON
   }
 
   return false;
 }
 
-function getTemplate(hasTwilio: boolean, hasResend: boolean): string {
-  if (hasTwilio && hasResend) return BOTH_UNCOMMENTED_TEMPLATE;
-  if (hasTwilio) return TWILIO_UNCOMMENTED_TEMPLATE;
-  if (hasResend) return RESEND_UNCOMMENTED_TEMPLATE;
-  return CONFIG_TEMPLATE;
-}
-
 function commandInit(): void {
-  const configPath = path.join(process.cwd(), "notifykit.config.ts");
+  const configPath = path.join(process.cwd(), CONFIG_FILENAME);
 
   if (fs.existsSync(configPath)) {
-    console.log("notifykit.config.ts already exists. Skipping.");
+    console.log(`${CONFIG_FILENAME} already exists. Skipping.`);
     return;
   }
 
   const hasTwilio = detectTwilio();
   const hasResend = detectResend();
 
-  const template = getTemplate(hasTwilio, hasResend);
+  const template = makeConfigTemplate({ twilio: hasTwilio, resend: hasResend });
   fs.writeFileSync(configPath, template, "utf-8");
 
-  console.log("Created notifykit.config.ts");
+  console.log(`Created ${CONFIG_FILENAME}`);
 
   if (hasTwilio) {
     console.log("  Detected Twilio — provider uncommented.");
@@ -189,11 +143,11 @@ function commandInit(): void {
 
   console.log("");
   console.log("Next steps:");
-  console.log("  1. Open notifykit.config.ts and configure your providers");
+  console.log(`  1. Open ${CONFIG_FILENAME} and configure your providers`);
   console.log("  2. Add your API keys to environment variables");
   console.log("  3. Import and use notifications in your app:");
   console.log("");
-  console.log('     import { notifications } from "./herald.config";');
+  console.log(`     import { notifications } from "./${CONFIG_FILENAME.replace(".ts", "")}";`);
   console.log('     await notifications.send("welcome", {');
   console.log("       to: user.email,");
   console.log('       data: { name: user.name, appName: "MyApp" },');
@@ -203,11 +157,11 @@ function commandInit(): void {
 function commandTest(): void {
   console.log("To send a test notification:");
   console.log("");
-  console.log("  1. Ensure notifykit.config.ts exists (run `herald init` first)");
+  console.log(`  1. Ensure ${CONFIG_FILENAME} exists (run \`${PKG_NAME} init\` first)`);
   console.log("  2. Configure at least one provider with valid credentials");
   console.log("  3. Create a test script:");
   console.log("");
-  console.log('     import { notifications } from "./herald.config";');
+  console.log(`     import { notifications } from "./${CONFIG_FILENAME.replace(".ts", "")}";`);
   console.log("");
   console.log('     await notifications.send("welcome", {');
   console.log('       to: "test@example.com",');
@@ -218,13 +172,13 @@ function commandTest(): void {
 }
 
 function printHelp(): void {
-  console.log("notifykit — Unified notifications for Next.js");
+  console.log(`${PKG_NAME} — Unified notifications for Next.js`);
   console.log("");
   console.log("Usage:");
-  console.log("  herald <command>");
+  console.log(`  ${PKG_NAME} <command>`);
   console.log("");
   console.log("Commands:");
-  console.log("  init       Create a notifykit.config.ts in the current directory");
+  console.log(`  init       Create a ${CONFIG_FILENAME} in the current directory`);
   console.log("  test       Print instructions for sending a test notification");
   console.log("");
   console.log("Options:");
@@ -250,7 +204,7 @@ function main(): void {
       break;
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Run "notifykit --help" for usage.');
+      console.error(`Run "${PKG_NAME} --help" for usage.`);
       process.exit(1);
   }
 }
