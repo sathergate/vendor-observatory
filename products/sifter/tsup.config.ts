@@ -2,12 +2,12 @@ import { defineConfig } from "tsup";
 
 export default defineConfig([
   {
-    entry: ["src/index.ts", "src/react.tsx", "src/next.ts"],
+    entry: ["src/index.ts", "src/react.tsx", "src/next.ts", "src/mcp.ts"],
     format: ["esm"],
     dts: true,
     splitting: true,
     clean: true,
-    external: ["react", "next"],
+    external: ["react", "next", "@modelcontextprotocol/server", "zod"],
   },
   {
     entry: ["src/cli.ts"],
@@ -15,6 +15,6 @@ export default defineConfig([
     dts: false,
     splitting: false,
     clean: false,
-    external: ["react", "next"],
+    external: ["react", "next", "@modelcontextprotocol/server", "zod"],
   },
 ]);

@@ -9,13 +9,14 @@ export default defineConfig([
       "src/adapters/twilio.ts",
       "src/adapters/sns.ts",
       "src/adapters/resend.ts",
+      "src/mcp.ts",
     ],
     format: ["esm"],
     dts: true,
     splitting: true,
     sourcemap: true,
     clean: true,
-    external: ["react", "next", "twilio", "@aws-sdk/client-sns", "resend"],
+    external: ["react", "next", "twilio", "@aws-sdk/client-sns", "resend", "@modelcontextprotocol/server", "zod"],
   },
   {
     entry: ["src/cli.ts"],
@@ -25,6 +26,6 @@ export default defineConfig([
     },
     sourcemap: true,
     clean: false,
-    external: ["react", "next", "twilio", "@aws-sdk/client-sns", "resend"],
+    external: ["react", "next", "twilio", "@aws-sdk/client-sns", "resend", "@modelcontextprotocol/server", "zod"],
   },
 ]);
