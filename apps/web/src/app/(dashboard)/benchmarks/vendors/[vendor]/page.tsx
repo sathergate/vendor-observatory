@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getVendorScorecard, getVendorHeadToHead, getVendorTrend } from "@/lib/db";
+import { getVendorScorecard, getVendorHeadToHead, getVendorTrend, getReasoningChainsByVendor } from "@/lib/db";
 import { generateRecommendations, computeAIReadinessScore, type Recommendation } from "@/lib/recommendations";
 import { vendorDisplayName, VENDOR_META, vendorCategory } from "@/lib/vendor-taxonomy";
 import { Breadcrumb } from "@/components/Breadcrumb";
@@ -147,7 +147,10 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
   const meta = VENDOR_META[vendorId];
   const recommendations = generateRecommendations(scorecard);
   const aiReadiness = computeAIReadinessScore(scorecard);
-  const trend = await getVendorTrend(vendorId);
+  const [trend, reasoningChains] = await Promise.all([
+    getVendorTrend(vendorId),
+    getReasoningChainsByVendor(vendorId),
+  ]);
 
   // Find top competitor for head-to-head
   const topCompetitor = scorecard.competitorWins[0];
@@ -505,6 +508,47 @@ export default async function VendorScorecardPage({ params }: { params: Promise<
                 <div className="bg-surface rounded-[6px] p-6 border border-border space-y-3">
                   {scorecard.gotchaSnippets.map((s, i) => (
                     <p key={i} className="text-[14px] text-primary border-l-2 border-data-4 pl-3">{s}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Reasoning Chains */}
+            {reasoningChains.length > 0 && (
+              <div>
+                <h2 className="section-header mb-3">AI Reasoning Chains</h2>
+                <p className="text-[13px] text-secondary mb-4">
+                  Step-by-step reasoning AI assistants used when selecting {vendorDisplayName(vendorId)}.
+                  n = {reasoningChains.length} responses with reasoning data.
+                </p>
+                <div className="space-y-3">
+                  {reasoningChains.map((rc, i) => (
+                    <div key={i} className="bg-surface rounded-[6px] border border-border">
+                      <div className="flex items-center gap-2 px-4 py-2 border-b border-border-subtle">
+                        <span className="text-[11px] text-muted font-mono">{rc.prompt_id}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-[6px] bg-raised text-muted">
+                          {rc.platform.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[11px] text-muted">{rc.category.replace(/_/g, " ")}</span>
+                        {rc.constraints_addressed.length > 0 && (
+                          <div className="flex gap-1 ml-auto">
+                            {rc.constraints_addressed.slice(0, 3).map((c) => (
+                              <span key={c} className="text-[10px] px-1 py-0.5 rounded bg-data-1/15 text-data-1">
+                                {c.replace(/_/g, " ")}
+                              </span>
+                            ))}
+                            {rc.constraints_addressed.length > 3 && (
+                              <span className="text-[10px] text-muted">+{rc.constraints_addressed.length - 3}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="px-4 py-3">
+                        <p className="text-[13px] text-primary leading-relaxed whitespace-pre-wrap">
+                          {rc.reasoning_chain}
+                        </p>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

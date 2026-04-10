@@ -2714,3 +2714,59 @@ export async function getSideBySideResponses(category: string): Promise<Map<stri
     return grouped;
   } catch { return new Map(); }
 }
+
+// ── Reasoning Chains ────────────────────────────────────────────────
+
+export interface ReasoningChainRow {
+  prompt_id: string;
+  category: string;
+  platform: string;
+  primary_vendor: string | null;
+  reasoning_chain: string | null;
+  rationale_snippet: string | null;
+  constraints_addressed: string[];
+}
+
+export async function getReasoningChainsByVendor(vendor: string, limit = 20): Promise<ReasoningChainRow[]> {
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    // Try synced tables first, then fall back to non-synced
+    const table = (await hasTable(pool, T_RESPONSE_CONTEXT)) ? T_RESPONSE_CONTEXT : "response_context";
+    const sessTable = (await hasTable(pool, T_SESSIONS)) ? T_SESSIONS : "sessions";
+    const pmTable = (await hasTable(pool, T_PROMPT_METADATA)) ? T_PROMPT_METADATA : "prompt_metadata";
+
+    if (!(await hasTable(pool, table))) return [];
+
+    const { rows } = await pool.query(`
+      SELECT
+        rc.prompt_id,
+        COALESCE(pm.category, 'other') AS category,
+        s.source_platform AS platform,
+        rc.primary_vendor,
+        rc.reasoning_chain,
+        rc.rationale_snippet,
+        rc.constraints_addressed
+      FROM ${table} rc
+      JOIN ${sessTable} s ON rc.session_id = s.id
+      LEFT JOIN ${pmTable} pm ON rc.prompt_id = pm.prompt_id
+      WHERE rc.primary_vendor = $1
+        AND rc.reasoning_chain IS NOT NULL
+        AND rc.reasoning_chain != ''
+      ORDER BY s.started_at DESC
+      LIMIT $2
+    `, [vendor, limit]);
+
+    return rows.map((r: Record<string, unknown>) => ({
+      prompt_id: r.prompt_id as string,
+      category: r.category as string,
+      platform: r.platform as string,
+      primary_vendor: r.primary_vendor as string | null,
+      reasoning_chain: r.reasoning_chain as string | null,
+      rationale_snippet: r.rationale_snippet as string | null,
+      constraints_addressed: safeJsonParse<string[]>(r.constraints_addressed as string, []),
+    }));
+  } catch {
+    return [];
+  }
+}
