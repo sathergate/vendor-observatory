@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { BenchmarkResult, BenchmarkPrompt } from "@obs/benchmark/lib";
+import type { BenchmarkResult, BenchmarkPrompt } from "@sathergate/vendor-observatory-benchmark/lib";
 
 // ── Hoisted mocks (vi.hoisted runs before vi.mock factory) ──────────────
 
@@ -23,8 +23,8 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@obs/benchmark/lib", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@obs/benchmark/lib")>();
+vi.mock("@sathergate/vendor-observatory-benchmark/lib", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@sathergate/vendor-observatory-benchmark/lib")>();
 
   class MockClaudeCodeAdapter {
     name = "claude_code" as const;

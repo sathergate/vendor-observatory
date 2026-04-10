@@ -2,7 +2,7 @@
  * Pure data file — no external dependencies.
  * Contains all benchmark prompt types and the canonical BENCHMARK_PROMPTS array.
  * This file is safe to import from scripts (e.g. db/seed-prompts.ts) without
- * needing @obs/shared to be built first.
+ * needing @sathergate/vendor-observatory-shared to be built first.
  */
 
 /** Minimal pool interface — avoids hard dependency on `pg`. */

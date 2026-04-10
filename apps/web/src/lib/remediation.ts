@@ -1,4 +1,4 @@
-import type { EvidenceRef } from "@obs/shared";
+import type { EvidenceRef } from "@sathergate/vendor-observatory-shared";
 
 // ── Types ────────────────────────────────────────────────────────────
 

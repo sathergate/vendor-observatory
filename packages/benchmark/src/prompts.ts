@@ -2,7 +2,7 @@
  * Re-exports the pure data from prompt-data.ts and adds DB-backed loading.
  *
  * Consumers that only need the BENCHMARK_PROMPTS array (e.g. seed scripts)
- * should import from "./prompt-data.js" directly to avoid pulling in @obs/shared.
+ * should import from "./prompt-data.js" directly to avoid pulling in @sathergate/vendor-observatory-shared.
  */
 export {
   BENCHMARK_PROMPTS,
@@ -13,8 +13,8 @@ export {
   type TemplateType,
 } from "./prompt-data.js";
 
-import { loadPromptsByKind } from "@obs/shared";
-import type { PromptRow } from "@obs/shared";
+import { loadPromptsByKind } from "@sathergate/vendor-observatory-shared";
+import type { PromptRow } from "@sathergate/vendor-observatory-shared";
 import type { BenchmarkPrompt, ContentTag, PatternTag, TemplateType } from "./prompt-data.js";
 
 // ── DB-backed prompt loading ──────────────────────────────────────

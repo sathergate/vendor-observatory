@@ -1,4 +1,4 @@
-import type { SourcePlatform } from "@obs/shared";
+import type { SourcePlatform } from "@sathergate/vendor-observatory-shared";
 
 export interface BenchmarkResult {
   promptId: string;

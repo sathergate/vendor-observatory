@@ -1,5 +1,5 @@
 {
-  "name": "@obs/worker",
+  "name": "@sathergate/vendor-observatory-worker",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@obs/shared": "workspace:*",
-    "@obs/ingest": "workspace:*",
-    "@obs/benchmark": "workspace:*",
+    "@sathergate/vendor-observatory-shared": "workspace:*",
+    "@sathergate/vendor-observatory-ingest": "workspace:*",
+    "@sathergate/vendor-observatory-benchmark": "workspace:*",
     "pg": "^8.18.0"
   },
   "devDependencies": {
