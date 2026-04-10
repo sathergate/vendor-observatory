@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import type { JobStatus, StageStatus } from "@/lib/onboard";
 import { FLAGS } from "@/lib/flags";
@@ -53,6 +53,51 @@ function StageCard({
       </div>
     </div>
   );
+}
+
+// ── Skeleton loading state ──────────────────────────────────────────
+
+function StatusSkeleton() {
+  return (
+    <div className="max-w-xl mx-auto px-6 py-12 animate-pulse">
+      {/* Heading skeleton */}
+      <div className="h-7 bg-raised rounded w-3/5 mb-2" />
+      <div className="h-4 bg-raised rounded w-1/4 mb-8" />
+
+      {/* Stage card skeletons */}
+      <div className="space-y-3 mb-8">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-surface border border-border rounded-[6px] p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 rounded-full bg-raised" />
+              <div className="flex-1">
+                <div className="h-4 bg-raised rounded w-2/5" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Email capture skeleton */}
+      <div className="bg-surface border border-border rounded-[6px] p-6">
+        <div className="h-5 bg-raised rounded w-4/5 mb-2" />
+        <div className="h-4 bg-raised rounded w-3/5 mb-4" />
+        <div className="flex gap-2">
+          <div className="flex-1 h-10 bg-raised rounded-[6px]" />
+          <div className="w-36 h-10 bg-raised rounded-[6px]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Adaptive polling interval ───────────────────────────────────────
+
+function getPollingInterval(status: JobStatus): number {
+  if (status.stages.balanced.status === "complete") return 10_000;
+  if (status.stages.fast.status === "complete") return 8_000;
+  if (status.stages.url_analysis.status === "complete") return 4_000;
+  return 2_000;
 }
 
 // ── Initial diagnosis (FLAG_ONBOARDING_DIAGNOSIS) ───────────────────
@@ -158,29 +203,33 @@ export default function StatusPage() {
   const [email, setEmail] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailSubmitted, setEmailSubmitted] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const poll = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/onboard/analyze/${jobId}`);
+      if (!res.ok) return;
+      const data: JobStatus = await res.json();
+      setStatus(data);
+      if (data.email) setEmailSubmitted(true);
+
+      // Schedule next poll with adaptive interval (stop when comprehensive is done)
+      if (data.stages.comprehensive.status !== "complete") {
+        const delay = getPollingInterval(data);
+        timerRef.current = setTimeout(poll, delay);
+      }
+    } catch {
+      // Retry on next interval
+      timerRef.current = setTimeout(poll, 5_000);
+    }
+  }, [jobId]);
 
   useEffect(() => {
-    let stopped = false;
-
-    async function poll() {
-      try {
-        const res = await fetch(`/api/onboard/analyze/${jobId}`);
-        if (!res.ok) return;
-        const data: JobStatus = await res.json();
-        setStatus(data);
-        if (data.email) setEmailSubmitted(true);
-        if (data.stages.comprehensive.status === "complete") stopped = true;
-      } catch {
-        // ignore fetch errors, retry on next interval
-      }
-    }
-
     poll();
-    const id = setInterval(() => {
-      if (!stopped) poll();
-    }, 2000);
-    return () => clearInterval(id);
-  }, [jobId]);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [poll]);
 
   async function submitEmail(e: React.FormEvent) {
     e.preventDefault();
@@ -200,11 +249,7 @@ export default function StatusPage() {
   }
 
   if (!status) {
-    return (
-      <div className="max-w-xl mx-auto px-6 py-16 text-center text-secondary text-[14px]">
-        Loading...
-      </div>
-    );
+    return <StatusSkeleton />;
   }
 
   const fastDone = status.stages.fast.status === "complete";
@@ -297,11 +342,7 @@ export default function StatusPage() {
       {fastDone && (
         <a
           href={`/get-started/${jobId}/scorecard`}
-          className={`block w-full text-center py-3 rounded-[6px] font-medium text-[14px] transition-colors ${
-            emailSubmitted || status.email
-              ? "bg-accent hover:bg-accent/90"
-              : "bg-raised hover:bg-border-subtle text-secondary"
-          }`}
+          className="block w-full text-center py-3 rounded-[6px] font-medium text-[14px] transition-colors bg-accent hover:bg-accent/90"
         >
           Go to scorecard
         </a>

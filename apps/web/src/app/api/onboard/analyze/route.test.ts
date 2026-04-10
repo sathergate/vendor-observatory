@@ -8,6 +8,7 @@ const mockFindRecentJob = vi.fn();
 vi.mock("@/lib/onboard", () => ({
   createJob: (...args: unknown[]) => mockCreateJob(...args),
   findRecentJob: (...args: unknown[]) => mockFindRecentJob(...args),
+  getPool: () => null,
 }));
 
 beforeEach(() => {

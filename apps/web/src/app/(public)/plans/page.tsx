@@ -1,5 +1,4 @@
 import { cookies } from "next/headers";
-import { EmailAlertSignup } from "@/components/EmailAlertSignup";
 
 const plans = [
   {
@@ -106,13 +105,6 @@ export default async function PlansPage({
         ))}
       </div>
 
-      {/* Email alert signup */}
-      <div className="max-w-md mx-auto">
-        <p className="text-[12px] text-secondary text-center mb-3">
-          Not ready yet? Get notified when your scorecard changes.
-        </p>
-        <EmailAlertSignup defaultEmail={email} />
-      </div>
     </div>
   );
 }

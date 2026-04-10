@@ -8,10 +8,5 @@ export async function POST(
   const { jobId } = await params;
   const { email } = await request.json();
   await saveJobEmail(jobId, email);
-
-  // TODO: When the comprehensive stage completes, send the full report to this email.
-  // For now, just log as a placeholder.
-  console.log(`[onboard] TODO: send comprehensive report email to ${email} for job ${jobId}`);
-
   return NextResponse.json({ success: true });
 }
