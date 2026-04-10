@@ -1,16 +1,6 @@
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
-import { createJob, findRecentJob } from "@/lib/onboard";
+import { createJob, findRecentJob, getPool } from "@/lib/onboard";
 import { runUrlAnalysis } from "@/lib/url-analyzer";
-
-let _pool: Pool | null = null;
-function getPool(): Pool | null {
-  if (_pool) return _pool;
-  const cs = process.env.DATABASE_URL;
-  if (!cs) return null;
-  _pool = new Pool({ connectionString: cs });
-  return _pool;
-}
 
 export async function POST(request: Request) {
   let { url } = await request.json();
@@ -64,11 +54,9 @@ export async function POST(request: Request) {
     } catch (err) {
       console.error("[analyze] Failed to check existing analysis:", err);
     }
-  }
 
-  // Fire URL analysis as a background task (don't await — let the response return immediately).
-  // The worker on Fly.io will pick up fast + balanced benchmarks from the DB.
-  if (pool && process.env.USE_REAL_BENCHMARK === "true") {
+    // Fire URL analysis as a background task (don't await — let the response return immediately).
+    // The worker on Fly.io will pick up fast + balanced benchmarks from the DB.
     runUrlAnalysis(jobId, pool).catch((err) => {
       console.error("[analyze] Background URL analysis failed:", err);
     });

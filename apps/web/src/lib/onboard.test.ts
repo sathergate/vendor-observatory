@@ -22,108 +22,6 @@ async function loadOnboard() {
   return import("./onboard");
 }
 
-// ── domainSeed (tested via exported function) ────────────────────────
-
-describe("domainSeed", () => {
-  it("returns the same value for the same domain + salt (determinism)", async () => {
-    const { domainSeed } = await loadOnboard();
-    const a = domainSeed("sentry.io", 1);
-    const b = domainSeed("sentry.io", 1);
-    expect(a).toBe(b);
-  });
-
-  it("returns different values for different salts", async () => {
-    const { domainSeed } = await loadOnboard();
-    const a = domainSeed("sentry.io", 1);
-    const b = domainSeed("sentry.io", 2);
-    expect(a).not.toBe(b);
-  });
-
-  it("returns different values for different domains", async () => {
-    const { domainSeed } = await loadOnboard();
-    const a = domainSeed("sentry.io", 1);
-    const b = domainSeed("datadog.com", 1);
-    expect(a).not.toBe(b);
-  });
-
-  it("returns a value between 0 and 1", async () => {
-    const { domainSeed } = await loadOnboard();
-    const val = domainSeed("example.com", 42);
-    expect(val).toBeGreaterThanOrEqual(0);
-    expect(val).toBeLessThanOrEqual(1);
-  });
-});
-
-// ── stageStatusFromElapsed ───────────────────────────────────────────
-
-describe("stageStatusFromElapsed", () => {
-  it("elapsed=0: all pending", async () => {
-    const { stageStatusFromElapsed } = await loadOnboard();
-    const s = stageStatusFromElapsed(0);
-    expect(s).toEqual({
-      url_analysis: "pending",
-      fast: "pending",
-      balanced: "pending",
-      comprehensive: "pending",
-    });
-  });
-
-  it("elapsed=1: url_analysis running, rest pending", async () => {
-    const { stageStatusFromElapsed } = await loadOnboard();
-    const s = stageStatusFromElapsed(1);
-    expect(s).toEqual({
-      url_analysis: "running",
-      fast: "pending",
-      balanced: "pending",
-      comprehensive: "pending",
-    });
-  });
-
-  it("elapsed=16: url_analysis complete, fast running, rest pending", async () => {
-    const { stageStatusFromElapsed } = await loadOnboard();
-    const s = stageStatusFromElapsed(16);
-    expect(s).toEqual({
-      url_analysis: "complete",
-      fast: "running",
-      balanced: "pending",
-      comprehensive: "pending",
-    });
-  });
-
-  it("elapsed=31: url_analysis+fast complete, balanced running, comprehensive pending", async () => {
-    const { stageStatusFromElapsed } = await loadOnboard();
-    const s = stageStatusFromElapsed(31);
-    expect(s).toEqual({
-      url_analysis: "complete",
-      fast: "complete",
-      balanced: "running",
-      comprehensive: "pending",
-    });
-  });
-
-  it("elapsed=121: url_analysis+fast+balanced complete, comprehensive running", async () => {
-    const { stageStatusFromElapsed } = await loadOnboard();
-    const s = stageStatusFromElapsed(121);
-    expect(s).toEqual({
-      url_analysis: "complete",
-      fast: "complete",
-      balanced: "complete",
-      comprehensive: "running",
-    });
-  });
-
-  it("elapsed=301: all complete", async () => {
-    const { stageStatusFromElapsed } = await loadOnboard();
-    const s = stageStatusFromElapsed(301);
-    expect(s).toEqual({
-      url_analysis: "complete",
-      fast: "complete",
-      balanced: "complete",
-      comprehensive: "complete",
-    });
-  });
-});
-
 // ── createJob ────────────────────────────────────────────────────────
 
 describe("createJob", () => {
@@ -140,6 +38,15 @@ describe("createJob", () => {
     );
     expect(insertCall).toBeDefined();
     expect(insertCall![1]).toEqual([id, "https://sentry.io", "sentry.io"]);
+  });
+
+  it("throws when DATABASE_URL is not set", async () => {
+    vi.stubEnv("DATABASE_URL", "");
+    const { createJob } = await loadOnboard();
+
+    await expect(createJob("https://sentry.io", "sentry.io")).rejects.toThrow(
+      "DATABASE_URL is required",
+    );
   });
 });
 
@@ -245,17 +152,95 @@ describe("getJobStatus", () => {
     expect(result).toBeNull();
   });
 
-  it("when elapsed is 0s: stages are pending/running with no data", async () => {
-    const now = new Date(Date.now() - 2_000); // 2s ago so elapsed > 0 reliably
+  it("returns pending stages when worker has not claimed the job", async () => {
     mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
+      if (typeof sql === "string" && sql.includes("FROM onboarding_jobs WHERE id")) {
         return {
           rows: [{
             id: "job-1",
-            url: "https://example.com",
-            domain: "example.com",
+            url: "https://sentry.io",
+            domain: "sentry.io",
             email: null,
-            created_at: now.toISOString(),
+            created_at: new Date().toISOString(),
+            product_name: null,
+            detected_category: null,
+            competitors: null,
+            fast_mention_rate: null,
+            fast_session_count: null,
+            fast_platform_coverage: null,
+            fast_competitor_rates: null,
+            balanced_mention_rate: null,
+            balanced_session_count: null,
+            balanced_ai_readiness: null,
+            balanced_platform_coverage: null,
+            balanced_competitor_rates: null,
+            balanced_recommendations: null,
+            comprehensive_mention_rate: null,
+            comprehensive_session_count: null,
+            comprehensive_ai_readiness: null,
+            comprehensive_platform_coverage: null,
+            comprehensive_competitor_rates: null,
+            comprehensive_recommendations: null,
+            comprehensive_constraint_coverage: null,
+            url_analysis_completed_at: null,
+            fast_completed_at: null,
+            balanced_completed_at: null,
+            comprehensive_completed_at: null,
+            worker_claimed_at: null,
+            error: null,
+          }],
+        };
+      }
+      return { rows: [] };
+    });
+    const { getJobStatus } = await loadOnboard();
+
+    const result = await getJobStatus("job-1");
+    expect(result).not.toBeNull();
+    expect(result!.stages.url_analysis.status).toBe("pending");
+    expect(result!.stages.fast.status).toBe("pending");
+    expect(result!.stages.balanced.status).toBe("pending");
+    expect(result!.stages.comprehensive.status).toBe("pending");
+    expect(result!.stages.url_analysis.data).toBeNull();
+    expect(result!.stages.fast.data).toBeNull();
+  });
+
+  it("returns running url_analysis when worker has claimed but not completed", async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (typeof sql === "string" && sql.includes("FROM onboarding_jobs WHERE id")) {
+        return {
+          rows: [{
+            id: "job-1",
+            url: "https://sentry.io",
+            domain: "sentry.io",
+            email: null,
+            created_at: new Date().toISOString(),
+            product_name: null,
+            detected_category: null,
+            competitors: null,
+            fast_mention_rate: null,
+            fast_session_count: null,
+            fast_platform_coverage: null,
+            fast_competitor_rates: null,
+            balanced_mention_rate: null,
+            balanced_session_count: null,
+            balanced_ai_readiness: null,
+            balanced_platform_coverage: null,
+            balanced_competitor_rates: null,
+            balanced_recommendations: null,
+            comprehensive_mention_rate: null,
+            comprehensive_session_count: null,
+            comprehensive_ai_readiness: null,
+            comprehensive_platform_coverage: null,
+            comprehensive_competitor_rates: null,
+            comprehensive_recommendations: null,
+            comprehensive_constraint_coverage: null,
+            url_analysis_completed_at: null,
+            fast_completed_at: null,
+            balanced_completed_at: null,
+            comprehensive_completed_at: null,
+            worker_claimed_at: new Date().toISOString(),
+            error: null,
           }],
         };
       }
@@ -267,21 +252,44 @@ describe("getJobStatus", () => {
     expect(result).not.toBeNull();
     expect(result!.stages.url_analysis.status).toBe("running");
     expect(result!.stages.fast.status).toBe("pending");
-    expect(result!.stages.fast.data).toBeNull();
-    expect(result!.stages.balanced.data).toBeNull();
   });
 
-  it("when elapsed > 30s: url_analysis and fast have data", async () => {
-    const past = new Date(Date.now() - 35_000);
+  it("returns complete url_analysis with data and running fast when url done", async () => {
     mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
+      if (typeof sql === "string" && sql.includes("FROM onboarding_jobs WHERE id")) {
         return {
           rows: [{
             id: "job-1",
             url: "https://sentry.io",
             domain: "sentry.io",
             email: null,
-            created_at: past.toISOString(),
+            created_at: new Date().toISOString(),
+            product_name: "Sentry",
+            detected_category: "error_monitoring",
+            competitors: [{ name: "Datadog", domain: "datadog.com" }],
+            fast_mention_rate: null,
+            fast_session_count: null,
+            fast_platform_coverage: null,
+            fast_competitor_rates: null,
+            balanced_mention_rate: null,
+            balanced_session_count: null,
+            balanced_ai_readiness: null,
+            balanced_platform_coverage: null,
+            balanced_competitor_rates: null,
+            balanced_recommendations: null,
+            comprehensive_mention_rate: null,
+            comprehensive_session_count: null,
+            comprehensive_ai_readiness: null,
+            comprehensive_platform_coverage: null,
+            comprehensive_competitor_rates: null,
+            comprehensive_recommendations: null,
+            comprehensive_constraint_coverage: null,
+            url_analysis_completed_at: new Date().toISOString(),
+            fast_completed_at: null,
+            balanced_completed_at: null,
+            comprehensive_completed_at: null,
+            worker_claimed_at: new Date().toISOString(),
+            error: null,
           }],
         };
       }
@@ -292,109 +300,99 @@ describe("getJobStatus", () => {
     const result = await getJobStatus("job-1");
     expect(result).not.toBeNull();
     expect(result!.stages.url_analysis.status).toBe("complete");
-    expect(result!.stages.url_analysis.data).not.toBeNull();
+    expect(result!.stages.url_analysis.data).toEqual({
+      detected_name: "Sentry",
+      category: "error_monitoring",
+      competitors: ["Datadog"],
+    });
+    expect(result!.stages.fast.status).toBe("running");
+    expect(result!.stages.balanced.status).toBe("pending");
+  });
+
+  it("returns all stages complete with full data shape", async () => {
+    const recs = [
+      { title: "Improve docs", priority: "P1", impact: "HIGH", description: "Better docs" },
+      { title: "Add SDK", priority: "P2", impact: "MEDIUM", description: "Publish SDK" },
+    ];
+    const constraints = [
+      { constraint: "serverless_compatible", addressed_rate: 85 },
+      { constraint: "eu_data_residency", addressed_rate: 42 },
+    ];
+
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (typeof sql === "string" && sql.includes("FROM onboarding_jobs WHERE id")) {
+        return {
+          rows: [{
+            id: "job-1",
+            url: "https://sentry.io",
+            domain: "sentry.io",
+            email: "test@test.com",
+            created_at: new Date().toISOString(),
+            product_name: "Sentry",
+            detected_category: "error_monitoring",
+            competitors: [{ name: "Datadog", domain: "datadog.com" }],
+            fast_mention_rate: 45.2,
+            fast_session_count: 150,
+            fast_platform_coverage: { claude_code: true, codex_cli: true },
+            fast_competitor_rates: null,
+            balanced_mention_rate: 42.8,
+            balanced_session_count: 350,
+            balanced_ai_readiness: 67,
+            balanced_platform_coverage: { claude_code: true, codex_cli: true, cursor: true },
+            balanced_competitor_rates: [{ name: "Datadog", mentionRate: 38.5, delta: 4.3 }],
+            balanced_recommendations: recs,
+            comprehensive_mention_rate: 44.1,
+            comprehensive_session_count: 800,
+            comprehensive_ai_readiness: 72,
+            comprehensive_platform_coverage: { claude_code: true, codex_cli: true, cursor: true },
+            comprehensive_competitor_rates: [{ name: "Datadog", mentionRate: 39.0, delta: 5.1 }],
+            comprehensive_recommendations: recs,
+            comprehensive_constraint_coverage: constraints,
+            url_analysis_completed_at: new Date().toISOString(),
+            fast_completed_at: new Date().toISOString(),
+            balanced_completed_at: new Date().toISOString(),
+            comprehensive_completed_at: new Date().toISOString(),
+            worker_claimed_at: new Date().toISOString(),
+            error: null,
+          }],
+        };
+      }
+      return { rows: [] };
+    });
+    const { getJobStatus } = await loadOnboard();
+
+    const result = await getJobStatus("job-1");
+    expect(result).not.toBeNull();
+
+    // All stages complete
+    expect(result!.stages.url_analysis.status).toBe("complete");
     expect(result!.stages.fast.status).toBe("complete");
-    expect(result!.stages.fast.data).not.toBeNull();
-    expect(result!.stages.fast.data!.mention_rate).toBeGreaterThan(0);
-  });
-
-  it("when elapsed > 120s: balanced has complete data with valid shape", async () => {
-    const past = new Date(Date.now() - 125_000);
-    mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
-        return {
-          rows: [{
-            id: "job-1",
-            url: "https://sentry.io",
-            domain: "sentry.io",
-            email: null,
-            created_at: past.toISOString(),
-          }],
-        };
-      }
-      return { rows: [] };
-    });
-    const { getJobStatus } = await loadOnboard();
-
-    const result = await getJobStatus("job-1");
-    expect(result).not.toBeNull();
     expect(result!.stages.balanced.status).toBe("complete");
-    const balanced = result!.stages.balanced.data;
-    expect(balanced).not.toBeNull();
-    expect(Array.isArray(balanced!.competitor_comparison)).toBe(true);
-    expect(balanced!.recommendation_count).toBeGreaterThan(0);
-    expect(balanced!.top_recommendation).toHaveProperty("priority");
-    expect(balanced!.top_recommendation).toHaveProperty("impact");
-    expect(["P1", "P2", "P3"]).toContain(balanced!.top_recommendation.priority);
-    expect(["HIGH", "MEDIUM", "LOW"]).toContain(balanced!.top_recommendation.impact);
-  });
-
-  it("comprehensive.data has valid shape when elapsed > 300s", async () => {
-    const past = new Date(Date.now() - 400_000);
-    mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
-        return {
-          rows: [{
-            id: "job-1",
-            url: "https://sentry.io",
-            domain: "sentry.io",
-            email: null,
-            created_at: past.toISOString(),
-          }],
-        };
-      }
-      return { rows: [] };
-    });
-    const { getJobStatus } = await loadOnboard();
-
-    const result = await getJobStatus("job-1");
-    expect(result).not.toBeNull();
     expect(result!.stages.comprehensive.status).toBe("complete");
-    const comp = result!.stages.comprehensive.data;
-    expect(comp).not.toBeNull();
-    expect(comp!.sessions_analyzed).toBeGreaterThan(0);
-    expect(comp!.mention_rate).toBeGreaterThanOrEqual(0);
-    expect(comp!.platforms).toContain("Claude Code");
-    expect(comp!.platforms).toContain("Codex CLI");
-    expect(comp!.platforms).toContain("Cursor");
-    expect(comp!.ai_readiness_score).toBeGreaterThanOrEqual(0);
-    expect(Array.isArray(comp!.competitor_comparison)).toBe(true);
-    expect(Array.isArray(comp!.all_recommendations)).toBe(true);
-    expect(comp!.all_recommendations.length).toBeGreaterThan(0);
-    expect(comp!.recommendation_count).toBe(comp!.all_recommendations.length);
-    expect(comp!.top_recommendation).toHaveProperty("priority");
-    expect(comp!.top_recommendation).toHaveProperty("impact");
-    expect(Array.isArray(comp!.constraint_coverage)).toBe(true);
-    expect(comp!.constraint_coverage.length).toBeGreaterThan(0);
-    for (const cc of comp!.constraint_coverage) {
-      expect(cc).toHaveProperty("constraint");
-      expect(cc.addressed_rate).toBeGreaterThanOrEqual(0);
-      expect(cc.addressed_rate).toBeLessThanOrEqual(100);
-    }
-  });
 
-  it("mock data is deterministic: two calls return identical data", async () => {
-    const past = new Date(Date.now() - 200_000);
-    mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === "string" && sql.includes("SELECT id, url, domain, email, created_at")) {
-        return {
-          rows: [{
-            id: "job-1",
-            url: "https://sentry.io",
-            domain: "sentry.io",
-            email: null,
-            created_at: past.toISOString(),
-          }],
-        };
-      }
-      return { rows: [] };
-    });
-    const { getJobStatus } = await loadOnboard();
+    // URL analysis data
+    expect(result!.stages.url_analysis.data!.detected_name).toBe("Sentry");
+    expect(result!.stages.url_analysis.data!.category).toBe("error_monitoring");
+    expect(result!.stages.url_analysis.data!.competitors).toEqual(["Datadog"]);
 
-    const result1 = await getJobStatus("job-1");
-    const result2 = await getJobStatus("job-1");
-    expect(result1!.stages.balanced.data).toEqual(result2!.stages.balanced.data);
-    expect(result1!.stages.fast.data).toEqual(result2!.stages.fast.data);
-    expect(result1!.stages.url_analysis.data).toEqual(result2!.stages.url_analysis.data);
+    // Fast data
+    expect(result!.stages.fast.data!.sessions_analyzed).toBe(150);
+    expect(result!.stages.fast.data!.mention_rate).toBe(45);
+    expect(result!.stages.fast.data!.platforms).toEqual(["claude_code", "codex_cli"]);
+
+    // Balanced data
+    expect(result!.stages.balanced.data!.ai_readiness_score).toBe(67);
+    expect(result!.stages.balanced.data!.competitor_comparison).toHaveLength(1);
+    expect(result!.stages.balanced.data!.competitor_comparison[0].name).toBe("Datadog");
+    expect(result!.stages.balanced.data!.recommendation_count).toBe(2);
+
+    // Comprehensive data
+    expect(result!.stages.comprehensive.data!.ai_readiness_score).toBe(72);
+    expect(result!.stages.comprehensive.data!.all_recommendations).toHaveLength(2);
+    expect(result!.stages.comprehensive.data!.constraint_coverage).toHaveLength(2);
+    expect(result!.stages.comprehensive.data!.constraint_coverage[0].addressed_rate).toBe(85);
+
+    // Email preserved
+    expect(result!.email).toBe("test@test.com");
   });
 });

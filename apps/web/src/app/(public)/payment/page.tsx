@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Pool } from "pg";
+import { getPool } from "@/lib/onboard";
 import PaymentForm from "./PaymentForm";
 
 /**
@@ -9,9 +9,8 @@ import PaymentForm from "./PaymentForm";
 async function resolveVendorFromJob(
   jobId: string,
 ): Promise<{ vendorId: string; vendorName: string } | null> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) return null;
-  const pool = new Pool({ connectionString });
+  const pool = getPool();
+  if (!pool) return null;
   try {
     // Get domain and product name from the onboarding job
     const { rows: jobRows } = await pool.query<{
@@ -48,8 +47,6 @@ async function resolveVendorFromJob(
     return null;
   } catch {
     return null;
-  } finally {
-    await pool.end();
   }
 }
 

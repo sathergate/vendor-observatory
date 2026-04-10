@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type {
   JobStatus,
@@ -65,52 +65,122 @@ function ConstraintBar({ rate }: { rate: number }) {
   );
 }
 
+// ── Skeleton loading state ──────────────────────────────────────────
+
+function ScorecardSkeleton() {
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-12 animate-pulse">
+      {/* Header skeleton */}
+      <div className="mb-8">
+        <div className="h-8 bg-raised rounded w-2/5 mb-3" />
+        <div className="flex items-center gap-3">
+          <div className="h-6 bg-raised rounded-[6px] w-28" />
+          <div className="h-4 bg-raised rounded w-36" />
+        </div>
+      </div>
+
+      {/* Score card skeleton */}
+      <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+        <div className="h-4 bg-raised rounded w-24 mb-3" />
+        <div className="h-12 bg-raised rounded w-20 mb-2" />
+        <div className="h-4 bg-raised rounded w-3/5" />
+      </div>
+
+      {/* Table skeleton */}
+      <div className="bg-surface border border-border rounded-[6px] p-6 mb-6">
+        <div className="h-4 bg-raised rounded w-40 mb-4" />
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex justify-between">
+              <div className="h-4 bg-raised rounded w-1/3" />
+              <div className="h-4 bg-raised rounded w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Findings skeleton */}
+      <div className="bg-surface border border-border rounded-[6px] p-6">
+        <div className="h-4 bg-raised rounded w-24 mb-4" />
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="bg-base border border-border rounded-[6px] p-4">
+              <div className="flex gap-2 mb-3">
+                <div className="h-5 bg-raised rounded w-10" />
+                <div className="h-5 bg-raised rounded w-20" />
+              </div>
+              <div className="h-4 bg-raised rounded w-3/4 mb-2" />
+              <div className="h-4 bg-raised rounded w-1/2" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Adaptive polling interval ───────────────────────────────────────
+
+function getScorecardPollingInterval(status: JobStatus): number {
+  if (status.stages.balanced.status === "complete") return 8_000;
+  return 3_000;
+}
+
 export default function ScorecardPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const router = useRouter();
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [error, setError] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let stopped = false;
-
-    async function load() {
-      try {
-        const res = await fetch(`/api/onboard/analyze/${jobId}`);
-        if (!res.ok) {
-          setError(true);
-          return;
-        }
-        const data: JobStatus = await res.json();
-        if (data.stages.fast.status !== "complete") {
-          router.replace(`/get-started/${jobId}`);
-          return;
-        }
-        setStatus(data);
-        // Keep polling until comprehensive is done
-        if (data.stages.comprehensive.status === "complete") stopped = true;
-      } catch {
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/onboard/analyze/${jobId}`);
+      if (!res.ok) {
         setError(true);
+        return;
       }
+      const data: JobStatus = await res.json();
+      if (data.stages.fast.status !== "complete") {
+        router.replace(`/get-started/${jobId}`);
+        return;
+      }
+      setStatus(data);
+      // Keep polling until comprehensive is done
+      if (data.stages.comprehensive.status !== "complete") {
+        const delay = getScorecardPollingInterval(data);
+        timerRef.current = setTimeout(load, delay);
+      }
+    } catch {
+      setError(true);
     }
-
-    load();
-    const id = setInterval(() => {
-      if (!stopped) load();
-    }, 5000);
-    return () => clearInterval(id);
   }, [jobId, router]);
 
+  useEffect(() => {
+    load();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [load]);
+
   if (error) {
-    return <div className="p-8 text-secondary text-[14px]">Job not found.</div>;
+    return (
+      <div className="max-w-md mx-auto px-6 py-16 text-center">
+        <p className="text-secondary text-[14px] mb-4">
+          This analysis could not be found or may have expired.
+        </p>
+        <a
+          href="/get-started/analyze"
+          className="inline-block px-6 py-2.5 bg-accent hover:bg-accent/90 rounded-[6px] font-medium text-[14px] transition-colors"
+        >
+          Start a new analysis
+        </a>
+      </div>
+    );
   }
 
   if (!status) {
-    return (
-      <div className="max-w-3xl mx-auto px-6 py-16 text-center text-secondary text-[14px]">
-        Loading...
-      </div>
-    );
+    return <ScorecardSkeleton />;
   }
 
   const urlData = status.stages.url_analysis.data as UrlAnalysisData;
@@ -229,7 +299,7 @@ export default function ScorecardPage() {
         </div>
       )}
 
-      {/* Findings — comprehensive: show all; balanced: show first + blur */}
+      {/* Findings — comprehensive: show all; balanced: show first + pending indicator */}
       {compData && (
         <div className="bg-surface border border-border rounded-[6px] p-6 mb-8">
           <h2 className="section-header mb-4">
@@ -252,19 +322,13 @@ export default function ScorecardPage() {
           {/* First finding - shown in full */}
           <FindingCard rec={balancedData.top_recommendation} />
 
-          {/* Blurred placeholder for remaining findings */}
+          {/* Remaining findings indicator */}
           {balancedData.recommendation_count > 1 && (
-            <div className="relative mt-4">
-              <div className="bg-base border border-border rounded-[6px] p-4 blur-sm">
-                <div className="h-3 bg-raised rounded w-3/4 mb-2" />
-                <div className="h-3 bg-raised rounded w-1/2 mb-2" />
-                <div className="h-3 bg-raised rounded w-2/3" />
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="bg-surface border border-border rounded-[6px] px-4 py-2 text-[13px] font-medium text-secondary">
-                  {balancedData.recommendation_count - 1} more finding{balancedData.recommendation_count - 1 !== 1 ? "s" : ""} — comprehensive report running
-                </span>
-              </div>
+            <div className="mt-4 bg-base border border-border rounded-[6px] p-4 flex items-center gap-3">
+              <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin flex-shrink-0" />
+              <p className="text-[13px] text-secondary">
+                {balancedData.recommendation_count - 1} more finding{balancedData.recommendation_count - 1 !== 1 ? "s" : ""} — comprehensive analysis running
+              </p>
             </div>
           )}
         </div>

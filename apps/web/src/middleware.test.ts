@@ -198,9 +198,4 @@ describe("middleware — new public onboarding paths", () => {
     expect(res.headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("allows /api/onboard/email-alert without auth", () => {
-    const res = middleware(makeRequest("/api/onboard/email-alert"));
-    expect(res.status).toBe(200);
-    expect(res.headers.get("x-middleware-next")).toBe("1");
-  });
 });
