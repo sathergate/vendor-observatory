@@ -597,6 +597,138 @@ export function isAdminEmail(email: string): boolean {
   return ADMIN_EMAILS.has(email.toLowerCase().trim());
 }
 
+// ── API Key operations ──────────────────────────────────────────────
+
+let _apiKeysTableReady = false;
+
+async function ensureApiKeysTable() {
+  if (_apiKeysTableReady) return;
+  const pool = getPool();
+  if (!pool) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        key_hash TEXT NOT NULL,
+        key_prefix TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT 'default',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ,
+        revoked_at TIMESTAMPTZ
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix)
+    `);
+    _apiKeysTableReady = true;
+  } catch (err) {
+    console.error("[auth] Failed to create api_keys table:", err);
+  }
+}
+
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  key_prefix: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+/** Create a new API key for a user. Returns the full key (only shown once). */
+export async function createApiKey(userId: string, name: string): Promise<{ key: string; record: ApiKey } | null> {
+  await ensureApiKeysTable();
+  const pool = getPool();
+  if (!pool) return null;
+
+  const id = crypto.randomUUID();
+  const rawKey = `obs_sk_${crypto.randomBytes(32).toString("hex")}`;
+  const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+  const keyPrefix = rawKey.slice(0, 14); // "obs_sk_" + 7 hex chars
+
+  try {
+    await pool.query(
+      `INSERT INTO api_keys (id, user_id, key_hash, key_prefix, name) VALUES ($1, $2, $3, $4, $5)`,
+      [id, userId, keyHash, keyPrefix, name],
+    );
+    return {
+      key: rawKey,
+      record: { id, user_id: userId, key_prefix: keyPrefix, name, created_at: new Date().toISOString(), last_used_at: null, revoked_at: null },
+    };
+  } catch (err) {
+    console.error("[auth] createApiKey failed:", err);
+    return null;
+  }
+}
+
+/** List API keys for a user (masked — never returns the full key). */
+export async function listApiKeys(userId: string): Promise<ApiKey[]> {
+  await ensureApiKeysTable();
+  const pool = getPool();
+  if (!pool) return [];
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, user_id, key_prefix, name, created_at, last_used_at, revoked_at
+       FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`,
+      [userId],
+    );
+    return rows as ApiKey[];
+  } catch {
+    return [];
+  }
+}
+
+/** Revoke an API key. */
+export async function revokeApiKey(userId: string, keyId: string): Promise<boolean> {
+  await ensureApiKeysTable();
+  const pool = getPool();
+  if (!pool) return false;
+  try {
+    const result = await pool.query(
+      `UPDATE api_keys SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+      [keyId, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Verify an API key and return the associated user. Updates last_used_at. */
+export async function verifyApiKey(rawKey: string): Promise<AuthUser | null> {
+  await ensureApiKeysTable();
+  const pool = getPool();
+  if (!pool) return null;
+
+  const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT ak.id AS key_id, ak.user_id, u.email
+       FROM api_keys ak
+       JOIN users u ON u.id = ak.user_id
+       WHERE ak.key_hash = $1 AND ak.revoked_at IS NULL`,
+      [keyHash],
+    );
+    if (rows.length === 0) return null;
+
+    // Update last_used_at (best effort, don't block on it)
+    pool.query(
+      `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`,
+      [rows[0].key_id],
+    ).catch(() => {});
+
+    return { id: rows[0].user_id, email: rows[0].email };
+  } catch {
+    return null;
+  }
+}
+
 // ── Cookie helpers (legacy — kept for backward compat) ────────────
 
 const COOKIE_NAME = "session_token";
@@ -627,9 +759,18 @@ export function deleteSessionCookie() {
 
 /**
  * Get the current authenticated user.
- * Tries Auth.js JWT session first, falls back to legacy cookie-based session.
+ * Checks in order: API key (Bearer obs_sk_...), Auth.js JWT session, legacy cookie session.
  */
-export async function getCurrentUser(): Promise<AuthUser | null> {
+export async function getCurrentUser(request?: Request): Promise<AuthUser | null> {
+  // Try API key from Authorization header
+  if (request) {
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer obs_sk_")) {
+      const key = authHeader.slice(7); // Remove "Bearer "
+      return verifyApiKey(key);
+    }
+  }
+
   // Try Auth.js session
   try {
     const session = await auth();
