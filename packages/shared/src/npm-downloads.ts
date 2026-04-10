@@ -3,7 +3,7 @@
  * No authentication required — the npm API is public and rate-limited at ~100 req/s.
  *
  * Usage:
- *   import { fetchNpmDownloads, fetchBulkNpmDownloads } from "@obs/shared";
+ *   import { fetchNpmDownloads, fetchBulkNpmDownloads } from "@sathergate/vendor-observatory-shared";
  *   const downloads = await fetchNpmDownloads("flagpost");
  *   const bulk = await fetchBulkNpmDownloads(["flagpost", "pressroom"]);
  */

@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { loadPromptById } from "@obs/shared";
+import { loadPromptById } from "@sathergate/vendor-observatory-shared";
 
 interface UrlAnalysisResult {
   product_name: string;

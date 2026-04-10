@@ -1,6 +1,5 @@
 {
-  "name": "@obs/shared",
-  "private": true,
+  "name": "@sathergate/vendor-observatory-shared",
   "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -8,6 +7,15 @@
   "exports": {
     ".": "./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sathergate/vendor-observatory.git",
+    "directory": "packages/shared"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",

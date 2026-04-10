@@ -1,5 +1,5 @@
 /**
- * Library exports for @obs/ingest.
+ * Library exports for @sathergate/vendor-observatory-ingest.
  *
  * This module re-exports the core ingest building blocks so that other packages
  * (e.g. the Fly.io worker) can call ingest logic directly as an imported module

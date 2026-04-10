@@ -16,8 +16,8 @@ import {
   loadPackageMapFromDb,
   createPackageResolver,
   loadPromptsByKind,
-} from "@obs/shared";
-import type { VendorTaxonomy, VendorMention, VendorRejection, ParsedTurn, PromptRow } from "@obs/shared";
+} from "@sathergate/vendor-observatory-shared";
+import type { VendorTaxonomy, VendorMention, VendorRejection, ParsedTurn, PromptRow } from "@sathergate/vendor-observatory-shared";
 import { computeFastScores, type ScoreResult } from "./scorer.js";
 
 // ── Configuration ──────────────────────────────────────────────────

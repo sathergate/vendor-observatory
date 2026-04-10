@@ -1,5 +1,5 @@
 /**
- * Library exports for @obs/benchmark.
+ * Library exports for @sathergate/vendor-observatory-benchmark.
  *
  * These are used by the worker package to run onboarding benchmarks
  * without going through the CLI entry point.

@@ -18,7 +18,7 @@ import type {
   ExtractedResponseContext,
   IntentClassification,
   DisqualificationReason,
-} from "@obs/shared";
+} from "@sathergate/vendor-observatory-shared";
 
 // ── Schema (split into individual statements for pg) ──────────────────
 

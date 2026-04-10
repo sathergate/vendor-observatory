@@ -11,7 +11,7 @@ import {
   type AssistantAdapter,
   type BenchmarkResult,
   type BenchmarkPrompt,
-} from "@obs/benchmark/lib";
+} from "@sathergate/vendor-observatory-benchmark/lib";
 import { ingestResults } from "./ingest-bridge.js";
 import { spawnAndWait } from "./subprocess.js";
 import { cleanupOldWorkspaces } from "./cleanup.js";

@@ -13,8 +13,8 @@ import {
   extractResponseContextWithLLM,
   classifyIntent,
   DEFAULT_CATEGORIES,
-} from "@obs/shared";
-import type { VendorTaxonomy } from "@obs/shared";
+} from "@sathergate/vendor-observatory-shared";
+import type { VendorTaxonomy } from "@sathergate/vendor-observatory-shared";
 import { ObservatoryDB } from "./db.js";
 import { scanForTranscripts, scanAllTranscripts } from "./scanner.js";
 import { parseClaudeCodeFile } from "./parsers/claude-code.js";
@@ -511,7 +511,7 @@ program
       }
 
       case "downloads": {
-        const { PACKAGE_TO_VENDOR, fetchVendorNpmDownloads } = await import("@obs/shared");
+        const { PACKAGE_TO_VENDOR, fetchVendorNpmDownloads } = await import("@sathergate/vendor-observatory-shared");
         console.log(chalk.dim("Fetching npm download counts for all tracked vendors...\n"));
         const vendorDownloads = await fetchVendorNpmDownloads(PACKAGE_TO_VENDOR);
         if (vendorDownloads.size === 0) {
@@ -608,7 +608,7 @@ program
   .action(async (opts) => {
     const dbUrl = getDbUrl(opts);
     const db = await ObservatoryDB.create(dbUrl);
-    const { PACKAGE_TO_VENDOR, fetchBulkNpmDownloads } = await import("@obs/shared");
+    const { PACKAGE_TO_VENDOR, fetchBulkNpmDownloads } = await import("@sathergate/vendor-observatory-shared");
 
     console.log(chalk.blue("\nCapturing npm download snapshot...\n"));
     const allPackages = Object.keys(PACKAGE_TO_VENDOR);

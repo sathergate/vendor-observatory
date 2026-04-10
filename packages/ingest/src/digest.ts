@@ -6,7 +6,7 @@
  */
 
 import type { ObservatoryDB } from "./db.js";
-import { loadPromptById } from "@obs/shared";
+import { loadPromptById } from "@sathergate/vendor-observatory-shared";
 
 // ── Types ──────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@ import {
   loadDatabricksConfig,
   uploadTranscript,
 } from "./databricks-client.js";
-import { createWorkspace } from "@obs/benchmark/workspace";
+import { createWorkspace } from "@sathergate/vendor-observatory-benchmark/workspace";
 import { ingestResults } from "./ingest-bridge.js";
 
 type AdapterResult = {
@@ -288,17 +288,17 @@ async function runAdapter(
   const opts = { prompt: promptText, promptId, workDir, budgetUsd: 1, timeoutMs: 300_000 };
   switch (agent) {
     case "claude_code": {
-      const { ClaudeCodeAdapter } = await import("@obs/benchmark/adapters/claude-code");
+      const { ClaudeCodeAdapter } = await import("@sathergate/vendor-observatory-benchmark/adapters/claude-code");
       const adapter = new ClaudeCodeAdapter();
       return adapter.run(opts);
     }
     case "codex_cli": {
-      const { CodexCliAdapter } = await import("@obs/benchmark/adapters/codex-cli");
+      const { CodexCliAdapter } = await import("@sathergate/vendor-observatory-benchmark/adapters/codex-cli");
       const adapter = new CodexCliAdapter();
       return adapter.run(opts);
     }
     case "cursor": {
-      const { CursorAgentAdapter } = await import("@obs/benchmark/adapters/cursor-agent");
+      const { CursorAgentAdapter } = await import("@sathergate/vendor-observatory-benchmark/adapters/cursor-agent");
       const adapter = new CursorAgentAdapter();
       return adapter.run(opts);
     }

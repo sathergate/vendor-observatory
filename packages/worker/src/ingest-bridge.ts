@@ -9,9 +9,9 @@ import {
   loadPackageMapFromDb,
   createPackageResolver,
   deriveVendorFromPackageName,
-} from "@obs/shared";
-import type { VendorTaxonomy, ParsedSession, UnknownPackage } from "@obs/shared";
-import type { BenchmarkResult } from "@obs/benchmark/lib";
+} from "@sathergate/vendor-observatory-shared";
+import type { VendorTaxonomy, ParsedSession, UnknownPackage } from "@sathergate/vendor-observatory-shared";
+import type { BenchmarkResult } from "@sathergate/vendor-observatory-benchmark/lib";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 

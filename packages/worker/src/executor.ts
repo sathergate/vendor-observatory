@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import type { SourcePlatform } from "@obs/shared";
+import type { SourcePlatform } from "@sathergate/vendor-observatory-shared";
 import {
   selectOnboardingPromptsFromList,
   loadBenchmarkPrompts,
@@ -10,7 +10,7 @@ import {
   type AssistantAdapter,
   type BenchmarkResult,
   type BenchmarkPrompt,
-} from "@obs/benchmark/lib";
+} from "@sathergate/vendor-observatory-benchmark/lib";
 import { ingestResults } from "./ingest-bridge.js";
 import { computeScores, computeConstraintCoverage, type ScoreResult } from "./scorer.js";
 import { ensureVendor } from "./vendor-mapper.js";
