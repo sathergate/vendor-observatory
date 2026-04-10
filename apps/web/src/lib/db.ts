@@ -510,7 +510,7 @@ export async function getBenchmarkStats(vendorScope?: string | null) {
   if (!pool) return { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
   try {
     const vendorFilter = vendorScope
-      ? "AND id IN (SELECT session_id FROM ${T_OBSERVATIONS} WHERE vendor_canonical_id = $1)"
+      ? `AND id IN (SELECT session_id FROM ${T_OBSERVATIONS} WHERE vendor_canonical_id = $1)`
       : "";
     const obsVendorFilter = vendorScope
       ? "AND vendor_canonical_id = $1"
@@ -1389,47 +1389,48 @@ export interface CategorySummary {
 }
 
 export async function getCategorySummaries(): Promise<CategorySummary[]> {
-  const summaries = await getPromptEnrichmentSummaries();
-  if (summaries.length === 0) return [];
+  try {
+    const summaries = await getPromptEnrichmentSummaries();
+    if (summaries.length === 0) return [];
 
-  const catMap = new Map<string, {
-    prompts: PromptEnrichmentSummary[];
-    vendorCounts: Record<string, number>;
-    totalConstraints: number;
-    totalConstraintsCovered: number;
-    totalResponses: number;
-  }>();
+    const catMap = new Map<string, {
+      prompts: PromptEnrichmentSummary[];
+      vendorCounts: Record<string, number>;
+      totalConstraints: number;
+      totalConstraintsCovered: number;
+      totalResponses: number;
+    }>();
 
-  for (const s of summaries) {
-    if (!catMap.has(s.category)) {
-      catMap.set(s.category, { prompts: [], vendorCounts: {}, totalConstraints: 0, totalConstraintsCovered: 0, totalResponses: 0 });
+    for (const s of summaries) {
+      if (!catMap.has(s.category)) {
+        catMap.set(s.category, { prompts: [], vendorCounts: {}, totalConstraints: 0, totalConstraintsCovered: 0, totalResponses: 0 });
+      }
+      const cat = catMap.get(s.category)!;
+      cat.prompts.push(s);
+      cat.totalResponses += s.response_count;
+      cat.totalConstraints += s.constraints.length;
+      cat.totalConstraintsCovered += s.avg_constraints_covered * s.response_count;
+      for (const [vendor, count] of Object.entries(s.primary_vendors)) {
+        cat.vendorCounts[vendor] = (cat.vendorCounts[vendor] || 0) + count;
+      }
     }
-    const cat = catMap.get(s.category)!;
-    cat.prompts.push(s);
-    cat.totalResponses += s.response_count;
-    cat.totalConstraints += s.constraints.length;
-    cat.totalConstraintsCovered += s.avg_constraints_covered * s.response_count;
-    for (const [vendor, count] of Object.entries(s.primary_vendors)) {
-      cat.vendorCounts[vendor] = (cat.vendorCounts[vendor] || 0) + count;
+
+    const results: CategorySummary[] = [];
+    for (const [category, data] of catMap.entries()) {
+      const topEntry = Object.entries(data.vendorCounts).sort((a, b) => b[1] - a[1])[0];
+      results.push({
+        category,
+        prompt_count: data.prompts.length,
+        response_count: data.totalResponses,
+        top_vendor: topEntry?.[0] ?? null,
+        top_vendor_count: topEntry?.[1] ?? 0,
+        avg_constraint_coverage: data.totalResponses > 0 ? data.totalConstraintsCovered / data.totalResponses : 0,
+        total_constraints: data.totalConstraints,
+      });
     }
-  }
 
-  const results: CategorySummary[] = [];
-  for (const [category, data] of catMap.entries()) {
-    const topEntry = Object.entries(data.vendorCounts).sort((a, b) => b[1] - a[1])[0];
-    const totalPossibleConstraints = data.totalConstraints * (data.totalResponses / data.prompts.length || 1);
-    results.push({
-      category,
-      prompt_count: data.prompts.length,
-      response_count: data.totalResponses,
-      top_vendor: topEntry?.[0] ?? null,
-      top_vendor_count: topEntry?.[1] ?? 0,
-      avg_constraint_coverage: data.totalResponses > 0 ? data.totalConstraintsCovered / data.totalResponses : 0,
-      total_constraints: data.totalConstraints,
-    });
-  }
-
-  return results.sort((a, b) => b.response_count - a.response_count);
+    return results.sort((a, b) => b.response_count - a.response_count);
+  } catch { return []; }
 }
 
 // ── Enrichment: Category Detail ────────────────────────────────────
@@ -2035,7 +2036,7 @@ export async function getIntentDistribution(): Promise<IntentDistributionRow[]> 
         intent: row.intent,
         count: Number(row.count),
         pct: total > 0 ? Number(row.count) / total : 0,
-        avg_confidence: row.avg_confidence,
+        avg_confidence: Number(row.avg_confidence) || 0,
         top_vendor: topVendor,
         top_vendor_count: topVendorCount,
       });

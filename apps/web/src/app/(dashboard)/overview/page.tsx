@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type {
+  BenchmarkRunRow,
+  BenchmarkVendorCompRow,
+  CategorySummary,
+  IntentDistributionRow,
+  DigestRow,
+} from "@/lib/db";
 import {
   getBenchmarkStats,
   getBenchmarkSessions,
@@ -15,12 +22,25 @@ import { PROMPT_COUNTS } from "../benchmarks/prompt-summaries";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const stats = await getBenchmarkStats();
-  const sessions = await getBenchmarkSessions(50);
-  const vendorComp = await getBenchmarkVendorComparison();
-  const dbCategories = await getCategorySummaries();
-  const intentDist = await getIntentDistribution();
-  const digests = await getLatestDigests(3);
+  let stats = { totalBenchmarkSessions: 0, totalBenchmarkObservations: 0, platformBreakdown: {} as Record<string, number> };
+  let sessions: BenchmarkRunRow[] = [];
+  let vendorComp: BenchmarkVendorCompRow[] = [];
+  let dbCategories: CategorySummary[] = [];
+  let intentDist: IntentDistributionRow[] = [];
+  let digests: DigestRow[] = [];
+
+  try {
+    [stats, sessions, vendorComp, dbCategories, intentDist, digests] = await Promise.all([
+      getBenchmarkStats(),
+      getBenchmarkSessions(50),
+      getBenchmarkVendorComparison(),
+      getCategorySummaries(),
+      getIntentDistribution(),
+      getLatestDigests(3),
+    ]);
+  } catch {
+    // Degrade gracefully — page renders with empty/default data
+  }
 
   // Load categories dynamically from DB (falls back to defaults if DB unavailable)
   const CATEGORY_META = await loadCategoryMeta();
