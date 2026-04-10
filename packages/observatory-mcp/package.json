@@ -1,0 +1,48 @@
+{
+  "name": "@vendor-observatory/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for querying Vendor Observatory data — mention rates, benchmarks, factor scores, competitive intelligence.",
+  "type": "module",
+  "exports": {
+    ".": { "import": "./dist/mcp.js" },
+    "./mcp": { "import": "./dist/mcp.js" }
+  },
+  "bin": {
+    "observatory": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": ">=2.0.0-alpha.1",
+    "zod": ">=3.25.0"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/server": { "optional": false },
+    "zod": { "optional": false }
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "2.0.0-alpha.2",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "zod": "^3.25.0"
+  },
+  "keywords": [
+    "mcp",
+    "vendor-observatory",
+    "ai-coding",
+    "developer-intelligence",
+    "benchmarks",
+    "claude-code",
+    "agent-native"
+  ],
+  "claude": {
+    "mcp": true,
+    "category": "developer-intelligence"
+  },
+  "license": "MIT"
+}
