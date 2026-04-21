@@ -58,6 +58,9 @@ export default function SignupForm() {
     }
   }
 
+  const emailLooksValid = !email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const passwordMeetsLength = !password || password.length >= 8;
+
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="w-full max-w-sm">
@@ -70,6 +73,9 @@ export default function SignupForm() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+              aria-invalid={!emailLooksValid}
               className="w-full px-3 py-2 bg-surface border border-border rounded-[6px] text-primary text-[14px] focus:outline-none focus:border-accent"
               placeholder="you@example.com"
             />
@@ -81,9 +87,14 @@ export default function SignupForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              disabled={loading}
+              aria-invalid={!passwordMeetsLength}
               className="w-full px-3 py-2 bg-surface border border-border rounded-[6px] text-primary text-[14px] focus:outline-none focus:border-accent"
               placeholder="••••••••"
             />
+            <p className="text-[11px] text-muted mt-1">Use at least 8 characters.</p>
           </div>
           {error && <p className="text-red-400 text-[12px]">{error}</p>}
           <button
