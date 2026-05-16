@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
 
 export default function SignupForm() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function SignupForm() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    trackEvent("signup_submit_clicked", { surface: "standard_signup" });
 
     try {
       // Step 1: Create the user account
@@ -29,7 +31,9 @@ export default function SignupForm() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Signup failed");
+        const message = data.error || "Signup failed";
+        trackEvent("signup_api_error", { surface: "standard_signup", status: res.status, message });
+        setError(message);
         return;
       }
 
@@ -41,6 +45,7 @@ export default function SignupForm() {
       });
 
       if (result?.error) {
+        trackEvent("signup_signin_error_after_create", { surface: "standard_signup", message: result.error });
         setError("Account created but sign-in failed. Please log in manually.");
         router.push("/login");
         return;
@@ -50,8 +55,11 @@ export default function SignupForm() {
       const paymentParams = new URLSearchParams();
       if (plan) paymentParams.set("plan", plan);
       if (jobId) paymentParams.set("jobId", jobId);
-      router.push(paymentParams.toString() ? `/payment?${paymentParams.toString()}` : "/");
+      const destination = paymentParams.toString() ? `/payment?${paymentParams.toString()}` : "/";
+      trackEvent("signup_success_redirect", { surface: "standard_signup", destination });
+      router.push(destination);
     } catch {
+      trackEvent("signup_api_error", { surface: "standard_signup", message: "network_or_unexpected_error" });
       setError("Something went wrong");
     } finally {
       setLoading(false);

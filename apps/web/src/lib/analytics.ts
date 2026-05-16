@@ -5,7 +5,11 @@ export type AnalyticsEvent =
   | "diagnosis_start"
   | "diagnosis_complete"
   | "issue_created"
-  | "issue_verified";
+  | "issue_verified"
+  | "signup_submit_clicked"
+  | "signup_api_error"
+  | "signup_signin_error_after_create"
+  | "signup_success_redirect";
 
 interface EventProperties {
   variant?: string;

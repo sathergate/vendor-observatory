@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
 
 /** Freemail domains where we cannot infer a product URL. */
 const FREEMAIL_DOMAINS = new Set([
@@ -32,6 +33,7 @@ export default function GetStartedSignupPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    trackEvent("signup_submit_clicked", { surface: "get_started_signup" });
 
     try {
       // Step 1: Create the user account
@@ -42,7 +44,9 @@ export default function GetStartedSignupPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Could not create account");
+        const message = data.error || "Could not create account";
+        trackEvent("signup_api_error", { surface: "get_started_signup", status: res.status, message });
+        setError(message);
         return;
       }
 
@@ -54,6 +58,7 @@ export default function GetStartedSignupPage() {
       });
 
       if (result?.error) {
+        trackEvent("signup_signin_error_after_create", { surface: "get_started_signup", message: result.error });
         setError("Account created but sign-in failed. Please log in manually.");
         router.push("/login");
         return;
@@ -65,8 +70,11 @@ export default function GetStartedSignupPage() {
       const domain = domainFromEmail(email);
       const params = new URLSearchParams();
       if (domain) params.set("domain", domain);
-      router.push(`/get-started/analyze${params.toString() ? `?${params}` : ""}`);
+      const destination = `/get-started/analyze${params.toString() ? `?${params}` : ""}`;
+      trackEvent("signup_success_redirect", { surface: "get_started_signup", destination });
+      router.push(destination);
     } catch {
+      trackEvent("signup_api_error", { surface: "get_started_signup", message: "network_or_unexpected_error" });
       setError("Something went wrong");
     } finally {
       setLoading(false);

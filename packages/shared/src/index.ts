@@ -68,7 +68,14 @@ export {
 export { classifyIntent, classifyIntents } from "./intent-classifier.js";
 
 // ── Package Map ─────────────────────────────────────────────────────
-export { PACKAGE_TO_VENDOR, resolvePackageToVendor, isBlocklistedPackage, deriveVendorFromPackageName } from "./package-map.js";
+export {
+  PACKAGE_TO_VENDOR,
+  AGENTIC_PRODUCT_SUITE_PACKAGES,
+  AGENTIC_PRODUCT_SUITE_VENDOR_IDS,
+  resolvePackageToVendor,
+  isBlocklistedPackage,
+  deriveVendorFromPackageName,
+} from "./package-map.js";
 
 // ── Normalizer ──────────────────────────────────────────────────────
 export { normalizeVendorName } from "./normalizer.js";
@@ -90,6 +97,7 @@ export {
   fetchNpmDownloads,
   fetchBulkNpmDownloads,
   fetchVendorNpmDownloads,
+  fetchAgenticProductSuiteDownloads,
   buildVendorToPackagesMap,
 } from "./npm-downloads.js";
 export type { NpmDownloadPoint, NpmDownloadComparison } from "./npm-downloads.js";

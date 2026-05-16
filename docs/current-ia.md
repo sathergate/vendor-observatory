@@ -7,19 +7,20 @@
 ## Dashboard Auth Gate
 `apps/web/src/app/(dashboard)/layout.tsx` checks `getCurrentUser()` → redirects to `/login` if unauthenticated, then `hasActivePayment()` → redirects to `/plans` if unpaid.
 
-## Sidebar Navigation (Contradiction)
+## Sidebar Navigation
 File: `apps/web/src/components/Sidebar.tsx`
 
-**Defined but never rendered:**
+Legacy navigation now renders the core product areas whether or not a vendor has been selected:
 - Benchmarks: Vendor Intel, Prompt Intel
 - Analytics: Query, Search, Insights
 - Data: Vendors, Platforms, Actions, Sessions
 
-**Actually rendered:**
-- When vendor selected: My Dashboard, Rejections, Sessions
-- When no vendor selected: "Loading vendor..." text
+When a vendor is selected, the vendor-scoped links render above those global product areas:
+- My Dashboard
+- Rejections
+- Sessions
 
-This means 9 navigation links are defined in code but invisible to users.
+This keeps vendor-specific workflows prominent while preserving reachability for the rest of the dashboard.
 
 ## Dashboard Pages
 | Route | Purpose |

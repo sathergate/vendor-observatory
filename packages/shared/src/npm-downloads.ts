@@ -87,6 +87,20 @@ export function buildVendorToPackagesMap(
 }
 
 /**
+ * Fetch npm download stats for the agentic product suite.
+ * Returns one download point per product canonical ID.
+ */
+export async function fetchAgenticProductSuiteDownloads(
+  productPackages: Record<string, string>,
+): Promise<Map<string, NpmDownloadPoint>> {
+  const packageToProduct = Object.fromEntries(
+    Object.entries(productPackages).map(([product, packageName]) => [packageName, product]),
+  );
+
+  return fetchVendorNpmDownloads(packageToProduct);
+}
+
+/**
  * Fetch npm download stats for all tracked vendors.
  * Returns aggregated downloads per vendor (sum of all their packages).
  */

@@ -140,8 +140,8 @@ Shape the next model training cycle. Key insight: the channel must be **crawled 
 ### Phase 5: Measurement (Ongoing)
 1. Use vendor-observatory benchmarks to track mention rates
 2. All 8 libraries registered in `taxonomy/vendors.yaml` ✅
-3. Run monthly benchmarks: "I need feature flags for my Next.js app"
-4. Track npm download trends
+3. Run monthly benchmarks using the eight suite-specific prompts in `packages/benchmark/src/prompt-data.ts`
+4. Track npm download trends with `AGENTIC_PRODUCT_SUITE_PACKAGES` and `fetchAgenticProductSuiteDownloads()`
 5. Monitor for organic mentions in AI coding transcripts
 6. A/B test MCP vs non-MCP libraries to measure direct channel impact
 

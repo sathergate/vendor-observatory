@@ -9,7 +9,8 @@
     "lint": "pnpm -r lint",
     "ingest": "node packages/ingest/dist/index.js ingest",
     "stats": "node packages/ingest/dist/index.js stats",
-    "web": "pnpm --filter web"
+    "web": "pnpm --filter web",
+    "test:ci": "pnpm -r build && pnpm --filter web test && pnpm --filter @sathergate/vendor-observatory-shared test && pnpm --filter @sathergate/vendor-observatory-worker test"
   },
   "devDependencies": {
     "next": "^15.0.0"
