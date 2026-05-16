@@ -42,6 +42,25 @@ const VENDOR_NAV_LINKS = (vendorId: string) => [
   { href: "/sessions", label: "Sessions" },
 ];
 
+function LegacyNavGroups() {
+  return (
+    <div className="space-y-4">
+      {NAV_GROUPS.map((group) => (
+        <div key={group.label}>
+          <p className="px-3 pb-1 text-[11px] text-muted uppercase tracking-wider">
+            {group.label}
+          </p>
+          <div className="space-y-0.5">
+            {group.links.map((link) => (
+              <NavLink key={link.href} href={link.href} label={link.label} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── IA v2 canonical nav model ───────────────────────────────────────
 
 interface NavArea {
@@ -246,22 +265,26 @@ export function Sidebar({ iaV2 = false }: { iaV2?: boolean }) {
             </div>
           ) : (
             /* Legacy navigation */
-            selectedVendor ? (
-              <div className="space-y-0.5">
-                {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
-                  <NavLink
-                    key={link.href}
-                    href={link.href}
-                    label={link.label}
-                    exact={link.label === "My Dashboard"}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="px-3 pt-2 pb-1">
-                <span className="text-[13px] text-muted">Loading vendor...</span>
-              </div>
-            )
+            <div className="space-y-4">
+              {selectedVendor && (
+                <div>
+                  <p className="px-3 pb-1 text-[11px] text-muted uppercase tracking-wider">
+                    {vendorDisplayName(selectedVendor)}
+                  </p>
+                  <div className="space-y-0.5">
+                    {VENDOR_NAV_LINKS(selectedVendor).map((link) => (
+                      <NavLink
+                        key={link.href}
+                        href={link.href}
+                        label={link.label}
+                        exact={link.label === "My Dashboard"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              <LegacyNavGroups />
+            </div>
           )}
         </nav>
 

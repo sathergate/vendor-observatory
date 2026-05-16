@@ -39,13 +39,25 @@ vi.mock("./NavLink", () => ({
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("Sidebar", () => {
-  it("shows loading state when no vendor is selected", () => {
+  it("shows legacy navigation groups when no vendor is selected", () => {
     mockSelectedVendor = null;
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    expect(screen.getByText("Loading vendor...")).toBeDefined();
+    expect(screen.queryByText("Loading vendor...")).toBeNull();
+    expect(screen.getByText("Benchmarks")).toBeDefined();
+    expect(screen.getByText("Vendor Intel").getAttribute("href")).toBe("/benchmarks/vendors");
+    expect(screen.getByText("Prompt Intel").getAttribute("href")).toBe("/benchmarks/prompts");
+    expect(screen.getByText("Analytics")).toBeDefined();
+    expect(screen.getByText("Query").getAttribute("href")).toBe("/query");
+    expect(screen.getByText("Search").getAttribute("href")).toBe("/search");
+    expect(screen.getByText("Insights").getAttribute("href")).toBe("/insights");
+    expect(screen.getByText("Data")).toBeDefined();
+    expect(screen.getByText("Vendors").getAttribute("href")).toBe("/vendors");
+    expect(screen.getByText("Platforms").getAttribute("href")).toBe("/platforms");
+    expect(screen.getByText("Actions").getAttribute("href")).toBe("/actions");
+    expect(screen.getByText("Sessions").getAttribute("href")).toBe("/sessions");
   });
 
   it("shows vendor dashboard nav when a vendor is selected", () => {
@@ -71,15 +83,15 @@ describe("Sidebar", () => {
     expect(dashboardLink.getAttribute("href")).toBe("/benchmarks/vendors/cloudflare-workers");
   });
 
-  it("hides standard nav groups when vendor is selected", () => {
+  it("keeps standard nav groups reachable when vendor is selected", () => {
     mockSelectedVendor = "neon";
     mockPathname = "/";
 
     render(<Sidebar />);
 
     expect(screen.getByText("My Dashboard")).toBeDefined();
-    expect(screen.queryByText("Benchmarks")).toBeNull();
-    expect(screen.queryByText("Analytics")).toBeNull();
-    expect(screen.queryByText("Data")).toBeNull();
+    expect(screen.getByText("Benchmarks")).toBeDefined();
+    expect(screen.getByText("Analytics")).toBeDefined();
+    expect(screen.getByText("Data")).toBeDefined();
   });
 });

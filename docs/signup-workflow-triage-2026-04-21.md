@@ -45,7 +45,7 @@ None found that fully blocks all signup paths in the current checked code.
 ### Usability
 1. **Ship consistent client-side validation everywhere signup is offered.** ✅ Done in this patch.
 2. Add clear inline copy for password policy (minimum 8 chars). ✅ Done in this patch.
-3. Add analytics events for key drop-off points:
+3. Add analytics events for key drop-off points: ✅ Done in this patch.
    - `signup_submit_clicked`
    - `signup_api_error`
    - `signup_signin_error_after_create`
@@ -56,7 +56,7 @@ None found that fully blocks all signup paths in the current checked code.
    - API contract tests for `/api/auth/signup`.
    - UI tests for both signup entry points.
    - Post-signup sign-in transition test.
-2. Add a single canonical command in root `package.json` (e.g., `pnpm run test:ci`) that always builds required workspace packages before running web tests.
+2. Add a single canonical command in root `package.json` (e.g., `pnpm run test:ci`) that always builds required workspace packages before running web tests. ✅ Done in this patch.
 3. Add PR check annotation that fails fast when auth/signup tests are skipped or quarantined.
 
 ### Operational Readiness
@@ -70,6 +70,6 @@ None found that fully blocks all signup paths in the current checked code.
 - Web test suite passes when run after build.
 
 ## Recommended next sprint backlog
-1. End-to-end Playwright/Cypress happy-path + duplicate email + weak password scenarios.
+1. End-to-end Playwright/Cypress happy-path + duplicate email + weak password scenarios. API-level weak password coverage is now included; browser E2E coverage remains recommended.
 2. OAuth availability contract test to prevent hidden provider buttons.
 3. Error copy standardization between signup entry points and login recovery paths.

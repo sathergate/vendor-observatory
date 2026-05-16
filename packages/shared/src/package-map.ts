@@ -112,6 +112,21 @@ export const PACKAGE_TO_VENDOR: Record<string, string> = {
   "@flydotio/dockerfile": "fly-io",
 };
 
+export const AGENTIC_PRODUCT_SUITE_PACKAGES: Record<string, string> = {
+  flagpost: "flagpost",
+  floodgate: "ratelimit-next",
+  lockbox: "vaultbox",
+  clocktower: "croncall",
+  sifter: "searchcraft",
+  herald: "notifykit",
+  darkroom: "shutterbox",
+  pressroom: "pressroom",
+};
+
+export const AGENTIC_PRODUCT_SUITE_VENDOR_IDS = Object.keys(
+  AGENTIC_PRODUCT_SUITE_PACKAGES,
+);
+
 /**
  * Given a package name from an install command, return the vendor canonical ID.
  * Returns null if no mapping exists.

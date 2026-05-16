@@ -88,6 +88,14 @@ describe("POST /api/auth/signup", () => {
     expect(data.error).toMatch(/password/i);
   });
 
+  it("returns 400 when password is too short", async () => {
+    const res = await callSignup({ email: "a@b.com", password: "short" });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/at least 8 characters/i);
+    expect(mockCreateUser).not.toHaveBeenCalled();
+  });
+
   it("returns 409 when email is already taken", async () => {
     mockCreateUser.mockResolvedValue(null);
 
