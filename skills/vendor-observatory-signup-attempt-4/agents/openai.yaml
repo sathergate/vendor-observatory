@@ -1,0 +1,7 @@
+interface:
+  display_name: "VO Signup Attempt 4"
+  short_description: "Audit and validate the VO signup funnel."
+  default_prompt: "Use $vendor-observatory-signup-attempt-4 to audit, harden, and validate the vendor-observatory signup funnel against the intended Attempt 4 onboarding and payment flow."
+
+policy:
+  allow_implicit_invocation: true
