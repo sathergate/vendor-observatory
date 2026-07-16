@@ -12,6 +12,7 @@ export type {
   SessionRow,
   ObservationRow,
   ToolActionRow,
+  CategoryRow,
   VendorEntry,
   VendorTaxonomy,
   VendorStats,
@@ -35,10 +36,23 @@ export type {
   DeveloperIntent,
   IntentClassification,
   PromptIntentRow,
+  // Rejection types
+  RejectionReason,
+  VendorRejection,
+  VendorRejectionRow,
+  // Evidence linking
+  EvidenceRef,
+  // Unknown package discovery
+  UnknownPackage,
+  ExtractionResult,
 } from "./types.js";
 
 // ── Extractor ───────────────────────────────────────────────────────
-export { extractVendorMentions } from "./extractor.js";
+export { extractVendorMentions, extractVendorMentionsWithUnknowns } from "./extractor.js";
+export type { ExtractorOptions } from "./extractor.js";
+
+// ── Rejection Extractor ─────────────────────────────────────────────
+export { extractVendorRejections } from "./rejection-extractor.js";
 
 // ── Reasoning Extractor ─────────────────────────────────────────────
 export { extractResponseContext } from "./reasoning-extractor.js";
@@ -54,10 +68,47 @@ export {
 export { classifyIntent, classifyIntents } from "./intent-classifier.js";
 
 // ── Package Map ─────────────────────────────────────────────────────
-export { PACKAGE_TO_VENDOR, resolvePackageToVendor } from "./package-map.js";
+export {
+  PACKAGE_TO_VENDOR,
+  AGENTIC_PRODUCT_SUITE_PACKAGES,
+  AGENTIC_PRODUCT_SUITE_VENDOR_IDS,
+  resolvePackageToVendor,
+  isBlocklistedPackage,
+  deriveVendorFromPackageName,
+} from "./package-map.js";
 
 // ── Normalizer ──────────────────────────────────────────────────────
 export { normalizeVendorName } from "./normalizer.js";
 
+// ── Default Categories ──────────────────────────────────────────────
+export { DEFAULT_CATEGORIES } from "./default-categories.js";
+export type { CategoryMeta } from "./default-categories.js";
+
+// ── Prompt Store ────────────────────────────────────────────────────
+export {
+  loadPromptsByKind,
+  loadPromptById,
+  hasPrompts,
+} from "./prompt-store.js";
+export type { PromptKind, PromptRow } from "./prompt-store.js";
+
+// ── npm Downloads ──────────────────────────────────────────────────
+export {
+  fetchNpmDownloads,
+  fetchBulkNpmDownloads,
+  fetchVendorNpmDownloads,
+  fetchAgenticProductSuiteDownloads,
+  buildVendorToPackagesMap,
+} from "./npm-downloads.js";
+export type { NpmDownloadPoint, NpmDownloadComparison } from "./npm-downloads.js";
+
 // ── Loaders ─────────────────────────────────────────────────────────
 export { loadVendorTaxonomy } from "./taxonomy-loader.js";
+
+// ── Database Loaders ────────────────────────────────────────────────
+export {
+  loadVendorTaxonomyFromDb,
+  loadPackageMapFromDb,
+  createPackageResolver,
+} from "./db-taxonomy-loader.js";
+export type { DbQueryable } from "./db-taxonomy-loader.js";

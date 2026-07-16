@@ -46,6 +46,12 @@ describe("middleware — public paths", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-middleware-next")).toBe("1");
   });
+
+  it("allows /api/health without auth", () => {
+    const res = middleware(makeRequest("/api/health"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
 });
 
 // ── Protected page routes ────────────────────────────────────────────
@@ -81,6 +87,13 @@ describe("middleware — protected page routes without token", () => {
 
   it("redirects /insights to /login", () => {
     const res = middleware(makeRequest("/insights"));
+    expect(res.status).toBe(307);
+    const location = res.headers.get("location");
+    expect(location).toContain("/login");
+  });
+
+  it("redirects /overview to /login", () => {
+    const res = middleware(makeRequest("/overview"));
     expect(res.status).toBe(307);
     const location = res.headers.get("location");
     expect(location).toContain("/login");
@@ -126,4 +139,63 @@ describe("middleware — authenticated requests", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-middleware-next")).toBe("1");
   });
+});
+
+// ── New public onboarding paths ──────────────────────────────────────
+
+describe("middleware — new public onboarding paths", () => {
+  it("allows /get-started without auth", () => {
+    const res = middleware(makeRequest("/get-started"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /get-started/abc123 without auth", () => {
+    const res = middleware(makeRequest("/get-started/abc123"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /get-started/abc123/scorecard without auth", () => {
+    const res = middleware(makeRequest("/get-started/abc123/scorecard"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /plans without auth", () => {
+    const res = middleware(makeRequest("/plans"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /plans?email=x&jobId=y without auth", () => {
+    const res = middleware(makeRequest("/plans?email=x&jobId=y"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /payment without auth", () => {
+    const res = middleware(makeRequest("/payment"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /api/onboard/analyze without auth", () => {
+    const res = middleware(makeRequest("/api/onboard/analyze"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /api/onboard/analyze/abc123 without auth", () => {
+    const res = middleware(makeRequest("/api/onboard/analyze/abc123"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("allows /api/onboard/analyze/abc123/email without auth", () => {
+    const res = middleware(makeRequest("/api/onboard/analyze/abc123/email"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
 });

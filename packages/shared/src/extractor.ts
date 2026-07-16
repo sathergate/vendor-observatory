@@ -1,5 +1,15 @@
-import type { VendorMention, MentionType, WorkCategory, VendorTaxonomy, ParsedTurn } from "./types.js";
-import { resolvePackageToVendor } from "./package-map.js";
+import type { VendorMention, MentionType, WorkCategory, VendorTaxonomy, ParsedTurn, UnknownPackage, ExtractionResult } from "./types.js";
+import { resolvePackageToVendor as resolvePackageToVendorStatic, isBlocklistedPackage } from "./package-map.js";
+
+/** Optional configuration for extractVendorMentions. */
+export interface ExtractorOptions {
+  /**
+   * Custom package-name → vendor resolver. When provided, this is used instead
+   * of the hardcoded PACKAGE_TO_VENDOR map.  Typically created via
+   * `createPackageResolver(await loadPackageMapFromDb(pool))`.
+   */
+  packageResolver?: (packageName: string) => string | null;
+}
 
 // ── Package Manager Patterns ────────────────────────────────────────
 
@@ -93,12 +103,17 @@ const RECOMMENDATION_PHRASES = [
 /**
  * Extract vendor mentions from a single turn (user or assistant).
  * Returns an array of VendorMentions with deduplication within the turn.
+ *
+ * @param options.packageResolver - custom resolver for package → vendor mapping.
+ *   When omitted, falls back to the static PACKAGE_TO_VENDOR map.
  */
 export function extractVendorMentions(
   turn: ParsedTurn,
   taxonomy: VendorTaxonomy,
   userPromptSnippet: string | null,
+  options?: ExtractorOptions,
 ): VendorMention[] {
+  const resolvePackage = options?.packageResolver ?? resolvePackageToVendorStatic;
   const mentions: VendorMention[] = [];
   const seen = new Set<string>(); // "vendorId:mentionType" for dedup within turn
 
@@ -127,7 +142,7 @@ export function extractVendorMentions(
         // Split on whitespace to handle "npm install pkg1 pkg2"
         const pkgs = pkgStr.split(/\s+/).filter(p => p && !p.startsWith("-"));
         for (const pkg of pkgs) {
-          const vendorId = resolvePackageToVendor(pkg);
+          const vendorId = resolvePackage(pkg);
           if (vendorId) {
             addMention({
               vendorCanonicalId: vendorId,
@@ -202,7 +217,7 @@ export function extractVendorMentions(
     );
     for (const im of importMatches) {
       const pkg = im[1];
-      const vendorId = resolvePackageToVendor(pkg);
+      const vendorId = resolvePackage(pkg);
       if (vendorId) {
         addMention({
           vendorCanonicalId: vendorId,
@@ -223,6 +238,166 @@ export function extractVendorMentions(
   }
 
   return mentions;
+}
+
+/**
+ * Extract vendor mentions AND collect unknown packages in one pass.
+ * Unknown packages are those that appear in install commands or import
+ * statements but don't resolve to any known vendor and aren't blocklisted.
+ *
+ * The caller (ingest-bridge) uses the unknownPackages list to create
+ * dynamic vendor entries, then re-extracts to catch text mentions.
+ */
+export function extractVendorMentionsWithUnknowns(
+  turn: ParsedTurn,
+  taxonomy: VendorTaxonomy,
+  userPromptSnippet: string | null,
+  options?: ExtractorOptions,
+): ExtractionResult {
+  const resolvePackage = options?.packageResolver ?? resolvePackageToVendorStatic;
+  const mentions: VendorMention[] = [];
+  const unknownPackages: UnknownPackage[] = [];
+  const seen = new Set<string>();
+  const seenUnknown = new Set<string>();
+
+  function addMention(m: Omit<VendorMention, "userPromptSnippet">) {
+    const key = `${m.vendorCanonicalId}:${m.mentionType}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const entry = taxonomy.vendors.find(v => v.canonical_id === m.vendorCanonicalId);
+    const workCategory = (entry?.category as WorkCategory) ?? "other";
+    mentions.push({ ...m, userPromptSnippet, workCategory });
+  }
+
+  function addUnknown(pkg: string, command: string, timestamp: string) {
+    if (seenUnknown.has(pkg)) return;
+    seenUnknown.add(pkg);
+    unknownPackages.push({
+      packageName: pkg,
+      installCommand: command.slice(0, 300),
+      timestamp,
+      contextSnippet: command.slice(0, 200),
+    });
+  }
+
+  // ── Tier 1: Package install signals from tool_use blocks ────────
+  for (const toolUse of turn.toolUses) {
+    const command = getCommandFromToolUse(toolUse);
+    if (!command) continue;
+
+    for (const pattern of INSTALL_PATTERNS) {
+      pattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(command)) !== null) {
+        const pkgStr = match[1];
+        const pkgs = pkgStr.split(/\s+/).filter(p => p && !p.startsWith("-"));
+        for (const pkg of pkgs) {
+          const vendorId = resolvePackage(pkg);
+          if (vendorId) {
+            addMention({
+              vendorCanonicalId: vendorId,
+              vendorRaw: pkg,
+              mentionType: "installed",
+              confidence: 1.0,
+              contextSnippet: command.slice(0, 200),
+              timestamp: turn.timestamp,
+              workCategory: null,
+            });
+          } else {
+            const cleaned = pkg.replace(/@[\d^~>=<.*]+$/, "");
+            if (!isBlocklistedPackage(cleaned)) {
+              addUnknown(cleaned, command, turn.timestamp);
+            }
+          }
+        }
+      }
+    }
+
+    // CLI command patterns (same as original — no unknown collection needed)
+    if (command) {
+      for (const { pattern, vendor } of CLI_PATTERNS) {
+        if (pattern.test(command)) {
+          addMention({
+            vendorCanonicalId: vendor,
+            vendorRaw: command.slice(0, 80),
+            mentionType: "configured",
+            confidence: 0.9,
+            contextSnippet: command.slice(0, 200),
+            timestamp: turn.timestamp,
+            workCategory: null,
+          });
+        }
+      }
+    }
+  }
+
+  // ── Tier 2: Configuration signals from tool_use (Write/Edit) ────
+  for (const toolUse of turn.toolUses) {
+    const content = getWriteContentFromToolUse(toolUse);
+    if (!content) continue;
+
+    for (const { pattern, vendor } of CONNECTION_PATTERNS) {
+      if (pattern.test(content)) {
+        addMention({
+          vendorCanonicalId: vendor,
+          vendorRaw: pattern.source,
+          mentionType: "configured",
+          confidence: 0.95,
+          contextSnippet: content.slice(0, 200),
+          timestamp: turn.timestamp,
+          workCategory: null,
+        });
+      }
+    }
+
+    for (const { pattern, vendor } of ENV_VAR_PATTERNS) {
+      if (pattern.test(content)) {
+        addMention({
+          vendorCanonicalId: vendor,
+          vendorRaw: pattern.source,
+          mentionType: "configured",
+          confidence: 0.9,
+          contextSnippet: content.slice(0, 200),
+          timestamp: turn.timestamp,
+          workCategory: null,
+        });
+      }
+    }
+
+    // Import statements — collect unknowns here too
+    const importMatches = content.matchAll(
+      /(?:import\s+.*?from\s+['"]|require\s*\(\s*['"])([^'"]+)['"]/g,
+    );
+    for (const im of importMatches) {
+      const pkg = im[1];
+      // Skip relative imports
+      if (pkg.startsWith(".") || pkg.startsWith("/")) continue;
+      const vendorId = resolvePackage(pkg);
+      if (vendorId) {
+        addMention({
+          vendorCanonicalId: vendorId,
+          vendorRaw: pkg,
+          mentionType: "implemented",
+          confidence: 0.9,
+          contextSnippet: content.slice(0, 200),
+          timestamp: turn.timestamp,
+          workCategory: null,
+        });
+      } else {
+        const cleaned = pkg.replace(/@[\d^~>=<.*]+$/, "");
+        if (!isBlocklistedPackage(cleaned)) {
+          addUnknown(cleaned, `import ${pkg}`, turn.timestamp);
+        }
+      }
+    }
+  }
+
+  // ── Tier 3: Text mentions from assistant text ─────────────────
+  if (turn.role === "assistant" && turn.textContent) {
+    extractTextMentions(turn.textContent, taxonomy, turn.timestamp, addMention);
+  }
+
+  return { mentions, unknownPackages };
 }
 
 /**

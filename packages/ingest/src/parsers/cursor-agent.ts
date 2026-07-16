@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { ParsedSession, ParsedTurn, ToolUseRecord, ToolResultRecord, SourcePlatform } from "@obs/shared";
+import type { ParsedSession, ParsedTurn, ToolUseRecord, ToolResultRecord, SourcePlatform } from "@sathergate/vendor-observatory-shared";
 
 /**
  * Cursor Agent transcript format (written by the benchmark adapter):

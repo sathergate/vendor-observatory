@@ -6,6 +6,7 @@
  */
 
 import type { ObservatoryDB } from "./db.js";
+import { loadPromptById } from "@sathergate/vendor-observatory-shared";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -145,8 +146,30 @@ export function scoreSignificance(deltas: VendorDelta[]): ScoredDelta[] {
 
 // ── Narrative Generation ───────────────────────────────────────────
 
+/** Minimal pool interface for DB access */
+interface Queryable {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
+
+let _cachedDigestTemplate: string | null = null;
+
+async function getDigestTemplate(pool: Queryable): Promise<string> {
+  if (_cachedDigestTemplate) return _cachedDigestTemplate;
+
+  const row = await loadPromptById(pool, "system-digest");
+  if (row) {
+    _cachedDigestTemplate = row.text;
+    return row.text;
+  }
+
+  throw new Error(
+    'Prompt "system-digest" not found in DB. Run: DATABASE_URL=... npx tsx db/seed-prompts.ts',
+  );
+}
+
 export async function generateNarrative(
   significantChanges: ScoredDelta[],
+  pool: Queryable,
 ): Promise<string | null> {
   if (significantChanges.length === 0) {
     return "No significant vendor position changes detected in this benchmark run.";
@@ -166,13 +189,16 @@ export async function generateNarrative(
         )
         .join("\n");
 
+      const template = await getDigestTemplate(pool);
+      const promptContent = template.replace("{{CHANGES}}", changesText);
+
       const response = await client.messages.create({
         model: process.env.ENRICHMENT_MODEL || "claude-haiku-4-20250414",
         max_tokens: 512,
         messages: [
           {
             role: "user",
-            content: `You are writing a brief daily digest for a developer tool vendor observatory. Summarize these vendor position changes in 3-5 sentences. Focus on the most impactful changes and what they might signal about market dynamics. Be concise and data-driven.\n\nChanges:\n${changesText}`,
+            content: promptContent,
           },
         ],
       });

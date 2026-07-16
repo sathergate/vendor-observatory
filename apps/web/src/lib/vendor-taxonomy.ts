@@ -105,3 +105,10 @@ export function vendorDisplayName(vendorId: string): string {
 export function vendorCategory(vendorId: string): string | null {
   return VENDOR_META[vendorId]?.category ?? null;
 }
+
+/** Get all vendor IDs that belong to the same category */
+export function getVendorIdsInCategory(category: string): string[] {
+  return Object.entries(VENDOR_META)
+    .filter(([, meta]) => meta.category === category)
+    .map(([id]) => id);
+}

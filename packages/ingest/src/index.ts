@@ -7,12 +7,14 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import {
   loadVendorTaxonomy,
   extractVendorMentions,
+  extractVendorRejections,
   extractResponseContext,
   isEnrichmentEnabled,
   extractResponseContextWithLLM,
   classifyIntent,
-} from "@obs/shared";
-import type { VendorTaxonomy } from "@obs/shared";
+  DEFAULT_CATEGORIES,
+} from "@sathergate/vendor-observatory-shared";
+import type { VendorTaxonomy } from "@sathergate/vendor-observatory-shared";
 import { ObservatoryDB } from "./db.js";
 import { scanForTranscripts, scanAllTranscripts } from "./scanner.js";
 import { parseClaudeCodeFile } from "./parsers/claude-code.js";
@@ -94,6 +96,10 @@ program
     const dbUrl = getDbUrl(opts);
     const db = await ObservatoryDB.create(dbUrl);
     console.log(chalk.green(`✓ Database connected`));
+
+    // Seed categories from taxonomy (idempotent — only inserts missing ones)
+    await db.seedCategoriesFromTaxonomy(taxonomy.vendors, DEFAULT_CATEGORIES);
+    console.log(chalk.green(`✓ Categories synced`));
 
     let totalSessions = 0;
     let totalObservations = 0;
@@ -193,6 +199,15 @@ program
             console.log(chalk.green(`    Session ${session.id.slice(0, 8)}... → ${sessionObservations} vendor observations`));
           }
 
+          // ── Rejection Extraction ──
+          const rejections = extractVendorRejections(session.turns, taxonomy);
+          for (const rejection of rejections) {
+            await db.insertVendorRejection(session.id, rejection);
+          }
+          if (rejections.length > 0) {
+            console.log(chalk.red(`    Session ${session.id.slice(0, 8)}... → ${rejections.length} vendor rejections`));
+          }
+
           // ── Enrichment: Store prompt metadata + response context for benchmark sessions ──
           const isBenchmark = (session.cwd && session.cwd.includes("obs-bench")) || session.gitBranch === "__obs_bench__";
           if (isBenchmark && session.cwd) {
@@ -245,6 +260,7 @@ program
                 promptId,
                 primaryVendor: responseCtx.primaryVendor,
                 isImplemented: responseCtx.isImplemented,
+                isCustomDiy: responseCtx.isCustomDiy,
                 rationaleSnippet: responseCtx.rationaleSnippet,
                 vendorsMentioned: responseCtx.vendorsMentioned,
                 tradeOffsSnippet: responseCtx.tradeOffsSnippet,
@@ -343,6 +359,7 @@ program
               pending.turns,
               taxonomy,
               pending.constraints,
+              db.getPool(),
             );
             if (llmCtx) {
               await db.upsertResponseContext({
@@ -350,6 +367,7 @@ program
                 promptId: pending.promptId,
                 primaryVendor: llmCtx.primaryVendor,
                 isImplemented: llmCtx.isImplemented,
+                isCustomDiy: llmCtx.isCustomDiy,
                 rationaleSnippet: llmCtx.rationaleSnippet,
                 vendorsMentioned: llmCtx.vendorsMentioned,
                 tradeOffsSnippet: llmCtx.tradeOffsSnippet,
@@ -386,7 +404,7 @@ program
 program
   .command("stats")
   .description("Show statistics from the observation database")
-  .option("--by <dimension>", "Group by: vendor, platform, category, action", "vendor")
+  .option("--by <dimension>", "Group by: vendor, platform, category, action, downloads", "vendor")
   .option("--db <url>", "PostgreSQL connection string")
   .action(async (opts) => {
     const dbUrl = getDbUrl(opts);
@@ -492,11 +510,119 @@ program
         break;
       }
 
+      case "downloads": {
+        const { PACKAGE_TO_VENDOR, fetchVendorNpmDownloads } = await import("@sathergate/vendor-observatory-shared");
+        console.log(chalk.dim("Fetching npm download counts for all tracked vendors...\n"));
+        const vendorDownloads = await fetchVendorNpmDownloads(PACKAGE_TO_VENDOR);
+        if (vendorDownloads.size === 0) {
+          console.log(chalk.yellow("No download data retrieved."));
+          break;
+        }
+
+        // Optionally cross-reference with mention stats
+        const vendorStats = await db.getVendorStats();
+        const mentionMap = new Map(vendorStats.map(s => [s.vendor_canonical_id, s.total]));
+
+        const rows = [...vendorDownloads.entries()]
+          .map(([vendor, dl]) => ({
+            vendor,
+            packages: dl.package,
+            weekly: dl.weekly,
+            monthly: dl.monthly,
+            mentions: mentionMap.get(vendor) ?? 0,
+            ratio: mentionMap.get(vendor)
+              ? Math.round(dl.weekly / mentionMap.get(vendor)!)
+              : null,
+          }))
+          .sort((a, b) => b.weekly - a.weekly);
+
+        console.log(
+          chalk.bold(
+            "Vendor".padEnd(22) +
+            "Weekly".padStart(10) +
+            "Monthly".padStart(10) +
+            "Mentions".padStart(10) +
+            "DL/Mention".padStart(12) +
+            "  Packages",
+          ),
+        );
+        console.log("─".repeat(90));
+        for (const r of rows) {
+          console.log(
+            r.vendor.padEnd(22) +
+            String(r.weekly.toLocaleString()).padStart(10) +
+            String(r.monthly.toLocaleString()).padStart(10) +
+            String(r.mentions).padStart(10) +
+            (r.ratio !== null ? String(r.ratio.toLocaleString()) : "—").padStart(12) +
+            "  " + r.packages.slice(0, 40),
+          );
+        }
+        console.log(chalk.dim(`\n  ${rows.length} vendors with npm packages tracked.`));
+        break;
+      }
+
+      case "downloads-history": {
+        const history = await db.getNpmDownloadHistory(undefined, 30);
+        if (history.length === 0) {
+          console.log(chalk.yellow("No download history found. Run `obs downloads-snapshot` first."));
+          break;
+        }
+        console.log(
+          chalk.bold(
+            "Date".padEnd(12) +
+            "Vendor".padEnd(22) +
+            "Weekly".padStart(10) +
+            "Monthly".padStart(10) +
+            "  Package",
+          ),
+        );
+        console.log("─".repeat(80));
+        for (const h of history) {
+          const date = h.recorded_at.slice(0, 10);
+          console.log(
+            date.padEnd(12) +
+            h.vendor_canonical_id.padEnd(22) +
+            String(h.weekly_downloads.toLocaleString()).padStart(10) +
+            String(h.monthly_downloads.toLocaleString()).padStart(10) +
+            "  " + h.npm_package.slice(0, 30),
+          );
+        }
+        console.log(chalk.dim(`\n  ${history.length} snapshots in last 30 days.`));
+        break;
+      }
+
       default:
-        console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, or action.`));
+        console.error(chalk.red(`Unknown dimension: ${by}. Use vendor, platform, category, action, downloads, or downloads-history.`));
         process.exit(1);
     }
 
+    await db.close();
+  });
+
+// ── Downloads Snapshot Command ──────────────────────────────────────
+
+program
+  .command("downloads-snapshot")
+  .description("Capture npm download counts for all tracked vendors and save to database")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const { PACKAGE_TO_VENDOR, fetchBulkNpmDownloads } = await import("@sathergate/vendor-observatory-shared");
+
+    console.log(chalk.blue("\nCapturing npm download snapshot...\n"));
+    const allPackages = Object.keys(PACKAGE_TO_VENDOR);
+    const downloads = await fetchBulkNpmDownloads(allPackages);
+
+    const snapshots = downloads.map((dl) => ({
+      vendorId: PACKAGE_TO_VENDOR[dl.package],
+      npmPackage: dl.package,
+      weekly: dl.weekly,
+      monthly: dl.monthly,
+    }));
+
+    const saved = await db.saveNpmDownloadBatch(snapshots);
+    console.log(chalk.green(`  Saved ${saved} download snapshots for ${new Set(snapshots.map(s => s.vendorId)).size} vendors.`));
     await db.close();
   });
 
@@ -562,7 +688,7 @@ program
     console.log(chalk.green(`  ${significant.length} significant changes`));
 
     console.log(chalk.cyan("Generating narrative..."));
-    const summary = await generateNarrative(significant);
+    const summary = await generateNarrative(significant, db.getPool());
     console.log(chalk.green(`  Summary: ${summary?.slice(0, 100) ?? "(template)"}`));
 
     const alerts = emitAlerts(deltas);
@@ -591,6 +717,227 @@ program
     } catch {
       // Server was terminated
     }
+  });
+
+// ── Prompts Command ─────────────────────────────────────────────────
+
+const promptsCmd = program
+  .command("prompts")
+  .description("Manage LLM prompts stored in the database");
+
+promptsCmd
+  .command("list")
+  .description("List prompts with optional filters")
+  .option("--kind <kind>", "Filter by kind: benchmark, fast, fast_generic, system")
+  .option("--category <category>", "Filter by category")
+  .option("--inactive", "Include inactive prompts", false)
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const prompts = await db.listPrompts({
+      kind: opts.kind,
+      category: opts.category,
+      includeInactive: opts.inactive,
+    });
+
+    if (prompts.length === 0) {
+      console.log(chalk.yellow("No prompts found."));
+      await db.close();
+      return;
+    }
+
+    console.log(chalk.blue(`\nFound ${prompts.length} prompts\n`));
+    console.log(
+      chalk.bold(
+        "ID".padEnd(30) +
+        "Kind".padEnd(14) +
+        "Category".padEnd(20) +
+        "Active".padEnd(8) +
+        "v".padEnd(4) +
+        "Text Preview",
+      ),
+    );
+    console.log("─".repeat(120));
+    for (const p of prompts) {
+      const preview = p.text.replace(/\n/g, " ").slice(0, 40);
+      console.log(
+        p.id.padEnd(30) +
+        p.kind.padEnd(14) +
+        (p.category ?? "—").padEnd(20) +
+        (p.is_active ? chalk.green("yes") : chalk.red("no ")).padEnd(8 + 10) + // +10 for chalk codes
+        String(p.version).padEnd(4) +
+        chalk.gray(preview + (p.text.length > 40 ? "…" : "")),
+      );
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("get <id>")
+  .description("Show full details of a prompt")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const prompt = await db.getPromptById(id);
+
+    if (!prompt) {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+      await db.close();
+      process.exit(1);
+    }
+
+    console.log(chalk.blue(`\nPrompt: ${prompt.id}\n`));
+    console.log(`  Kind:     ${prompt.kind}`);
+    console.log(`  Category: ${prompt.category ?? "—"}`);
+    console.log(`  Template: ${prompt.template ?? "—"}`);
+    console.log(`  Active:   ${prompt.is_active ? chalk.green("yes") : chalk.red("no")}`);
+    console.log(`  Version:  ${prompt.version}`);
+    console.log(`  Metadata: ${JSON.stringify(prompt.metadata)}`);
+    console.log(`\n  Text:\n${chalk.white(prompt.text)}`);
+    await db.close();
+  });
+
+promptsCmd
+  .command("add")
+  .description("Add a new prompt")
+  .requiredOption("--id <id>", "Prompt ID")
+  .requiredOption("--kind <kind>", "Prompt kind: benchmark, fast, fast_generic, system")
+  .requiredOption("--text <text>", "Prompt text")
+  .option("--category <category>", "Category")
+  .option("--template <template>", "Template name")
+  .option("--metadata <json>", "Metadata as JSON string", "{}")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+
+    let metadata: Record<string, unknown> = {};
+    try { metadata = JSON.parse(opts.metadata); } catch {
+      console.error(chalk.red("Invalid JSON for --metadata"));
+      await db.close();
+      process.exit(1);
+    }
+
+    await db.upsertPrompt({
+      id: opts.id,
+      kind: opts.kind,
+      category: opts.category ?? null,
+      template: opts.template ?? null,
+      text: opts.text,
+      metadata,
+    });
+
+    console.log(chalk.green(`Prompt "${opts.id}" added/updated.`));
+    await db.close();
+  });
+
+promptsCmd
+  .command("edit <id>")
+  .description("Edit an existing prompt (only provided fields are updated)")
+  .option("--text <text>", "New prompt text")
+  .option("--kind <kind>", "New kind")
+  .option("--category <category>", "New category")
+  .option("--template <template>", "New template")
+  .option("--metadata <json>", "New metadata as JSON string")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+
+    const existing = await db.getPromptById(id);
+    if (!existing) {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+      await db.close();
+      process.exit(1);
+    }
+
+    const fields: {
+      text?: string; kind?: string; category?: string | null;
+      template?: string | null; metadata?: Record<string, unknown>;
+    } = {};
+    if (opts.text !== undefined) fields.text = opts.text;
+    if (opts.kind !== undefined) fields.kind = opts.kind;
+    if (opts.category !== undefined) fields.category = opts.category;
+    if (opts.template !== undefined) fields.template = opts.template;
+    if (opts.metadata !== undefined) {
+      try { fields.metadata = JSON.parse(opts.metadata); } catch {
+        console.error(chalk.red("Invalid JSON for --metadata"));
+        await db.close();
+        process.exit(1);
+      }
+    }
+
+    if (Object.keys(fields).length === 0) {
+      console.log(chalk.yellow("No fields to update. Use --text, --kind, --category, --template, or --metadata."));
+      await db.close();
+      return;
+    }
+
+    const updated = await db.updatePromptFields(id, fields);
+    if (updated) {
+      console.log(chalk.green(`Prompt "${id}" updated (version bumped).`));
+    } else {
+      console.error(chalk.red(`Failed to update prompt "${id}".`));
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("delete <id>")
+  .description("Permanently delete a prompt")
+  .option("--confirm", "Confirm deletion (required)", false)
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+
+    if (!opts.confirm) {
+      console.error(chalk.red(`Pass --confirm to permanently delete prompt "${id}".`));
+      await db.close();
+      process.exit(1);
+    }
+
+    const deleted = await db.deletePrompt(id);
+    if (deleted) {
+      console.log(chalk.green(`Prompt "${id}" deleted.`));
+    } else {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("deactivate <id>")
+  .description("Soft-disable a prompt (set is_active = false)")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const ok = await db.setPromptActive(id, false);
+    if (ok) {
+      console.log(chalk.green(`Prompt "${id}" deactivated.`));
+    } else {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+    }
+    await db.close();
+  });
+
+promptsCmd
+  .command("activate <id>")
+  .description("Re-enable a deactivated prompt")
+  .option("--db <url>", "PostgreSQL connection string")
+  .action(async (id: string, opts) => {
+    const dbUrl = getDbUrl(opts);
+    const db = await ObservatoryDB.create(dbUrl);
+    const ok = await db.setPromptActive(id, true);
+    if (ok) {
+      console.log(chalk.green(`Prompt "${id}" activated.`));
+    } else {
+      console.error(chalk.red(`Prompt not found: ${id}`));
+    }
+    await db.close();
   });
 
 // ── Helper ──────────────────────────────────────────────────────────

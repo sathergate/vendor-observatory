@@ -1,7 +1,7 @@
 import { readdirSync, statSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
-import type { SourcePlatform } from "@obs/shared";
+import type { SourcePlatform } from "@sathergate/vendor-observatory-shared";
 
 export interface TranscriptFile {
   path: string;

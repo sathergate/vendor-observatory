@@ -31,16 +31,16 @@ export function SectionNav({ sections }: { sections: Section[] }) {
   }, [sections]);
 
   return (
-    <nav className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur border-b border-gray-800 -mx-6 px-6 py-2 mb-6">
+    <nav className="sticky top-0 z-10 bg-base/95 backdrop-blur border-b border-border-subtle -mx-8 px-8 py-2 mb-6">
       <div className="flex gap-1 overflow-x-auto">
         {sections.map(({ id, label }) => (
           <a
             key={id}
             href={`#${id}`}
-            className={`px-3 py-1.5 rounded text-sm whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 rounded-[6px] text-[14px] whitespace-nowrap transition-colors ${
               active === id
-                ? "bg-gray-700 text-white"
-                : "text-gray-400 hover:text-gray-200"
+                ? "bg-raised text-primary"
+                : "text-secondary hover:text-primary"
             }`}
           >
             {label}

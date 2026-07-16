@@ -9,10 +9,14 @@ import {
   getQueryAutocompleteData,
 } from "@/lib/query-engine";
 import { getVendorHeadToHead } from "@/lib/db";
+import { requireActivePayment } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireActivePayment();
+  if (auth.error) return auth.error;
+  const vs = auth.vendorCanonicalId;
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
 
@@ -28,7 +32,8 @@ export async function GET(request: NextRequest) {
       }
 
       case "vendorWinRate": {
-        const vendor = searchParams.get("vendor");
+        // Use the subscriber's linked vendor (ignore client-supplied vendor param)
+        const vendor = vs || searchParams.get("vendor");
         if (!vendor) {
           return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
         }
@@ -60,8 +65,9 @@ export async function GET(request: NextRequest) {
       }
 
       case "headToHead": {
-        const vendorA = searchParams.get("vendorA");
-        const vendorB = searchParams.get("vendorB");
+        // One of the vendors must be the subscriber's linked vendor
+        const vendorA = vs || searchParams.get("vendorA");
+        const vendorB = searchParams.get("vendorB") || searchParams.get("vendorA");
         if (!vendorA || !vendorB) {
           return NextResponse.json({ error: "Missing required parameters: vendorA, vendorB" }, { status: 400 });
         }
@@ -79,7 +85,8 @@ export async function GET(request: NextRequest) {
       }
 
       case "whatIf": {
-        const vendor = searchParams.get("vendor");
+        // Use the subscriber's linked vendor
+        const vendor = vs || searchParams.get("vendor");
         if (!vendor) {
           return NextResponse.json({ error: "Missing required parameter: vendor" }, { status: 400 });
         }

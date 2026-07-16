@@ -5,6 +5,8 @@ import type {
   ObservationRow,
   ToolActionRow,
   VendorMention,
+  VendorRejection,
+  VendorRejectionRow,
   VendorStats,
   PlatformStats,
   CoOccurrence,
@@ -16,7 +18,7 @@ import type {
   ExtractedResponseContext,
   IntentClassification,
   DisqualificationReason,
-} from "@obs/shared";
+} from "@sathergate/vendor-observatory-shared";
 
 // ── Schema (split into individual statements for pg) ──────────────────
 
@@ -87,6 +89,7 @@ const SCHEMA_STATEMENTS = [
     prompt_id TEXT NOT NULL,
     primary_vendor TEXT,
     is_implemented BOOLEAN NOT NULL DEFAULT FALSE,
+    is_custom_diy BOOLEAN NOT NULL DEFAULT FALSE,
     rationale_snippet TEXT,
     vendors_mentioned TEXT NOT NULL DEFAULT '[]',
     trade_offs_snippet TEXT,
@@ -150,7 +153,29 @@ const SCHEMA_STATEMENTS = [
     generated_at TEXT NOT NULL
   )`,
 
+  `CREATE TABLE IF NOT EXISTS categories (
+    id              TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    icon            TEXT NOT NULL DEFAULT '📦',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS vendors (
+    canonical_id    TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    synonyms        TEXT[] NOT NULL DEFAULT '{}',
+    package_names   TEXT[] NOT NULL DEFAULT '{}',
+    is_dynamic      BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
   // Indexes
+  `CREATE INDEX IF NOT EXISTS idx_categories_display_name ON categories(display_name)`,
+  `CREATE INDEX IF NOT EXISTS vendors_synonyms_gin ON vendors USING GIN(synonyms)`,
+  `CREATE INDEX IF NOT EXISTS vendors_package_names_gin ON vendors USING GIN(package_names)`,
+  `CREATE INDEX IF NOT EXISTS vendors_category ON vendors(category)`,
   `CREATE INDEX IF NOT EXISTS idx_observations_vendor ON observations(vendor_canonical_id)`,
   `CREATE INDEX IF NOT EXISTS idx_observations_session ON observations(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(mention_type)`,
@@ -167,6 +192,76 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_search_tsv ON search_index USING GIN(tsv)`,
   `CREATE INDEX IF NOT EXISTS idx_search_source_id ON search_index(source_id)`,
   `CREATE INDEX IF NOT EXISTS idx_insights_type ON cross_session_insights(insight_type)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_vendor ON vendor_rejections(vendor_canonical_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_session ON vendor_rejections(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_reason ON vendor_rejections(rejection_reason)`,
+  `CREATE INDEX IF NOT EXISTS idx_rejections_alternative ON vendor_rejections(chosen_alternative)`,
+
+  `CREATE TABLE IF NOT EXISTS vendor_rejections (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    vendor_canonical_id TEXT NOT NULL,
+    rejection_reason TEXT NOT NULL,
+    rejection_reason_detail TEXT,
+    chosen_alternative TEXT,
+    timestamp TEXT NOT NULL,
+    UNIQUE(session_id, vendor_canonical_id, rejection_reason)
+  )`,
+
+  // Prompts: all LLM prompts stored in the DB for easy editing without deploys
+  `CREATE TABLE IF NOT EXISTS prompts (
+    id              TEXT PRIMARY KEY,
+    kind            TEXT NOT NULL,
+    category        TEXT,
+    template        TEXT,
+    text            TEXT NOT NULL,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    version         INTEGER NOT NULL DEFAULT 1,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_prompts_kind ON prompts(kind)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompts_category ON prompts(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_prompts_active ON prompts(is_active) WHERE is_active = TRUE`,
+
+  // Fast benchmark: direct API probe responses (not full transcripts)
+  `CREATE TABLE IF NOT EXISTS fast_benchmark_responses (
+    id SERIAL PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    prompt_id TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    category TEXT NOT NULL,
+    response_text TEXT,
+    duration_ms INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    model TEXT NOT NULL DEFAULT 'claude-haiku-4-5-20251001',
+    vendor_mentions JSONB NOT NULL DEFAULT '[]',
+    primary_vendor TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(job_id, prompt_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_fast_bench_job ON fast_benchmark_responses(job_id)`,
+
+  // npm download snapshots for historical tracking
+  `CREATE TABLE IF NOT EXISTS npm_download_snapshots (
+    id SERIAL PRIMARY KEY,
+    vendor_canonical_id TEXT NOT NULL,
+    npm_package TEXT NOT NULL,
+    weekly_downloads INTEGER NOT NULL DEFAULT 0,
+    monthly_downloads INTEGER NOT NULL DEFAULT 0,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(vendor_canonical_id, npm_package, (recorded_at::date))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_npm_snapshots_vendor ON npm_download_snapshots(vendor_canonical_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_npm_snapshots_date ON npm_download_snapshots(recorded_at)`,
+
+  // Seed the uncategorized category for auto-discovered vendors
+  `INSERT INTO categories (id, display_name, description, icon)
+   VALUES ('uncategorized', 'Uncategorized', 'Auto-discovered vendors not yet categorized', '❓')
+   ON CONFLICT(id) DO NOTHING`,
 ];
 
 export class ObservatoryDB {
@@ -180,6 +275,11 @@ export class ObservatoryDB {
 
   private constructor(pool: Pool) {
     this.pool = pool;
+  }
+
+  /** Expose pool for prompt-store and LLM enrichment queries. */
+  getPool(): Pool {
+    return this.pool;
   }
 
   static async create(connectionString: string): Promise<ObservatoryDB> {
@@ -220,6 +320,9 @@ export class ObservatoryDB {
     if (!rcColNames.has("confidence_score")) {
       await this.queryable.query("ALTER TABLE response_context ADD COLUMN confidence_score REAL");
     }
+    if (!rcColNames.has("is_custom_diy")) {
+      await this.queryable.query("ALTER TABLE response_context ADD COLUMN is_custom_diy BOOLEAN NOT NULL DEFAULT FALSE");
+    }
   }
 
   async getIngestedFile(filePath: string): Promise<IngestedFileRow | null> {
@@ -257,6 +360,7 @@ export class ObservatoryDB {
     for (const s of sessions as { id: string }[]) {
       await this.queryable.query("DELETE FROM tool_actions WHERE session_id = $1", [s.id]);
       await this.queryable.query("DELETE FROM observations WHERE session_id = $1", [s.id]);
+      await this.queryable.query("DELETE FROM vendor_rejections WHERE session_id = $1", [s.id]);
     }
     await this.queryable.query("DELETE FROM sessions WHERE file_path = $1", [filePath]);
   }
@@ -268,6 +372,20 @@ export class ObservatoryDB {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT DO NOTHING
     `, [sessionId, mention.vendorCanonicalId, mention.vendorRaw, mention.mentionType, mention.workCategory, mention.confidence, mention.contextSnippet, mention.userPromptSnippet, mention.timestamp]);
+  }
+
+  async insertVendorRejection(sessionId: string, rejection: VendorRejection): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO vendor_rejections
+        (session_id, vendor_canonical_id, rejection_reason, rejection_reason_detail, chosen_alternative, timestamp)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT DO NOTHING
+    `, [sessionId, rejection.vendorCanonicalId, rejection.rejectionReason, rejection.rejectionReasonDetail, rejection.chosenAlternative, rejection.timestamp]);
+  }
+
+  async getRejectionsBySessionId(sessionId: string): Promise<VendorRejectionRow[]> {
+    const { rows } = await this.queryable.query("SELECT * FROM vendor_rejections WHERE session_id = $1 ORDER BY timestamp", [sessionId]);
+    return rows as VendorRejectionRow[];
   }
 
   async insertToolAction(sessionId: string, toolName: string, commandOrPath: string | null, vendorCanonicalId: string | null, actionType: string | null, success: number | null, timestamp: string): Promise<void> {
@@ -321,6 +439,7 @@ export class ObservatoryDB {
         SUM(CASE WHEN o.mention_type = 'compared' THEN 1 ELSE 0 END) AS compared,
         SUM(CASE WHEN o.mention_type = 'mentioned' THEN 1 ELSE 0 END) AS mentioned,
         SUM(CASE WHEN o.mention_type = 'rejected' THEN 1 ELSE 0 END) AS rejected,
+        SUM(CASE WHEN o.mention_type = 'custom_diy' THEN 1 ELSE 0 END) AS custom_diy,
         string_agg(DISTINCT s.source_platform, ',') AS platforms
       FROM observations o JOIN sessions s ON o.session_id = s.id WHERE ${whereClause}
       GROUP BY o.vendor_canonical_id, o.work_category ORDER BY total DESC
@@ -330,7 +449,7 @@ export class ObservatoryDB {
       category: (r.category as string) || "other", total: Number(r.total), installed: Number(r.installed),
       configured: Number(r.configured), implemented: Number(r.implemented), recommended: Number(r.recommended),
       compared: Number(r.compared), mentioned: Number(r.mentioned), rejected: Number(r.rejected),
-      platforms: (r.platforms as string) || "",
+      custom_diy: Number(r.custom_diy), platforms: (r.platforms as string) || "",
     }));
   }
 
@@ -386,6 +505,50 @@ export class ObservatoryDB {
         mentioned_total: Number(r.mentioned_total), recommended_total: rec, installed_total: inst,
         conversion_rate: rec > 0 ? inst / rec : 0 };
     });
+  }
+
+  // ── npm Download Snapshots ──────────────────────────────────────────
+
+  async saveNpmDownloadSnapshot(
+    vendorId: string,
+    npmPackage: string,
+    weekly: number,
+    monthly: number,
+  ): Promise<void> {
+    await this.queryable.query(
+      `INSERT INTO npm_download_snapshots (vendor_canonical_id, npm_package, weekly_downloads, monthly_downloads)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (vendor_canonical_id, npm_package, (recorded_at::date)) DO UPDATE
+       SET weekly_downloads = EXCLUDED.weekly_downloads, monthly_downloads = EXCLUDED.monthly_downloads`,
+      [vendorId, npmPackage, weekly, monthly],
+    );
+  }
+
+  async saveNpmDownloadBatch(
+    snapshots: Array<{ vendorId: string; npmPackage: string; weekly: number; monthly: number }>,
+  ): Promise<number> {
+    let saved = 0;
+    for (const s of snapshots) {
+      await this.saveNpmDownloadSnapshot(s.vendorId, s.npmPackage, s.weekly, s.monthly);
+      saved++;
+    }
+    return saved;
+  }
+
+  async getNpmDownloadHistory(
+    vendorId?: string,
+    days = 30,
+  ): Promise<Array<{ vendor_canonical_id: string; npm_package: string; weekly_downloads: number; monthly_downloads: number; recorded_at: string }>> {
+    let sql = `SELECT vendor_canonical_id, npm_package, weekly_downloads, monthly_downloads, recorded_at::text
+       FROM npm_download_snapshots WHERE recorded_at >= NOW() - INTERVAL '${days} days'`;
+    const params: string[] = [];
+    if (vendorId) {
+      sql += ` AND vendor_canonical_id = $1`;
+      params.push(vendorId);
+    }
+    sql += ` ORDER BY recorded_at DESC, weekly_downloads DESC`;
+    const { rows } = await this.queryable.query(sql, params);
+    return rows as Array<{ vendor_canonical_id: string; npm_package: string; weekly_downloads: number; monthly_downloads: number; recorded_at: string }>;
   }
 
   async getSessions(limit = 50, offset = 0, platform?: string): Promise<SessionRow[]> {
@@ -466,6 +629,7 @@ export class ObservatoryDB {
     promptId: string;
     primaryVendor: string | null;
     isImplemented: boolean;
+    isCustomDiy?: boolean;
     rationaleSnippet: string | null;
     vendorsMentioned: Array<{ vendor: string; disposition: string }>;
     tradeOffsSnippet: string | null;
@@ -476,13 +640,14 @@ export class ObservatoryDB {
     confidenceScore?: number | null;
   }): Promise<void> {
     await this.queryable.query(`
-      INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, rationale_snippet,
-        vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed,
+      INSERT INTO response_context (session_id, prompt_id, primary_vendor, is_implemented, is_custom_diy,
+        rationale_snippet, vendors_mentioned, trade_offs_snippet, gotchas_snippet, constraints_addressed,
         reasoning_chain, disqualification_reasons, confidence_score, extracted_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()::text)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()::text)
       ON CONFLICT(session_id, prompt_id) DO UPDATE SET
         primary_vendor = EXCLUDED.primary_vendor,
         is_implemented = EXCLUDED.is_implemented,
+        is_custom_diy = EXCLUDED.is_custom_diy,
         rationale_snippet = EXCLUDED.rationale_snippet,
         vendors_mentioned = EXCLUDED.vendors_mentioned,
         trade_offs_snippet = EXCLUDED.trade_offs_snippet,
@@ -497,6 +662,7 @@ export class ObservatoryDB {
       ctx.promptId,
       ctx.primaryVendor,
       ctx.isImplemented,
+      ctx.isCustomDiy ?? false,
       ctx.rationaleSnippet,
       JSON.stringify(ctx.vendorsMentioned),
       ctx.tradeOffsSnippet,
@@ -709,6 +875,313 @@ export class ObservatoryDB {
       gotchas_snippet: string | null; extracted_at: string; source_platform: string;
       category: string | null;
     }>;
+  }
+
+  // ── Vendors (taxonomy in DB) ──────────────────────────────────────
+
+  async getVendorsAsTaxonomy(): Promise<{ vendors: Array<{ canonical_id: string; display_name: string; synonyms: string[]; category: string }> }> {
+    const { rows } = await this.queryable.query(
+      "SELECT canonical_id, display_name, category, synonyms FROM vendors ORDER BY canonical_id"
+    );
+    return {
+      vendors: rows.map((r: Record<string, unknown>) => ({
+        canonical_id: r.canonical_id as string,
+        display_name: r.display_name as string,
+        category: r.category as string,
+        synonyms: (r.synonyms as string[]) ?? [],
+      })),
+    };
+  }
+
+  async getVendorById(canonicalId: string): Promise<{ canonical_id: string; display_name: string; category: string; synonyms: string[]; package_names: string[]; is_dynamic: boolean } | null> {
+    const { rows } = await this.queryable.query(
+      "SELECT canonical_id, display_name, category, synonyms, package_names, is_dynamic FROM vendors WHERE canonical_id = $1",
+      [canonicalId]
+    );
+    if (rows.length === 0) return null;
+    const r = rows[0] as Record<string, unknown>;
+    return {
+      canonical_id: r.canonical_id as string,
+      display_name: r.display_name as string,
+      category: r.category as string,
+      synonyms: (r.synonyms as string[]) ?? [],
+      package_names: (r.package_names as string[]) ?? [],
+      is_dynamic: r.is_dynamic as boolean,
+    };
+  }
+
+  async findVendorByDomainOrName(domain: string, productName: string): Promise<string | null> {
+    // Check canonical_id matches domain
+    const { rows: byId } = await this.queryable.query(
+      "SELECT canonical_id FROM vendors WHERE canonical_id = $1 OR canonical_id = $2",
+      [domain.split(".")[0], `unknown/${domain}`]
+    );
+    if (byId.length > 0) return (byId[0] as { canonical_id: string }).canonical_id;
+
+    // Check display_name
+    const { rows: byName } = await this.queryable.query(
+      "SELECT canonical_id FROM vendors WHERE LOWER(display_name) = LOWER($1)",
+      [productName]
+    );
+    if (byName.length > 0) return (byName[0] as { canonical_id: string }).canonical_id;
+
+    // Check synonyms array contains the domain or product name
+    const { rows: bySyn } = await this.queryable.query(
+      "SELECT canonical_id FROM vendors WHERE $1 = ANY(synonyms) OR $2 = ANY(synonyms) LIMIT 1",
+      [domain.split(".")[0].toLowerCase(), productName.toLowerCase()]
+    );
+    if (bySyn.length > 0) return (bySyn[0] as { canonical_id: string }).canonical_id;
+
+    return null;
+  }
+
+  async upsertVendor(vendor: {
+    canonicalId: string;
+    displayName: string;
+    category: string;
+    synonyms: string[];
+    packageNames?: string[];
+    isDynamic: boolean;
+  }): Promise<void> {
+    // Ensure the category exists in the categories table before inserting the vendor.
+    // This resolves the category dynamically: reuses an existing one if it matches,
+    // or creates a new one if no suitable category exists.
+    const resolvedCategory = await this.resolveCategory(vendor.category, {
+      displayName: vendor.category.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+      description: "",
+      icon: "📦",
+    });
+
+    await this.queryable.query(`
+      INSERT INTO vendors (canonical_id, display_name, category, synonyms, package_names, is_dynamic)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT(canonical_id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        category = EXCLUDED.category,
+        synonyms = EXCLUDED.synonyms,
+        package_names = EXCLUDED.package_names
+    `, [vendor.canonicalId, vendor.displayName, resolvedCategory, vendor.synonyms, vendor.packageNames ?? [], vendor.isDynamic]);
+  }
+
+  // ── Categories ───────────────────────────────────────────────────
+
+  async getAllCategories(): Promise<Array<{ id: string; display_name: string; description: string; icon: string }>> {
+    const { rows } = await this.queryable.query(
+      "SELECT id, display_name, description, icon FROM categories ORDER BY id"
+    );
+    return rows as Array<{ id: string; display_name: string; description: string; icon: string }>;
+  }
+
+  async getCategoryById(id: string): Promise<{ id: string; display_name: string; description: string; icon: string } | null> {
+    const { rows } = await this.queryable.query(
+      "SELECT id, display_name, description, icon FROM categories WHERE id = $1",
+      [id]
+    );
+    return (rows[0] as { id: string; display_name: string; description: string; icon: string }) ?? null;
+  }
+
+  async upsertCategory(category: {
+    id: string;
+    displayName: string;
+    description: string;
+    icon: string;
+  }): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO categories (id, display_name, description, icon)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT(id) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        description = EXCLUDED.description,
+        icon = EXCLUDED.icon
+    `, [category.id, category.displayName, category.description, category.icon]);
+  }
+
+  /**
+   * Given a proposed category slug, check if it already exists in the DB.
+   * If it does, return it. If not, create a new category row and return it.
+   */
+  async resolveCategory(
+    categoryId: string,
+    fallback: { displayName: string; description: string; icon: string },
+  ): Promise<string> {
+    const existing = await this.getCategoryById(categoryId);
+    if (existing) return existing.id;
+
+    // Check if any existing category is a close match (prefix/substring)
+    const allCats = await this.getAllCategories();
+    for (const cat of allCats) {
+      // Exact match on display name (case-insensitive)
+      if (cat.display_name.toLowerCase() === fallback.displayName.toLowerCase()) {
+        return cat.id;
+      }
+    }
+
+    // No suitable existing category — create a new one
+    await this.upsertCategory({
+      id: categoryId,
+      displayName: fallback.displayName,
+      description: fallback.description,
+      icon: fallback.icon,
+    });
+    return categoryId;
+  }
+
+  /**
+   * Seed categories from vendor taxonomy entries.
+   * Extracts distinct categories from the vendor list and ensures they exist in the categories table.
+   */
+  async seedCategoriesFromTaxonomy(vendors: Array<{ category: string }>, categoryMeta?: Record<string, { displayName: string; description: string; icon: string }>): Promise<void> {
+    const seen = new Set<string>();
+    for (const v of vendors) {
+      if (seen.has(v.category)) continue;
+      seen.add(v.category);
+
+      const meta = categoryMeta?.[v.category];
+      await this.upsertCategory({
+        id: v.category,
+        displayName: meta?.displayName ?? v.category.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+        description: meta?.description ?? "",
+        icon: meta?.icon ?? "📦",
+      });
+    }
+  }
+
+  // ── Prompts ──────────────────────────────────────────────────────
+
+  async getPromptsByKind(kind: string, activeOnly = true): Promise<Array<{
+    id: string; kind: string; category: string | null; template: string | null;
+    text: string; metadata: Record<string, unknown>; is_active: boolean;
+    version: number;
+  }>> {
+    const sql = activeOnly
+      ? "SELECT id, kind, category, template, text, metadata, is_active, version FROM prompts WHERE kind = $1 AND is_active = TRUE ORDER BY id"
+      : "SELECT id, kind, category, template, text, metadata, is_active, version FROM prompts WHERE kind = $1 ORDER BY id";
+    const { rows } = await this.queryable.query(sql, [kind]);
+    return rows as Array<{
+      id: string; kind: string; category: string | null; template: string | null;
+      text: string; metadata: Record<string, unknown>; is_active: boolean;
+      version: number;
+    }>;
+  }
+
+  async getPromptById(id: string): Promise<{
+    id: string; kind: string; category: string | null; template: string | null;
+    text: string; metadata: Record<string, unknown>; is_active: boolean;
+    version: number;
+  } | null> {
+    const { rows } = await this.queryable.query(
+      "SELECT id, kind, category, template, text, metadata, is_active, version FROM prompts WHERE id = $1",
+      [id],
+    );
+    return (rows[0] as {
+      id: string; kind: string; category: string | null; template: string | null;
+      text: string; metadata: Record<string, unknown>; is_active: boolean;
+      version: number;
+    }) ?? null;
+  }
+
+  async upsertPrompt(prompt: {
+    id: string; kind: string; category?: string | null; template?: string | null;
+    text: string; metadata?: Record<string, unknown>; isActive?: boolean;
+    version?: number;
+  }): Promise<void> {
+    await this.queryable.query(`
+      INSERT INTO prompts (id, kind, category, template, text, metadata, is_active, version, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      ON CONFLICT(id) DO UPDATE SET
+        kind = EXCLUDED.kind,
+        category = EXCLUDED.category,
+        template = EXCLUDED.template,
+        text = EXCLUDED.text,
+        metadata = EXCLUDED.metadata,
+        is_active = EXCLUDED.is_active,
+        version = EXCLUDED.version,
+        updated_at = NOW()
+    `, [
+      prompt.id,
+      prompt.kind,
+      prompt.category ?? null,
+      prompt.template ?? null,
+      prompt.text,
+      JSON.stringify(prompt.metadata ?? {}),
+      prompt.isActive ?? true,
+      prompt.version ?? 1,
+    ]);
+  }
+
+  async listPrompts(opts?: {
+    kind?: string;
+    category?: string;
+    includeInactive?: boolean;
+  }): Promise<Array<{
+    id: string; kind: string; category: string | null; template: string | null;
+    text: string; metadata: Record<string, unknown>; is_active: boolean;
+    version: number; created_at: string; updated_at: string;
+  }>> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    let idx = 1;
+    if (opts?.kind) { conditions.push(`kind = $${idx++}`); params.push(opts.kind); }
+    if (opts?.category) { conditions.push(`category = $${idx++}`); params.push(opts.category); }
+    if (!opts?.includeInactive) { conditions.push("is_active = TRUE"); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const { rows } = await this.queryable.query(
+      `SELECT id, kind, category, template, text, metadata, is_active, version, created_at::text, updated_at::text FROM prompts ${where} ORDER BY kind, category, id`,
+      params,
+    );
+    return rows as Array<{
+      id: string; kind: string; category: string | null; template: string | null;
+      text: string; metadata: Record<string, unknown>; is_active: boolean;
+      version: number; created_at: string; updated_at: string;
+    }>;
+  }
+
+  async updatePromptFields(id: string, fields: {
+    text?: string;
+    kind?: string;
+    category?: string | null;
+    template?: string | null;
+    metadata?: Record<string, unknown>;
+  }): Promise<boolean> {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
+    if (fields.text !== undefined) { sets.push(`text = $${idx++}`); params.push(fields.text); }
+    if (fields.kind !== undefined) { sets.push(`kind = $${idx++}`); params.push(fields.kind); }
+    if (fields.category !== undefined) { sets.push(`category = $${idx++}`); params.push(fields.category); }
+    if (fields.template !== undefined) { sets.push(`template = $${idx++}`); params.push(fields.template); }
+    if (fields.metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(fields.metadata)); }
+    if (sets.length === 0) return false;
+    sets.push(`version = version + 1`);
+    sets.push(`updated_at = NOW()`);
+    params.push(id);
+    const { rowCount } = await this.queryable.query(
+      `UPDATE prompts SET ${sets.join(", ")} WHERE id = $${idx}`,
+      params,
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async deletePrompt(id: string): Promise<boolean> {
+    const { rowCount } = await this.queryable.query("DELETE FROM prompts WHERE id = $1", [id]);
+    return (rowCount ?? 0) > 0;
+  }
+
+  async setPromptActive(id: string, active: boolean): Promise<boolean> {
+    const { rowCount } = await this.queryable.query(
+      "UPDATE prompts SET is_active = $1, updated_at = NOW() WHERE id = $2",
+      [active, id],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
+  async getPromptsCount(kind?: string): Promise<number> {
+    const sql = kind
+      ? "SELECT COUNT(*) AS c FROM prompts WHERE kind = $1 AND is_active = TRUE"
+      : "SELECT COUNT(*) AS c FROM prompts WHERE is_active = TRUE";
+    const params = kind ? [kind] : [];
+    const { rows } = await this.queryable.query(sql, params);
+    return Number((rows[0] as { c: string }).c);
   }
 
   async close(): Promise<void> { await this.pool.end(); }

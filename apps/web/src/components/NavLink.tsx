@@ -19,10 +19,10 @@ export function NavLink({ href, label, exact = false }: NavLinkProps) {
     <Link
       href={href}
       aria-current={isActive ? "page" : undefined}
-      className={`block px-3 py-2 rounded-md text-sm transition-colors ${
+      className={`block px-3 py-2 rounded-[6px] text-[14px] transition-colors ${
         isActive
-          ? "bg-gray-800 text-white font-medium"
-          : "text-gray-400 hover:bg-gray-800 hover:text-gray-100"
+          ? "bg-raised text-primary font-medium"
+          : "text-secondary hover:bg-raised hover:text-primary"
       }`}
     >
       {label}

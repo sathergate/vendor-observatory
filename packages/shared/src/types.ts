@@ -11,15 +11,15 @@ export type MentionType =
   | "recommended"
   | "compared"
   | "mentioned"
-  | "rejected";
+  | "rejected"
+  | "custom_diy";
 
-export type WorkCategory =
-  | "database" | "auth" | "hosting" | "ci_cd" | "monitoring"
-  | "payments" | "email" | "storage" | "search" | "analytics"
-  | "ai_ml" | "messaging" | "cdn" | "dns" | "observability"
-  | "error_monitoring" | "feature_flags" | "secrets_management"
-  | "developer_portal" | "llm_observability" | "incident_management"
-  | "code_search" | "security_scanning" | "edge_compute" | "other";
+/**
+ * Work category for a vendor mention. Now dynamic — categories are stored
+ * in the `categories` table in the database and can be extended at runtime.
+ * Common built-in values include "database", "ci_cd", "observability", etc.
+ */
+export type WorkCategory = string;
 
 // ── Vendor Mention (extracted from a transcript) ────────────────────
 
@@ -117,6 +117,44 @@ export interface ToolActionRow {
   timestamp: string;
 }
 
+// ── Vendor Rejections ────────────────────────────────────────────────
+
+export type RejectionReason =
+  | "too_expensive"
+  | "too_complex"
+  | "poor_docs"
+  | "not_available_region"
+  | "feature_gap"
+  | "trust_concerns"
+  | "vendor_lock_in";
+
+export interface VendorRejection {
+  vendorCanonicalId: string;
+  rejectionReason: RejectionReason;
+  rejectionReasonDetail: string | null;
+  chosenAlternative: string | null;
+  timestamp: string;
+}
+
+export interface VendorRejectionRow {
+  id: number;
+  session_id: string;
+  vendor_canonical_id: string;
+  rejection_reason: RejectionReason;
+  rejection_reason_detail: string | null;
+  chosen_alternative: string | null;
+  timestamp: string;
+}
+
+// ── Category (DB-backed) ────────────────────────────────────────────
+
+export interface CategoryRow {
+  id: string;
+  display_name: string;
+  description: string;
+  icon: string;
+}
+
 // ── Vendor Taxonomy ─────────────────────────────────────────────────
 
 export interface VendorEntry {
@@ -152,7 +190,8 @@ export type VendorDisposition =
   | "compared"
   | "rejected"
   | "mentioned"
-  | "implemented";
+  | "implemented"
+  | "custom_diy";
 
 // ── Enrichment: DB Row Types ────────────────────────────────────────
 
@@ -174,6 +213,7 @@ export interface ResponseContextRow {
   prompt_id: string;
   primary_vendor: string | null;
   is_implemented: boolean;
+  is_custom_diy: boolean;
   rationale_snippet: string | null;
   vendors_mentioned: string;    // JSON array of { vendor, disposition }
   trade_offs_snippet: string | null;
@@ -211,6 +251,7 @@ export interface DisqualificationReason {
 export interface ExtractedResponseContext {
   primaryVendor: string | null;
   isImplemented: boolean;
+  isCustomDiy: boolean;
   rationaleSnippet: string | null;
   vendorsMentioned: VendorDispositionEntry[];
   tradeOffsSnippet: string | null;
@@ -275,6 +316,7 @@ export interface VendorStats {
   compared: number;
   mentioned: number;
   rejected: number;
+  custom_diy: number;
   platforms: string;
 }
 
@@ -314,4 +356,28 @@ export interface DashboardStats {
   uniqueVendors: number;
   platformBreakdown: Record<string, number>;
   lastIngestedAt: string | null;
+}
+
+// ── Unknown Package Discovery ────────────────────────────────────────
+
+export interface UnknownPackage {
+  packageName: string;       // e.g., "@tanstack/query"
+  installCommand: string;    // full command context
+  timestamp: string;
+  contextSnippet: string;
+}
+
+export interface ExtractionResult {
+  mentions: VendorMention[];
+  unknownPackages: UnknownPackage[];
+}
+
+// ── Evidence Linking ──────────────────────────────────────────────────
+
+export interface EvidenceRef {
+  type: "session" | "benchmark_case";
+  id: string;
+  label: string;
+  url: string;
+  anchor?: string;
 }

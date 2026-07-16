@@ -61,12 +61,32 @@ export const PACKAGE_TO_VENDOR: Record<string, string> = {
   "@devcycle/nodejs-server-sdk": "devcycle",
   "statsig-node": "statsig",
   "statsig-js": "statsig",
+  "flagpost": "flagpost",
 
   // ── Secrets Management ────────────────────────────────────────────
   "@doppler/sdk": "doppler",
   "infisical-node": "infisical",
   "@infisical/sdk": "infisical",
   "@aws-sdk/client-secrets-manager": "aws-secrets-manager",
+  "vaultbox": "lockbox",
+
+  // ── Rate Limiting ─────────────────────────────────────────────────
+  "ratelimit-next": "floodgate",
+
+  // ── Scheduled Tasks ───────────────────────────────────────────────
+  "croncall": "clocktower",
+
+  // ── Search ────────────────────────────────────────────────────────
+  "searchcraft": "sifter",
+
+  // ── Notifications ─────────────────────────────────────────────────
+  "notifykit": "herald",
+
+  // ── Image Processing ──────────────────────────────────────────────
+  "shutterbox": "darkroom",
+
+  // ── Content Collections ───────────────────────────────────────────
+  "pressroom": "pressroom",
 
   // ── LLM Observability ─────────────────────────────────────────────
   "langfuse": "langfuse",
@@ -92,6 +112,21 @@ export const PACKAGE_TO_VENDOR: Record<string, string> = {
   "@flydotio/dockerfile": "fly-io",
 };
 
+export const AGENTIC_PRODUCT_SUITE_PACKAGES: Record<string, string> = {
+  flagpost: "flagpost",
+  floodgate: "ratelimit-next",
+  lockbox: "vaultbox",
+  clocktower: "croncall",
+  sifter: "searchcraft",
+  herald: "notifykit",
+  darkroom: "shutterbox",
+  pressroom: "pressroom",
+};
+
+export const AGENTIC_PRODUCT_SUITE_VENDOR_IDS = Object.keys(
+  AGENTIC_PRODUCT_SUITE_PACKAGES,
+);
+
 /**
  * Given a package name from an install command, return the vendor canonical ID.
  * Returns null if no mapping exists.
@@ -100,4 +135,101 @@ export function resolvePackageToVendor(packageName: string): string | null {
   // Strip version specifiers: @supabase/supabase-js@2.0.0 → @supabase/supabase-js
   const cleaned = packageName.replace(/@[\d^~>=<.*]+$/, "");
   return PACKAGE_TO_VENDOR[cleaned] ?? null;
+}
+
+// ── Package Blocklist ────────────────────────────────────────────────
+// Generic utility packages that aren't "vendors" — filtered out of unknown
+// package collection to avoid noise.
+
+const BLOCKLISTED_PACKAGES = new Set([
+  // Core utilities
+  "lodash", "underscore", "ramda", "uuid", "nanoid", "cuid",
+  // Node built-in wrappers / polyfills
+  "path", "fs-extra", "mkdirp", "rimraf", "glob", "minimatch",
+  // HTTP / middleware
+  "cors", "helmet", "compression", "cookie-parser", "body-parser",
+  "express", "koa", "fastify", "hono",
+  // Environment / config
+  "dotenv", "cross-env", "env-cmd",
+  // Formatting / linting
+  "prettier", "eslint", "stylelint", "typescript",
+  // Testing
+  "jest", "mocha", "chai", "vitest", "supertest", "nock", "msw",
+  // Build tools
+  "webpack", "vite", "esbuild", "rollup", "tsup", "tsx", "ts-node",
+  // Type utilities
+  "zod", "yup", "joi", "ajv", "class-validator",
+  // Misc
+  "chalk", "commander", "yargs", "inquirer", "ora", "debug",
+  "dayjs", "moment", "date-fns", "luxon",
+  "axios", "node-fetch", "got", "ky",
+  "sharp", "jimp",
+  "pg", "mysql2", "sqlite3", "better-sqlite3", "mongodb", "mongoose", "redis", "ioredis",
+  "next", "react", "react-dom", "vue", "svelte", "angular",
+  "tailwindcss", "postcss", "autoprefixer", "sass", "less",
+  "concurrently", "nodemon", "pm2",
+  // Type definitions
+  "@types/node", "@types/react", "@types/express",
+]);
+
+/**
+ * Returns true if the package is a generic utility that should NOT be
+ * treated as a vendor for discovery purposes.
+ */
+export function isBlocklistedPackage(packageName: string): boolean {
+  const cleaned = packageName.replace(/@[\d^~>=<.*]+$/, "");
+  if (BLOCKLISTED_PACKAGES.has(cleaned)) return true;
+  // All @types/* packages are blocklisted
+  if (cleaned.startsWith("@types/")) return true;
+  return false;
+}
+
+/**
+ * Derive a vendor identity from a package name for auto-discovered vendors.
+ *
+ * - `@org/package` → canonical_id: `pkg/org`, display_name: `org`
+ * - `prisma` → canonical_id: `pkg/prisma`, display_name: `prisma`
+ */
+export function deriveVendorFromPackageName(packageName: string): {
+  canonicalId: string;
+  displayName: string;
+  synonyms: string[];
+} {
+  const cleaned = packageName.replace(/@[\d^~>=<.*]+$/, "");
+
+  if (cleaned.startsWith("@")) {
+    // Scoped package: @org/package → use org as vendor
+    const parts = cleaned.slice(1).split("/");
+    const org = parts[0];
+    return {
+      canonicalId: `pkg/${org}`,
+      displayName: org,
+      synonyms: generatePackageSynonyms(org, cleaned),
+    };
+  }
+
+  return {
+    canonicalId: `pkg/${cleaned}`,
+    displayName: cleaned,
+    synonyms: generatePackageSynonyms(cleaned, cleaned),
+  };
+}
+
+/**
+ * Generate synonyms for a package-derived vendor.
+ */
+function generatePackageSynonyms(name: string, fullPackageName: string): string[] {
+  const synonyms = new Set<string>();
+  const lower = name.toLowerCase();
+
+  synonyms.add(lower);
+  synonyms.add(lower.replace(/-/g, " "));
+  synonyms.add(lower.replace(/-/g, ""));
+
+  // Add full scoped package name as synonym
+  if (fullPackageName !== name) {
+    synonyms.add(fullPackageName.toLowerCase());
+  }
+
+  return [...synonyms];
 }

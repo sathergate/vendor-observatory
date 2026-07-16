@@ -1,18 +1,32 @@
 {
-  "name": "@obs/benchmark",
-  "private": true,
+  "name": "@sathergate/vendor-observatory-benchmark",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./lib": "./dist/lib.js",
+    "./workspace": "./dist/workspace.js",
+    "./adapters/*": "./dist/adapters/*.js"
+  },
   "bin": {
     "obs-bench": "dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sathergate/vendor-observatory.git",
+    "directory": "packages/benchmark"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": ["dist"],
   "scripts": {
     "build": "tsc",
     "bench": "node dist/index.js"
   },
   "dependencies": {
-    "@obs/shared": "workspace:*",
+    "@sathergate/vendor-observatory-shared": "workspace:*",
     "commander": "^13.0.0",
     "chalk": "^5.4.0"
   },

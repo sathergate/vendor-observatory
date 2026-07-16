@@ -1,0 +1,29 @@
+resources:
+  jobs:
+    create_benchmark_run:
+      name: create_benchmark_run
+      description: "Create a benchmark run and populate worker_queue with prompt×agent pairs"
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"  # Daily at 6 AM UTC
+        timezone_id: UTC
+      parameters:
+        - name: budget_usd
+          default: "30.0"
+        - name: assistants
+          default: "claude_code,codex_cli,cursor"
+        - name: category
+          default: ""
+      tasks:
+        - task_key: create_run
+          spark_python_task:
+            python_file: ../src/benchmark/jobs/create_run.py
+            parameters:
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+          environment_key: default
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "4"
+            dependencies:
+              - ${workspace.file_path}/dist/benchmark-0.0.1-py3-none-any.whl

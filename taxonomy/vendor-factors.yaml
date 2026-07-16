@@ -1,0 +1,1221 @@
+# Vendor Factor Scores
+# Scores each vendor across the 13 AI-recommendation factors from vendor-selection-principles.md.
+# Reflects the multi-causal model: training data is eligibility gate, not proportional driver.
+# Scores: 1 (poor) → 5 (excellent). null = not assessed.
+# Confidence: high = explicitly discussed in principles doc, medium = partially referenced, low = inferred.
+
+---
+version: "2.0"
+description: >
+  Vendor scores across 13 AI-recommendation factors reflecting the multi-causal model.
+  Training data is an eligibility gate; ecosystem position, sentiment, recency, and MCP
+  integration independently shape recommendations. Used by the Factor Analysis visualization.
+
+factors:
+  - id: ecosystem_graph_position
+    label: Ecosystem Graph Position
+    short: Ecosystem
+    weight: very_high
+    description: Position in the Next.js/React/TS dependency chain; hub tools amplified
+
+  - id: integration_speed
+    label: Integration Speed
+    short: Integration
+    weight: very_high
+    description: Lines of code to first working integration
+
+  - id: sentiment_polarity
+    label: Sentiment & Trust Signals
+    short: Sentiment
+    weight: high
+    description: Net developer sentiment; negative signals suppress recommendations regardless of volume
+
+  - id: training_data_volume
+    label: Training Data Presence
+    short: Training Data
+    weight: high
+    description: GitHub repos, tutorials, SO answers — eligibility gate, not proportional driver
+
+  - id: recency_gradient
+    label: Recency Gradient
+    short: Recency
+    weight: high
+    description: Presence in the training composition window the current model weights most heavily; shifts are discontinuous across model versions
+
+  - id: serverless_compat
+    label: Serverless Compatibility
+    short: Serverless
+    weight: high
+    description: HTTP-based, edge support, connection pooling
+
+  - id: stack_fit
+    label: Stack Fit
+    short: Stack Fit
+    weight: high
+    description: Next.js App Router, React components, RSC compat
+
+  - id: free_tier
+    label: Free Tier Generosity
+    short: Free Tier
+    weight: high
+    description: Limits, pausing behavior, real product vs demo
+
+  - id: docs_quality
+    label: Documentation Quality
+    short: Docs
+    weight: medium_high
+    description: Copy-pasteable examples, TS types, error messages
+
+  - id: mcp_integration
+    label: MCP & Tool Integration
+    short: MCP
+    weight: medium
+    description: Official MCP server, Claude connector, Agent Skills rules
+
+  - id: security_defaults
+    label: Security Defaults
+    short: Security
+    weight: medium_high
+    description: CSRF, parameterized queries, scoped keys
+
+  - id: cost_predictability
+    label: Cost Predictability
+    short: Cost
+    weight: medium
+    description: Pricing model, surprise charges, self-host breakpoint
+
+  - id: escape_hatch
+    label: Escape Hatch
+    short: Lock-in
+    weight: medium
+    description: Standard tech, open-source option, migration ease
+
+vendors:
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: database
+  # ─────────────────────────────────────────────
+
+  - vendor_id: neon
+    confidence: high
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 4
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Serverless Postgres with cold starts; 512 MB free tier; official MCP server with OAuth"
+
+  - vendor_id: supabase
+    confidence: high
+    scores:
+      ecosystem_graph_position: 5
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 5
+      recency_gradient: 5
+      serverless_compat: 3
+      stack_fit: 4
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 5
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Bundles DB+auth+storage+realtime; official MCP server and Claude connector; inactivity pausing is a known pain point"
+
+  - vendor_id: planetscale
+    confidence: high
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 1
+      training_data_volume: 4
+      recency_gradient: 1
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 1
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Free tier removed 2024 — strong negative trust signal; Claude has falsely claimed it shut down"
+
+  - vendor_id: turso
+    confidence: high
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 5
+      docs_quality: 3
+      mcp_integration: 2
+      security_defaults: 4
+      cost_predictability: 5
+      escape_hatch: 5
+    notes: "SQLite at the edge via HTTP; generous free tier; thinner training signal"
+
+  - vendor_id: cockroachdb
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 3
+      escape_hatch: 4
+    notes: "Enterprise-grade distributed SQL; less common in tutorial/starter contexts"
+
+  - vendor_id: xata
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Newer entrant; very thin training signal"
+
+  - vendor_id: railway-postgres
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 3
+      serverless_compat: 2
+      stack_fit: 3
+      free_tier: 2
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 5
+    notes: "Standard Postgres on Railway; not serverless-native"
+
+  - vendor_id: vercel-postgres
+    confidence: medium
+    scores:
+      ecosystem_graph_position: 5
+      integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 5
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 3
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Tight Vercel integration; Neon under the hood"
+
+  - vendor_id: tidb-serverless
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "MySQL-compatible; less common in JS/TS ecosystem"
+
+  - vendor_id: fauna
+    confidence: medium
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 2
+      training_data_volume: 2
+      recency_gradient: 1
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 1
+    notes: "Proprietary query language; high lock-in; migration difficulty mentioned in training"
+
+  - vendor_id: convex
+    confidence: low
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 5
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 2
+    notes: "Strong React integration; newer tool with growing but thin training signal"
+
+  - vendor_id: upstash
+    confidence: high
+    scores:
+      ecosystem_graph_position: 5
+      integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 5
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 3
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 4
+    notes: "HTTP-based Redis/Kafka; works on edge runtimes; strong serverless story"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: ci_cd
+  # ─────────────────────────────────────────────
+
+  - vendor_id: github-actions
+    confidence: medium
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 5
+      recency_gradient: 3
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Dominant CI/CD in training data; YAML config widely represented"
+
+  - vendor_id: circleci
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Well-established but declining tutorial presence vs GitHub Actions"
+
+  - vendor_id: gitlab-ci
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 4
+    notes: "Strong in enterprise; less represented in JS/Next.js ecosystem tutorials"
+
+  - vendor_id: buildkite
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
+      serverless_compat: 3
+      stack_fit: 2
+      free_tier: 2
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Enterprise-focused; thin presence in open-source starter projects"
+
+  - vendor_id: dagger
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
+      serverless_compat: 3
+      stack_fit: 2
+      free_tier: 5
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 5
+      escape_hatch: 5
+    notes: "Open-source CI; very thin training signal; programmatic pipelines"
+
+  - vendor_id: railway-deployments
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 5
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 4
+      serverless_compat: 3
+      stack_fit: 3
+      free_tier: 2
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Simple deploy experience; limited free tier"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: observability
+  # ─────────────────────────────────────────────
+
+  - vendor_id: datadog
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 2
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 2
+      escape_hatch: 2
+    notes: "Enterprise standard; expensive; proprietary query language"
+
+  - vendor_id: grafana
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 2
+      sentiment_polarity: 4
+      training_data_volume: 4
+      recency_gradient: 3
+      serverless_compat: 3
+      stack_fit: 2
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 5
+      escape_hatch: 5
+    notes: "Open-source; self-hostable; requires more setup"
+
+  - vendor_id: new-relic
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 2
+    notes: "Generous free tier (100 GB/mo); established but less tutorial presence"
+
+  - vendor_id: honeycomb
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Strong observability focus; thinner community signal"
+
+  - vendor_id: axiom
+    confidence: low
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Vercel-friendly; very thin training signal; growing"
+
+  - vendor_id: betterstack
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Combines uptime monitoring and logging; newer entrant"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: error_monitoring
+  # ─────────────────────────────────────────────
+
+  - vendor_id: sentry
+    confidence: high
+    scores:
+      ecosystem_graph_position: 5
+      integration_speed: 4
+      sentiment_polarity: 5
+      training_data_volume: 5
+      recency_gradient: 4
+      serverless_compat: 4
+      stack_fit: 5
+      free_tier: 4
+      docs_quality: 5
+      mcp_integration: 2
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 4
+    notes: "Strong Next.js-specific guides; open-source self-host option"
+
+  - vendor_id: bugsnag
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Established but much less tutorial presence than Sentry"
+
+  - vendor_id: rollbar
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Similar story to Bugsnag; less JS/React-specific content"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: feature_flags
+  # ─────────────────────────────────────────────
+
+  - vendor_id: launchdarkly
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 4
+      free_tier: 2
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 2
+      escape_hatch: 2
+    notes: "Enterprise standard; expensive; proprietary"
+
+  - vendor_id: flagsmith
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Open-source; self-hostable; thin training signal"
+
+  - vendor_id: unleash
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 3
+      serverless_compat: 3
+      stack_fit: 3
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Open-source; self-hostable; moderate community presence"
+
+  - vendor_id: devcycle
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Edge-native feature flags; very thin training signal"
+
+  - vendor_id: statsig
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 4
+      serverless_compat: 4
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Combines feature flags with analytics; growing but thin signal"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: secrets_management
+  # ─────────────────────────────────────────────
+
+  - vendor_id: hashicorp-vault
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 3
+      serverless_compat: 2
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 3
+      escape_hatch: 5
+    notes: "Industry standard; complex setup; not serverless-native"
+
+  - vendor_id: doppler
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Developer-friendly secrets management; thin training signal"
+
+  - vendor_id: infisical
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 4
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Open-source; newer alternative to Vault/Doppler; very thin signal"
+
+  - vendor_id: aws-secrets-manager
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 2
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "AWS native; well-documented but SDK-heavy integration"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: developer_portal
+  # ─────────────────────────────────────────────
+
+  - vendor_id: backstage
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
+      serverless_compat: 2
+      stack_fit: 2
+      free_tier: 5
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 5
+      escape_hatch: 5
+    notes: "Spotify open-source; complex setup; React-based but not Next.js"
+
+  - vendor_id: port
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 2
+    notes: "Internal developer portal SaaS; very thin training signal"
+
+  - vendor_id: cortex
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 2
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 2
+      escape_hatch: 2
+    notes: "Internal developer portal; enterprise-focused; thin signal"
+
+  - vendor_id: opslevel
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 2
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 2
+      escape_hatch: 2
+    notes: "Service catalog; enterprise-focused; thin signal"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: llm_observability
+  # ─────────────────────────────────────────────
+
+  - vendor_id: langfuse
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 5
+      serverless_compat: 4
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Open-source LLM observability; growing fast; self-hostable"
+
+  - vendor_id: braintrust
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "LLM eval and observability; newer; thin signal"
+
+  - vendor_id: helicone
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 5
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 4
+    notes: "Proxy-based LLM observability; very simple integration; open-source"
+
+  - vendor_id: langsmith
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 2
+    notes: "LangChain ecosystem; tied to LangChain usage patterns"
+
+  - vendor_id: arize-phoenix
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 3
+      serverless_compat: 3
+      stack_fit: 2
+      free_tier: 5
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 3
+      cost_predictability: 5
+      escape_hatch: 5
+    notes: "Open-source; Python-first; thin JS/TS signal"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: incident_management
+  # ─────────────────────────────────────────────
+
+  - vendor_id: pagerduty
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 2
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 2
+      escape_hatch: 2
+    notes: "Industry standard; expensive; API well-documented"
+
+  - vendor_id: opsgenie
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
+      serverless_compat: 4
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Atlassian ecosystem; solid but less standalone training signal"
+
+  - vendor_id: incident-io
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Modern incident management; Slack-native; thin training signal"
+
+  - vendor_id: rootly
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Incident management with automation; very thin training signal"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: code_search
+  # ─────────────────────────────────────────────
+
+  - vendor_id: sourcegraph
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 3
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 2
+      serverless_compat: 3
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 4
+    notes: "Code intelligence platform; self-hostable; moderate training signal"
+
+  - vendor_id: github-code-search
+    confidence: low
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 5
+      recency_gradient: 3
+      serverless_compat: 5
+      stack_fit: 4
+      free_tier: 5
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 5
+      escape_hatch: 4
+    notes: "Built into GitHub; no separate integration; ubiquitous"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: security_scanning
+  # ─────────────────────────────────────────────
+
+  - vendor_id: snyk
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 3
+      recency_gradient: 3
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Developer-first security; good free tier; moderate training signal"
+
+  - vendor_id: sonarqube
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 2
+      sentiment_polarity: 3
+      training_data_volume: 4
+      recency_gradient: 2
+      serverless_compat: 2
+      stack_fit: 2
+      free_tier: 3
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Self-hosted code quality; well-established; complex setup"
+
+  - vendor_id: semgrep
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 2
+      recency_gradient: 4
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 4
+      escape_hatch: 5
+    notes: "Open-source static analysis; growing fast; good docs"
+
+  - vendor_id: github-advanced-security
+    confidence: low
+    scores:
+      ecosystem_graph_position: 4
+      integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 3
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 3
+      escape_hatch: 3
+    notes: "Built into GitHub; includes Dependabot, code scanning, secret scanning"
+
+  - vendor_id: socket
+    confidence: low
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 1
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 4
+      docs_quality: 3
+      mcp_integration: 1
+      security_defaults: 5
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Supply chain security; newer; very thin training signal"
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: edge_compute
+  # ─────────────────────────────────────────────
+
+  - vendor_id: cloudflare-workers
+    confidence: medium
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 4
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 3
+      free_tier: 5
+      docs_quality: 4
+      mcp_integration: 2
+      security_defaults: 4
+      cost_predictability: 5
+      escape_hatch: 3
+    notes: "Strong edge runtime; generous free tier; non-Node runtime quirks"
+
+  - vendor_id: vercel-edge-functions
+    confidence: medium
+    scores:
+      ecosystem_graph_position: 5
+      integration_speed: 5
+      sentiment_polarity: 4
+      training_data_volume: 4
+      recency_gradient: 4
+      serverless_compat: 5
+      stack_fit: 5
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 3
+      security_defaults: 4
+      cost_predictability: 3
+      escape_hatch: 2
+    notes: "Tight Next.js integration; limited to Vercel platform"
+
+  - vendor_id: deno-deploy
+    confidence: low
+    scores:
+      ecosystem_graph_position: 2
+      integration_speed: 4
+      sentiment_polarity: 3
+      training_data_volume: 2
+      recency_gradient: 3
+      serverless_compat: 5
+      stack_fit: 2
+      free_tier: 4
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 3
+    notes: "Deno-native; less compatible with npm/Node ecosystem"
+
+  - vendor_id: fly-io
+    confidence: medium
+    scores:
+      ecosystem_graph_position: 3
+      integration_speed: 4
+      sentiment_polarity: 4
+      training_data_volume: 3
+      recency_gradient: 4
+      serverless_compat: 4
+      stack_fit: 3
+      free_tier: 3
+      docs_quality: 4
+      mcp_integration: 1
+      security_defaults: 4
+      cost_predictability: 4
+      escape_hatch: 4
+    notes: "Containers at the edge; good Docker support; moderate training signal"

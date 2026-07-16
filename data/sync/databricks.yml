@@ -1,0 +1,47 @@
+# Databricks asset bundle for syncing benchmarks.prod → Lakebase Postgres.
+# Adapter tables in benchmarks.sync reshape prod data for the webapp schema,
+# then Databricks synced tables replicate them into Lakebase Postgres.
+bundle:
+  name: sync
+
+include:
+  - resources/*.yml
+
+sync:
+  include:
+    - dist/*.whl
+
+variables:
+  catalog:
+    description: The Unity Catalog catalog
+  schema:
+    description: The target schema for adapter tables
+  source_schema:
+    description: The source schema to read from
+  warehouse_id:
+    description: SQL warehouse ID
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-11cd9b20-43da.cloud.databricks.com
+    variables:
+      catalog: benchmarks
+      schema: sync_dev
+      source_schema: prod
+      warehouse_id: dd7165b90dbdd269
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-11cd9b20-43da.cloud.databricks.com
+      root_path: /Workspace/Users/talcorn.92@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: benchmarks
+      schema: sync
+      source_schema: prod
+      warehouse_id: dd7165b90dbdd269
+    permissions:
+      - user_name: talcorn.92@gmail.com
+        level: CAN_MANAGE

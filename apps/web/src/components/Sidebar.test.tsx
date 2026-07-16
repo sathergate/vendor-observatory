@@ -39,54 +39,59 @@ vi.mock("./NavLink", () => ({
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe("Sidebar", () => {
-  it("does not show Profile link when no vendor is selected", () => {
+  it("shows legacy navigation groups when no vendor is selected", () => {
     mockSelectedVendor = null;
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    // Standard nav items should still be present
-    expect(screen.getByText("Vendor Intel")).toBeDefined();
-    expect(screen.getByText("Prompt Intel")).toBeDefined();
-
-    // No profile link
-    const links = screen.queryAllByText(/^Profile/);
-    expect(links.length).toBe(0);
+    expect(screen.queryByText("Loading vendor...")).toBeNull();
+    expect(screen.getByText("Benchmarks")).toBeDefined();
+    expect(screen.getByText("Vendor Intel").getAttribute("href")).toBe("/benchmarks/vendors");
+    expect(screen.getByText("Prompt Intel").getAttribute("href")).toBe("/benchmarks/prompts");
+    expect(screen.getByText("Analytics")).toBeDefined();
+    expect(screen.getByText("Query").getAttribute("href")).toBe("/query");
+    expect(screen.getByText("Search").getAttribute("href")).toBe("/search");
+    expect(screen.getByText("Insights").getAttribute("href")).toBe("/insights");
+    expect(screen.getByText("Data")).toBeDefined();
+    expect(screen.getByText("Vendors").getAttribute("href")).toBe("/vendors");
+    expect(screen.getByText("Platforms").getAttribute("href")).toBe("/platforms");
+    expect(screen.getByText("Actions").getAttribute("href")).toBe("/actions");
+    expect(screen.getByText("Sessions").getAttribute("href")).toBe("/sessions");
   });
 
-  it("shows Profile link when a vendor is selected", () => {
+  it("shows vendor dashboard nav when a vendor is selected", () => {
     mockSelectedVendor = "supabase";
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    const profileLink = screen.getByText(/Profile — Supabase/);
-    expect(profileLink).toBeDefined();
-    expect(profileLink.getAttribute("href")).toBe("/benchmarks/vendors/supabase");
+    const dashboardLink = screen.getByText("My Dashboard");
+    expect(dashboardLink).toBeDefined();
+    expect(dashboardLink.getAttribute("href")).toBe("/benchmarks/vendors/supabase");
+    expect(screen.getByText("Rejections")).toBeDefined();
   });
 
-  it("Profile link uses correct href for vendor IDs with special characters", () => {
+  it("vendor nav uses correct href for vendor IDs with special characters", () => {
     mockSelectedVendor = "cloudflare-workers";
     mockPathname = "/";
 
     render(<Sidebar />);
 
-    const profileLink = screen.getByText(/Profile — Cloudflare Workers/);
-    expect(profileLink).toBeDefined();
-    expect(profileLink.getAttribute("href")).toBe("/benchmarks/vendors/cloudflare-workers");
+    const dashboardLink = screen.getByText("My Dashboard");
+    expect(dashboardLink).toBeDefined();
+    expect(dashboardLink.getAttribute("href")).toBe("/benchmarks/vendors/cloudflare-workers");
   });
 
-  it("renders all standard nav groups regardless of vendor selection", () => {
+  it("keeps standard nav groups reachable when vendor is selected", () => {
     mockSelectedVendor = "neon";
     mockPathname = "/";
 
     render(<Sidebar />);
 
+    expect(screen.getByText("My Dashboard")).toBeDefined();
     expect(screen.getByText("Benchmarks")).toBeDefined();
     expect(screen.getByText("Analytics")).toBeDefined();
     expect(screen.getByText("Data")).toBeDefined();
-    expect(screen.getByText("Vendor Intel")).toBeDefined();
-    expect(screen.getByText("Query")).toBeDefined();
-    expect(screen.getByText("Sessions")).toBeDefined();
   });
 });

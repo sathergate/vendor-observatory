@@ -8,13 +8,13 @@ export function EmptyState({
   code?: string;
 }) {
   return (
-    <div className="bg-gray-800 rounded-lg p-8 text-center">
-      <p className="text-gray-300 text-lg font-medium">{title}</p>
+    <div className="quiet-signal">
+      <p className="text-secondary text-[14px] font-medium">{title}</p>
       {description && (
-        <p className="text-gray-500 text-sm mt-2">{description}</p>
+        <p className="text-muted text-[13px] mt-2 italic max-w-[280px] mx-auto">{description}</p>
       )}
       {code && (
-        <code className="inline-block mt-3 bg-gray-700 px-3 py-1.5 rounded text-sm text-gray-300">
+        <code className="inline-block mt-3 bg-raised px-3 py-1.5 rounded-[6px] text-[14px] font-data text-secondary">
           {code}
         </code>
       )}

@@ -12,6 +12,16 @@ description: >
 vendors:
 
   # ─────────────────────────────────────────────
+  # PSEUDO-VENDOR: Custom/DIY (agent built from scratch)
+  # ─────────────────────────────────────────────
+
+  - canonical_id: custom-diy
+    display_name: Custom/DIY
+    synonyms: [custom, diy, from-scratch, hand-rolled, built-in, roll-your-own]
+    category: _meta
+    website: null
+
+  # ─────────────────────────────────────────────
   # CATEGORY: database
   # ─────────────────────────────────────────────
 
@@ -418,3 +428,83 @@ vendors:
     synonyms: [fly, flyio, fly-machines]
     category: edge_compute
     website: https://fly.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: feature_flags (continued)
+  # ─────────────────────────────────────────────
+
+  - canonical_id: flagpost
+    display_name: Flagpost
+    synonyms: [flag-post, flagpost-io]
+    category: feature_flags
+    website: https://flagpost.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: rate_limiting
+  # ─────────────────────────────────────────────
+
+  - canonical_id: floodgate
+    display_name: Floodgate
+    synonyms: [flood-gate, floodgate-io]
+    category: rate_limiting
+    website: https://floodgate.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: secrets_management (continued)
+  # ─────────────────────────────────────────────
+
+  - canonical_id: lockbox
+    display_name: Lockbox
+    synonyms: [lock-box, lockbox-io]
+    category: secrets_management
+    website: https://lockbox.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: scheduled_tasks
+  # ─────────────────────────────────────────────
+
+  - canonical_id: clocktower
+    display_name: Clocktower
+    synonyms: [clock-tower, clocktower-io]
+    category: scheduled_tasks
+    website: https://clocktower.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: search
+  # ─────────────────────────────────────────────
+
+  - canonical_id: sifter
+    display_name: Sifter
+    synonyms: [sifter-io, sifter-search]
+    category: search
+    website: https://sifter.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: notifications
+  # ─────────────────────────────────────────────
+
+  - canonical_id: herald
+    display_name: Herald
+    synonyms: [herald-io, herald-notify]
+    category: notifications
+    website: https://herald.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: media_processing
+  # ─────────────────────────────────────────────
+
+  - canonical_id: darkroom
+    display_name: Darkroom
+    synonyms: [dark-room, darkroom-io]
+    category: media_processing
+    website: https://darkroom.io
+
+  # ─────────────────────────────────────────────
+  # CATEGORY: headless_cms
+  # ─────────────────────────────────────────────
+
+  - canonical_id: pressroom
+    display_name: Pressroom
+    synonyms: [press-room, pressroom-io]
+    category: headless_cms
+    website: https://pressroom.io
